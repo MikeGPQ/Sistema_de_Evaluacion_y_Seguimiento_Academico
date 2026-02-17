@@ -1,1 +1,35 @@
 @import "tailwindcss";
+
+@layer components {
+  /* Estilo base para todos los inputs del formulario para que se parezcan al wireframe */
+  .input-base {
+    @apply mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm placeholder-gray-400
+    focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500;
+  }
+  
+  .custom-scrollbar::-webkit-scrollbar {
+    width: 6px;
+  }
+  .custom-scrollbar::-webkit-scrollbar-track {
+    background: #f1f1f1;
+  }
+  .custom-scrollbar::-webkit-scrollbar-thumb {
+    background: #c7c7c7;
+    border-radius: 4px;
+  }
+}
+
+/* Animación simple para el modal */
+@keyframes fade-in-up {
+  from {
+    opacity: 0;
+    transform: translateY(10px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+.animate-fade-in-up {
+  animation: fade-in-up 0.2s ease-out forwards;
+}
