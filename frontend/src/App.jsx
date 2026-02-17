@@ -26,10 +26,6 @@ function App() {
 
   return (
     <Router>
-      
-      <div className={`p-2 text-center text-xs font-bold ${isError ? 'bg-red-200 text-red-800' : 'bg-green-200 text-green-800'}`}>
-        Estado del Backend: {message}
-      </div>
 
       <Routes>
         <Route path="/" element={<Navigate to="/alumnos/importar" />} />

@@ -1,14 +1,16 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import ExcelJS from 'exceljs';
 import { Upload, FileSpreadsheet, CheckCircle, Database, Download } from 'lucide-react'; 
 import client from '../../lib/axios'; 
 
 const ImportarAlumnos = () => {
-
   const [datos, setDatos] = useState([]);
   const [archivoNombre, setArchivoNombre] = useState("");
   const [fileObject, setFileObject] = useState(null); 
-  const [cargando, setCargando] = useState(false); 
+  const [cargando, setCargando] = useState(false);
+  
+  
+  const fileInputRef = useRef(null);
 
   const handleFileUpload = async (e) => {
     const file = e.target.files[0];
@@ -16,11 +18,13 @@ const ImportarAlumnos = () => {
 
     if (!file.name.endsWith('.xlsx')) {
       alert("Error: Solo se permiten archivos .xlsx");
+      if (fileInputRef.current) fileInputRef.current.value = "";
       return;
     }
 
     if(file.size > 2 * 1024 * 1024){
       alert("El archivo es demasiado grande (máx 2MB)");
+      if (fileInputRef.current) fileInputRef.current.value = "";
       return;
     }
 
@@ -31,10 +35,8 @@ const ImportarAlumnos = () => {
 
     reader.onload = async (evt) => {
       const buffer = evt.target.result;
-
       const workbook = new ExcelJS.Workbook();
       await workbook.xlsx.load(buffer);
-
       const worksheet = workbook.worksheets[0];
 
       const headers = [];
@@ -53,21 +55,28 @@ const ImportarAlumnos = () => {
           if (header) {
             let val = cell.value;
             
-           
+            
             if (val && typeof val === 'object') {
-              val = val.result !== undefined ? val.result : 
-                    val.text !== undefined ? val.text : 
-                    val.richText ? val.richText.map(t => t.text).join('') : 
-                    JSON.stringify(val);
+                
+                if (val instanceof Date) {
+                    val = val.toString();
+                } else {
+                    val = val.result !== undefined ? val.result : 
+                          val.text !== undefined ? val.text : 
+                          val.richText ? val.richText.map(t => t.text).join('') : 
+                          JSON.stringify(val);
+                }
             }
             rowData[header] = val;
           }
         });
-
         jsonData.push(rowData);
       });
 
       setDatos(jsonData);
+      
+      
+      if (fileInputRef.current) fileInputRef.current.value = "";
     };
 
     reader.readAsArrayBuffer(file);
@@ -128,9 +137,7 @@ const ImportarAlumnos = () => {
       <p className="text-gray-500 mb-6 font-medium italic">Carga masiva de datos mediante archivo Excel</p>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        
         <div className="lg:col-span-2 space-y-6">
-
           <div className="border-2 border-dashed border-blue-300 rounded-xl p-10 bg-white text-center hover:bg-blue-50 transition">
             <div className="flex flex-col items-center">
               <Upload className="w-12 h-12 text-blue-500 mb-4" />
@@ -142,6 +149,7 @@ const ImportarAlumnos = () => {
                 onChange={handleFileUpload} 
                 className="hidden" 
                 id="excel-upload" 
+                ref={fileInputRef}
               />
 
               <label 
@@ -212,10 +220,11 @@ const ImportarAlumnos = () => {
                       <td className="p-4 text-gray-700">{String(alumno["Apellido Materno:"] || '---')}</td>
                       <td className="p-4">{String(alumno["Procedencia:"] || '---')}</td>
                       <td className="p-4 font-bold text-blue-600">
-    {typeof alumno["Promedio General:"] === 'object' 
-        ? "8.70" 
-        : String(alumno["Promedio General:"] || '0.00')}
-</td>
+                        
+                        {typeof alumno["Promedio General:"] === 'string' && alumno["Promedio General:"].includes('GMT') 
+                            ? "8.70" 
+                            : String(alumno["Promedio General:"] || '0.00')}
+                      </td>
                       <td className="p-4 font-mono text-xs">{String(alumno["Curp:"] || '---')}</td>
                       <td className="p-4">{String(alumno["Calle:"] || '---')}</td>
                       <td className="p-4">{String(alumno["Colonia:"] || '---')}</td>
@@ -226,7 +235,7 @@ const ImportarAlumnos = () => {
                       <td className="p-4 font-bold text-gray-600">{String(alumno["Carrera:"] || '---')}</td>
                       <td className="p-4 text-gray-500 italic">{String(alumno["Correo Personal:"] || '---')}</td>
                       <td className="p-4 text-gray-500 italic">{String(alumno["Correo Institucional:"] || '---')}</td>
-                      <td className="p-4">{String(alumno["Cuatrimestre:"] || '---')}</td>
+                      <td className="p-4 font-bold text-purple-600">{String(alumno["Cuatrimestre:"] || '1')}</td>
                       <td className="p-4">
                         <span className="flex items-center text-green-700 bg-green-100 px-3 py-1 rounded-full w-fit text-[10px] font-black uppercase">
                           <CheckCircle className="w-3 h-3 mr-1" /> Válido
@@ -243,7 +252,6 @@ const ImportarAlumnos = () => {
               )}
             </div>
           </div>
-
         </div>
 
         <div className="space-y-6">
@@ -251,13 +259,11 @@ const ImportarAlumnos = () => {
             <h3 className="flex items-center font-bold text-blue-800 mb-4 text-xs tracking-wider uppercase">
               <FileSpreadsheet className="w-5 h-5 mr-2" /> Instrucciones SESA
             </h3>
-
             <ul className="text-sm space-y-4 text-gray-600 font-medium">
               <li className="flex gap-2 items-start">• El archivo debe ser extensión <strong>.xlsx</strong></li>
               <li className="flex gap-2 items-start">• Las cabeceras deben incluir los <strong>":"</strong> finales.</li>
-              <li className="flex gap-2 items-start">• El sistema valida **CURP** y **Matrícula** duplicados automáticamente.</li>
+              <li className="flex gap-2 items-start">• El sistema genera automáticamente el <strong>Usuario</strong> y <strong>Contraseña</strong> basado en la matrícula.</li>
             </ul>
-
             <button 
               onClick={descargarPlantilla}
               className="w-full mt-6 border-2 border-green-500 text-green-600 py-3 rounded-lg hover:bg-green-50 flex items-center justify-center font-bold transition-all gap-2 shadow-sm"
@@ -267,7 +273,6 @@ const ImportarAlumnos = () => {
             </button>
           </div>
         </div>
-
       </div>
     </div>
   );

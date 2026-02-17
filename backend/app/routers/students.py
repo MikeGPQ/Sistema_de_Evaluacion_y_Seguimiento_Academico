@@ -1,13 +1,21 @@
 from fastapi import APIRouter, UploadFile, File, Depends, HTTPException
 from sqlalchemy.orm import Session
-from sqlalchemy import text
 from app.db.database import get_db
 from app.models.student import Student
 from app.models.student_addresses import StudentAddress
 from app.models.career import Career
 from app.models.origin_school import OriginSchool
+from app.models.user import User 
+from passlib.context import CryptContext 
 import pandas as pd
 import io
+
+
+pwd_context = CryptContext(
+    schemes=["bcrypt"], 
+    deprecated="auto", 
+    bcrypt__ident="2b" 
+)
 
 router = APIRouter(prefix="/alumnos", tags=["Alumnos"])
 
@@ -17,11 +25,7 @@ async def importar_alumnos(file: UploadFile = File(...), db: Session = Depends(g
         raise HTTPException(status_code=400, detail="Error: Solo se permiten archivos .xlsx")
 
     content = await file.read()
-    
-   
     df = pd.read_excel(io.BytesIO(content))
-    
-    
     df.columns = [c.replace(':', '').strip() for c in df.columns]
 
     registros_nuevos = 0
@@ -31,28 +35,22 @@ async def importar_alumnos(file: UploadFile = File(...), db: Session = Depends(g
         if not matricula_str or matricula_str == 'nan': continue
 
        
-        existente = db.query(Student).filter(Student.matricula == matricula_str).first()
-        if existente: continue 
+        if db.query(Student).filter(Student.matricula == matricula_str).first():
+            continue 
 
         try:
             
             carrera_excel = str(row.get('Carrera', '')).strip()
-           
-            career = db.query(Career).filter(
-                (Career.external_id == carrera_excel) | (Career.name == carrera_excel)
-            ).first()
-
-            if not career:
-                print(f"⚠️ Carrera '{carrera_excel}' no encontrada en BD. Saltando...")
-                continue
-
+            career = db.query(Career).filter((Career.external_id == carrera_excel) | (Career.name == carrera_excel)).first()
             
             escuela_excel = str(row.get('Procedencia', '')).strip()
             school = db.query(OriginSchool).filter(OriginSchool.name == escuela_excel).first()
 
-            if not school:
-                print(f"⚠️ Escuela '{escuela_excel}' no existe en la lista oficial.")
+            if not career or not school:
+                print(f"⚠️ Datos maestros faltantes para {matricula_str}")
                 continue
+
+            email_inst = row.get('Correo Institucional') or row.get('Correo institucional')
 
             
             nuevo_alumno = Student(
@@ -62,21 +60,32 @@ async def importar_alumnos(file: UploadFile = File(...), db: Session = Depends(g
                 apellido_materno=row.get('Apellido Materno'),
                 curp=row.get('Curp'),
                 email_personal=row.get('Correo Personal') or row.get('Correo personal'),
-                email_institucional=row.get('Correo Institucional') or row.get('Correo institucional'),
-                
-                
+                email_institucional=email_inst,
                 cuatrimestre_actual=int(row.get('Cuatrimestre') or 1),
-                
                 status=row.get('Estatus', 'activo').lower(), 
                 career_id=career.id,
                 origin_school_id=school.id,
                 promedio_procedencia=float(row.get('Promedio General', 0))
             )
             db.add(nuevo_alumno)
-            db.flush()
 
+            
+            if email_inst:
+                
+                password_plana = str(matricula_str).strip()
+                
+                nuevo_usuario = User(
+                    identifier=matricula_str,
+                    email=email_inst,
+                    password_hash=pwd_context.hash(password_plana),
+                    role='alumno',
+                    is_temp_password=True
+                )
+                db.add(nuevo_usuario)
+
+            
             nueva_direccion = StudentAddress(
-                student_matricula=nuevo_alumno.matricula,
+                student_matricula=matricula_str,
                 calle=row.get('Calle'),
                 numero_domicilio=str(row.get('Número de domicilio') or 'S/N'), 
                 colonia=row.get('Colonia'),
@@ -93,4 +102,4 @@ async def importar_alumnos(file: UploadFile = File(...), db: Session = Depends(g
             db.rollback()
             print(f"❌ Error en matrícula {matricula_str}: {e}")
 
-    return {"message": f"{registros_nuevos} alumnos importados correctamente."}
+    return {"message": f"{registros_nuevos} alumnos y usuarios creados correctamente."}
