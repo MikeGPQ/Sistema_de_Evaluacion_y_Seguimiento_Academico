@@ -85,26 +85,50 @@ const ImportarAlumnos = () => {
   };
 
   const generarPDFCredenciales = (usuarios) => {
-    const doc = new jsPDF();
-    doc.setFontSize(18);
-    doc.text("Credenciales de Acceso - Alumnos Importados", 14, 20);
-    doc.setFontSize(11);
-    doc.setTextColor(100);
-    doc.text("Sistema de Evaluación y Seguimiento Académico (SESA)", 14, 28);
+  const doc = new jsPDF();
+  
+  // Título y encabezado
+  doc.setFontSize(18);
+  doc.text("Credenciales de Acceso - Alumnos Importados", 14, 20);
+  doc.setFontSize(11);
+  doc.setTextColor(100);
+  doc.text("Sistema de Evaluación y Seguimiento Académico (SESA)", 14, 28);
 
-    const tableColumn = ["Nombre Alumno", "Usuario (Matrícula)", "Contraseña Temporal", "Correo Institucional"];
-    const tableRows = usuarios.map(u => [u.nombre, u.usuario, u.password, u.correo]);
+  const tableColumn = ["Nombre Alumno", "Usuario (Matrícula)", "Clave Temporal", "Correo Institucional"];
+  const tableRows = usuarios.map(u => [u.nombre, u.usuario, u.password, u.correo]);
 
-    autoTable(doc, {
-      head: [tableColumn],
-      body: tableRows,
-      startY: 35,
-      theme: 'grid',
-      headStyles: { fillColor: [37, 99, 235] }
-    });
+  autoTable(doc, {
+    head: [tableColumn],
+    body: tableRows,
+    startY: 35,
+    theme: 'grid',
+    headStyles: { fillColor: [37, 99, 235] },
+    didDrawPage: (data) => {
+      const finalY = data.cursor.y + 15; 
+      
+      
+      doc.setFontSize(10);
+      doc.setTextColor(255, 0, 0); 
+      doc.setFont("helvetica", "bold");
+      doc.text("AVISO DE SEGURIDAD IMPORTANTE:", 14, finalY);
+      
+      doc.setFontSize(9);
+      doc.setTextColor(60); 
+      doc.setFont("helvetica", "normal");
+      
+     
+      const aviso = "Las contraseñas proporcionadas en este documento son de carácter temporal. " +
+                    "Por políticas de seguridad del sistema SESA, se le solicitará obligatoriamente " +
+                    "cambiar su contraseña al realizar su primer inicio de sesión.";
+      
+      
+      const splitAviso = doc.splitTextToSize(aviso, 180);
+      doc.text(splitAviso, 14, finalY + 7);
+    }
+  });
 
-    doc.save(`Credenciales_Importacion_${new Date().getTime()}.pdf`);
-  };
+  doc.save(`Credenciales_Seguras_${new Date().getTime()}.pdf`);
+};
 
   const handleGuardarEnBaseDeDatos = async () => {
     if (!fileObject) return;
@@ -270,7 +294,7 @@ const ImportarAlumnos = () => {
             </h3>
             <ul className="text-sm space-y-4 text-gray-600 font-medium leading-relaxed">
               <li>• Solo archivos <strong>.xlsx</strong>.</li>
-              <li>• Al terminar, se descargará un PDF con los accesos temporales.</li>
+              <li>• Se generarán claves aleatorias seguras automáticamente.</li>
               <li>• El sistema no permite matrículas duplicadas.</li>
             </ul>
             <button onClick={descargarPlantilla} className="w-full mt-6 border-2 border-green-500 text-green-600 py-3 rounded-lg hover:bg-green-50 flex items-center justify-center font-bold transition-all gap-2 shadow-sm">

@@ -9,6 +9,8 @@ from app.models.user import User
 from passlib.context import CryptContext 
 import pandas as pd
 import io
+import secrets 
+import string
 
 pwd_context = CryptContext(
     schemes=["bcrypt"], 
@@ -34,7 +36,6 @@ async def importar_alumnos(file: UploadFile = File(...), db: Session = Depends(g
         matricula_str = str(row.get('Matrícula', '')).strip()
         if not matricula_str or matricula_str == 'nan': continue
 
-        # CAMBIO AQUÍ: En lugar de saltar, lanzamos error si ya existe
         if db.query(Student).filter(Student.matricula == matricula_str).first():
             raise HTTPException(
                 status_code=400, 
@@ -75,20 +76,25 @@ async def importar_alumnos(file: UploadFile = File(...), db: Session = Depends(g
             db.add(nuevo_alumno)
 
             if email_inst:
-                password_plana = str(matricula_str).strip()
+                
+                caracteres = string.ascii_letters + string.digits
+                password_aleatoria = ''.join(secrets.choice(caracteres) for _ in range(10))
+                
+                
                 nuevo_usuario = User(
                     identifier=matricula_str,
                     email=email_inst,
-                    password_hash=pwd_context.hash(password_plana),
+                    password_hash=pwd_context.hash(password_aleatoria),
                     role='alumno',
                     is_temp_password=True
                 )
                 db.add(nuevo_usuario)
                 
+                
                 credenciales_generadas.append({
                     "nombre": f"{row.get('Nombre')} {row.get('Apellido Paterno')}",
                     "usuario": matricula_str,
-                    "password": password_plana,
+                    "password": password_aleatoria,
                     "correo": email_inst
                 })
 
