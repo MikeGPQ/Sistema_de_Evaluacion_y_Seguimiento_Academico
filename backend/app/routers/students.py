@@ -10,7 +10,6 @@ from passlib.context import CryptContext
 import pandas as pd
 import io
 
-
 pwd_context = CryptContext(
     schemes=["bcrypt"], 
     deprecated="auto", 
@@ -29,30 +28,36 @@ async def importar_alumnos(file: UploadFile = File(...), db: Session = Depends(g
     df.columns = [c.replace(':', '').strip() for c in df.columns]
 
     registros_nuevos = 0
+    credenciales_generadas = []
 
     for _, row in df.iterrows():
         matricula_str = str(row.get('Matrícula', '')).strip()
         if not matricula_str or matricula_str == 'nan': continue
 
-       
+        # CAMBIO AQUÍ: En lugar de saltar, lanzamos error si ya existe
         if db.query(Student).filter(Student.matricula == matricula_str).first():
-            continue 
+            raise HTTPException(
+                status_code=400, 
+                detail=f"La matrícula {matricula_str} ya está registrada en el sistema."
+            )
 
         try:
-            
             carrera_excel = str(row.get('Carrera', '')).strip()
-            career = db.query(Career).filter((Career.external_id == carrera_excel) | (Career.name == carrera_excel)).first()
+            career = db.query(Career).filter(
+                (Career.external_id == carrera_excel) | (Career.name == carrera_excel)
+            ).first()
             
             escuela_excel = str(row.get('Procedencia', '')).strip()
             school = db.query(OriginSchool).filter(OriginSchool.name == escuela_excel).first()
 
             if not career or not school:
-                print(f"⚠️ Datos maestros faltantes para {matricula_str}")
-                continue
+                raise HTTPException(
+                    status_code=400, 
+                    detail=f"Datos maestros (Carrera/Escuela) no encontrados para matrícula {matricula_str}"
+                )
 
             email_inst = row.get('Correo Institucional') or row.get('Correo institucional')
 
-            
             nuevo_alumno = Student(
                 matricula=matricula_str,
                 nombre=row.get('Nombre'),
@@ -69,11 +74,8 @@ async def importar_alumnos(file: UploadFile = File(...), db: Session = Depends(g
             )
             db.add(nuevo_alumno)
 
-            
             if email_inst:
-                
                 password_plana = str(matricula_str).strip()
-                
                 nuevo_usuario = User(
                     identifier=matricula_str,
                     email=email_inst,
@@ -82,8 +84,14 @@ async def importar_alumnos(file: UploadFile = File(...), db: Session = Depends(g
                     is_temp_password=True
                 )
                 db.add(nuevo_usuario)
+                
+                credenciales_generadas.append({
+                    "nombre": f"{row.get('Nombre')} {row.get('Apellido Paterno')}",
+                    "usuario": matricula_str,
+                    "password": password_plana,
+                    "correo": email_inst
+                })
 
-            
             nueva_direccion = StudentAddress(
                 student_matricula=matricula_str,
                 calle=row.get('Calle'),
@@ -98,8 +106,14 @@ async def importar_alumnos(file: UploadFile = File(...), db: Session = Depends(g
             db.commit()
             registros_nuevos += 1
 
+        except HTTPException as he:
+            db.rollback()
+            raise he
         except Exception as e:
             db.rollback()
-            print(f"❌ Error en matrícula {matricula_str}: {e}")
+            raise HTTPException(status_code=500, detail=str(e))
 
-    return {"message": f"{registros_nuevos} alumnos y usuarios creados correctamente."}
+    return {
+        "message": f"{registros_nuevos} alumnos y usuarios creados correctamente.",
+        "data": credenciales_generadas 
+    }
