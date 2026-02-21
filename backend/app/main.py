@@ -4,7 +4,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
 from app.db.database import engine
 from sqlalchemy import text 
-
+from app.routers import Listados
 
 from app.routers.students import router as students_router
 
@@ -24,6 +24,7 @@ app.add_middleware(
 
 
 app.include_router(students_router)
+app.include_router(Listados.router)
 
 @app.get("/")
 def read_root():

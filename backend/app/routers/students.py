@@ -1,4 +1,5 @@
 from fastapi import APIRouter, UploadFile, File, Depends, HTTPException
+from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 from app.db.database import get_db
 from app.models.student import Student
@@ -31,32 +32,52 @@ async def importar_alumnos(file: UploadFile = File(...), db: Session = Depends(g
 
     registros_nuevos = 0
     credenciales_generadas = []
+    
+  
+    errores_validacion = []
 
     for _, row in df.iterrows():
         matricula_str = str(row.get('Matrícula', '')).strip()
         if not matricula_str or matricula_str == 'nan': continue
 
+        errores_fila = []
+        campos_error = []
+
+        
         if db.query(Student).filter(Student.matricula == matricula_str).first():
-            raise HTTPException(
-                status_code=400, 
-                detail=f"La matrícula {matricula_str} ya está registrada en el sistema."
-            )
+            errores_fila.append("La matrícula ya existe")
+            campos_error.append("Matrícula")
 
+        
+        carrera_excel = str(row.get('Carrera', '')).strip()
+        career = db.query(Career).filter(
+            (Career.external_id == carrera_excel) | (Career.name == carrera_excel)
+        ).first()
+        
+        if not career:
+            errores_fila.append(f"Carrera '{carrera_excel}' no encontrada")
+            campos_error.append("Carrera")
+
+       
+        escuela_excel = str(row.get('Procedencia', '')).strip()
+        school = db.query(OriginSchool).filter(OriginSchool.name == escuela_excel).first()
+        
+        if not school:
+            errores_fila.append(f"Procedencia '{escuela_excel}' no registrada")
+            campos_error.append("Procedencia")
+
+        
+        if errores_fila:
+            errores_validacion.append({
+                "matricula": matricula_str,
+                "nombre": row.get('Nombre', 'Desconocido'),
+                "campos": campos_error,
+                "mensajes": errores_fila
+            })
+            continue
+
+        
         try:
-            carrera_excel = str(row.get('Carrera', '')).strip()
-            career = db.query(Career).filter(
-                (Career.external_id == carrera_excel) | (Career.name == carrera_excel)
-            ).first()
-            
-            escuela_excel = str(row.get('Procedencia', '')).strip()
-            school = db.query(OriginSchool).filter(OriginSchool.name == escuela_excel).first()
-
-            if not career or not school:
-                raise HTTPException(
-                    status_code=400, 
-                    detail=f"Datos maestros (Carrera/Escuela) no encontrados para matrícula {matricula_str}"
-                )
-
             email_inst = row.get('Correo Institucional') or row.get('Correo institucional')
 
             nuevo_alumno = Student(
@@ -76,10 +97,8 @@ async def importar_alumnos(file: UploadFile = File(...), db: Session = Depends(g
             db.add(nuevo_alumno)
 
             if email_inst:
-                
                 caracteres = string.ascii_letters + string.digits
                 password_aleatoria = ''.join(secrets.choice(caracteres) for _ in range(10))
-                
                 
                 nuevo_usuario = User(
                     identifier=matricula_str,
@@ -89,7 +108,6 @@ async def importar_alumnos(file: UploadFile = File(...), db: Session = Depends(g
                     is_temp_password=True
                 )
                 db.add(nuevo_usuario)
-                
                 
                 credenciales_generadas.append({
                     "nombre": f"{row.get('Nombre')} {row.get('Apellido Paterno')}",
@@ -109,16 +127,27 @@ async def importar_alumnos(file: UploadFile = File(...), db: Session = Depends(g
             )
             db.add(nueva_direccion)
             
-            db.commit()
             registros_nuevos += 1
 
-        except HTTPException as he:
-            db.rollback()
-            raise he
         except Exception as e:
             db.rollback()
             raise HTTPException(status_code=500, detail=str(e))
 
+   
+    if errores_validacion:
+        
+        db.rollback()
+        return JSONResponse(
+            status_code=400,
+            content={
+                "detail": f"Se encontraron errores en {len(errores_validacion)} alumnos.",
+                "errores_detalle": errores_validacion
+            }
+        )
+
+   
+    db.commit()
+    
     return {
         "message": f"{registros_nuevos} alumnos y usuarios creados correctamente.",
         "data": credenciales_generadas 
