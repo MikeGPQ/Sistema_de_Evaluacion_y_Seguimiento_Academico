@@ -70,7 +70,7 @@ export default function ManualRegister({ isOpen, onClose }) {
       });
       setColoniasAPI([]);
 
-      client.get('/students/options').then(res => {
+      client.get('/alumnos/options').then(res => {
         setCareers(res.data.careers || []);
         setSchools(res.data.schools || []);
       }).catch(err => console.error("Error al cargar catálogos:", err));
@@ -159,16 +159,15 @@ export default function ManualRegister({ isOpen, onClose }) {
 
  const handleCheckCurp = async () => {
     if (formData.curp.length === 18) {
-      // 🌟 NUEVO CANDADO EN VIVO: Revisar formato oficial antes de buscar en la BD
       const curpRegex = /^[A-Z]{4}\d{6}[HM][A-Z]{5}[A-Z0-9]\d$/i;
       if (!curpRegex.test(formData.curp)) {
         setErroresEnVivo(prev => ({ ...prev, curp: '❌ El formato de la CURP es incorrecto.' }));
         setValidacionExitosa(prev => ({ ...prev, curp: false }));
-        return; // Detenemos la función aquí
+        return;
       }
 
       try {
-        const res = await client.get(`/students/check-curp?curp=${formData.curp}`);
+        const res = await client.get(`/alumnos/check-curp?curp=${formData.curp}`);
         if (res.data.exists) {
           setErroresEnVivo(prev => ({ ...prev, curp: '❌ Esta CURP ya está registrada.' }));
           setValidacionExitosa(prev => ({ ...prev, curp: false }));
@@ -183,8 +182,7 @@ export default function ManualRegister({ isOpen, onClose }) {
   };
 
   const handleCheckEmail = async () => {
-    if (formData.email_personal.length > 5) { // Para no revisar a cada letra
-      // 🌟 NUEVO CANDADO EN VIVO: Revisar formato de correo antes de buscar en la BD
+    if (formData.email_personal.length > 5) {
       const emailRegex = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/i;
       if (!emailRegex.test(formData.email_personal)) {
         setErroresEnVivo(prev => ({ ...prev, email: '❌ Formato de correo inválido.' }));
@@ -193,7 +191,7 @@ export default function ManualRegister({ isOpen, onClose }) {
       }
 
       try {
-        const res = await client.get(`/students/check-email?email=${formData.email_personal.toLowerCase()}`);
+        const res = await client.get(`/alumnos/check-email?email=${formData.email_personal.toLowerCase()}`);
         if (res.data.exists) {
           setErroresEnVivo(prev => ({ ...prev, email: '❌ Este correo ya está en uso.' }));
           setValidacionExitosa(prev => ({ ...prev, email: false }));
@@ -233,11 +231,9 @@ export default function ManualRegister({ isOpen, onClose }) {
 
     setIsLoading(true);
 
-    // 🌟 CORRECCIÓN: Construimos el correo institucional completo antes de enviarlo
     let finalEmailInstitucional = null;
     if (formData.email_institucional.trim() !== "") {
       const rawEmail = formData.email_institucional.trim().toLowerCase();
-      // Si el usuario por error escribió el @red.unid.mx, no lo duplicamos
       finalEmailInstitucional = rawEmail.includes('@') ? rawEmail : `${rawEmail}@red.unid.mx`;
     }
 
@@ -246,7 +242,7 @@ export default function ManualRegister({ isOpen, onClose }) {
       career_id: parseInt(formData.career_id),
       origin_school_id: parseInt(formData.origin_school_id),
       promedio_procedencia: promedio,
-      email_institucional: finalEmailInstitucional, // Enviamos el correo ya armado
+      email_institucional: finalEmailInstitucional,
       cuatrimestre: 1,
       address: {
         calle: formData.calle, numero_domicilio: formData.numero_domicilio,
@@ -262,7 +258,7 @@ export default function ManualRegister({ isOpen, onClose }) {
     if (files.certificado) dataToSend.append('certificado', files.certificado);
 
     try {
-      const res = await client.post('/students/register', dataToSend);
+      const res = await client.post('/alumnos/register', dataToSend);
       
       Swal.fire({
         title: '¡Alumno Guardado Exitosamente!',
@@ -305,7 +301,6 @@ export default function ManualRegister({ isOpen, onClose }) {
 
       <form onSubmit={handleSubmit} className="space-y-8 bg-slate-50 p-2 md:p-6 rounded-lg">
         
-        {/* 1. INFORMACIÓN PERSONAL */}
         <div className="bg-white rounded-lg p-6 shadow-sm border border-gray-100">
           <h4 className="flex items-center text-[#1e3a8a] font-bold mb-6 text-base">
             <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-blue-50 text-blue-600 mr-3">
@@ -343,7 +338,6 @@ export default function ManualRegister({ isOpen, onClose }) {
           </div>
         </div>
 
-        {/* 2. INFORMACIÓN ACADÉMICA */}
         <div className="bg-white rounded-lg p-6 shadow-sm border border-gray-100">
           <h4 className="flex items-center text-[#1e3a8a] font-bold mb-6 text-base">
             <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-blue-50 text-blue-600 mr-3">
@@ -379,7 +373,6 @@ export default function ManualRegister({ isOpen, onClose }) {
           </div>
         </div>
 
-        {/* 3. DIRECCIÓN / CONTACTO */}
         <div className="bg-white rounded-lg p-6 shadow-sm border border-gray-100">
           <h4 className="flex items-center text-[#1e3a8a] font-bold mb-6 text-base">
             <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-blue-50 text-blue-600 mr-3">
@@ -391,7 +384,6 @@ export default function ManualRegister({ isOpen, onClose }) {
             <div>
               <label className="block text-xs font-bold text-gray-600 mb-1">Correo Institucional</label>
               <div className="flex">
-                {/* 🌟 CORRECCIÓN: type="text" para engañar al navegador */}
                 <input type="text" name="email_institucional" value={formData.email_institucional} placeholder="Ej: darkminnk128" onChange={handleChange} className="w-full border border-gray-300 rounded-l-md p-2.5 text-sm lowercase focus:border-[#1e3a8a] focus:ring-1 focus:ring-[#1e3a8a] outline-none" />
                 <span className="inline-flex items-center px-3 rounded-r-md border border-l-0 border-gray-300 bg-gray-50 text-gray-500 text-sm">@red.unid.mx</span>
               </div>
@@ -438,7 +430,6 @@ export default function ManualRegister({ isOpen, onClose }) {
           </div>
         </div>
 
-        {/* 4. DOCUMENTOS MULTIMEDIA */}
         <div className="bg-white rounded-lg p-6 shadow-sm border border-gray-100">
           <h4 className="flex items-center text-[#1e3a8a] font-bold mb-4 text-base">
             <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-blue-50 text-blue-600 mr-3">
@@ -462,7 +453,6 @@ export default function ManualRegister({ isOpen, onClose }) {
           </div>
         </div>
 
-        {/* BOTONES FINALES */}
         <div className="flex justify-between items-center pt-4">
           <span className="text-xs text-red-500">* Campos obligatorios</span>
           <div className="flex space-x-3">

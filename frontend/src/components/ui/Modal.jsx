@@ -1,7 +1,6 @@
 import { useEffect } from 'react';
 
 export default function Modal({ isOpen, onClose, title, children }) {
-  // Evitar scroll de fondo cuando el modal está abierto
   useEffect(() => {
     if (isOpen) document.body.style.overflow = 'hidden';
     else document.body.style.overflow = 'unset';
@@ -14,7 +13,6 @@ export default function Modal({ isOpen, onClose, title, children }) {
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 transition-opacity">
       <div className="bg-white rounded-lg shadow-xl w-full max-w-4xl max-h-[90vh] flex flex-col animate-fade-in-up">
         
-        {/* 🌟 CORRECCIÓN: El Header original solo se dibuja si existe un "title" */}
         {title && (
           <div className="flex justify-between items-center p-6 border-b border-gray-100">
             <div>
@@ -30,11 +28,9 @@ export default function Modal({ isOpen, onClose, title, children }) {
           </div>
         )}
 
-        {/* Body (Scrollable) */}
         <div className="p-6 overflow-y-auto custom-scrollbar">
           {children}
         </div>
-
       </div>
     </div>
   );

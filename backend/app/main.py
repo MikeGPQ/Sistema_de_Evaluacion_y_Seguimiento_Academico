@@ -1,16 +1,29 @@
 import os
+from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
-
-# 1. IMPORTAR EL ROUTER DE ESTUDIANTES
-from app.routers import students 
+from sqlalchemy import text 
+from app.routers import Listados
+from app.db.database import engine
+from app.routers.students import router as students_router
+from app.routers import auth
 
 load_dotenv()
 
-app = FastAPI()
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    try:
+        with engine.connect() as connection:
+            connection.execute(text("SELECT 1"))
+        print("\n¡CONEXIÓN A BASE DE DATOS EXITOSA!\n")
+    except Exception as e:
+        print(f"\nERROR AL CONECTAR A LA BD: {e}\n")
+    
+    yield
 
-# Evitar error si la variable de entorno no existe o está vacía
+app = FastAPI(title="SESA API", version="1.0.0", lifespan=lifespan)
+
 origins_env = os.getenv("BACKEND_CORS_ORIGINS")
 origins = origins_env.split(",") if origins_env else ["http://localhost:5173", "http://127.0.0.1:5173"]
 
@@ -22,9 +35,10 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# 2. CONECTAR EL ROUTER A LA APP
-app.include_router(students.router)
+app.include_router(students_router)
+app.include_router(Listados.router)
+app.include_router(auth.router)
 
 @app.get("/")
 def read_root():
-    return {"message": "El sistema SESA está funcionando 🚀"}
+    return {"message": "El sistema SESA está funcionando"}
