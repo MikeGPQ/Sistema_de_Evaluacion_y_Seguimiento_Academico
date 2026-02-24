@@ -7,13 +7,17 @@ import {
   Loader2,
   Search,
   Upload,
-  Plus
+  Plus,
+  LogOut
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import client from '../../lib/axios';
+import { useAuth } from '../../hooks/AuthContext';
 
 const ListadoAlumnos = () => {
   const navigate = useNavigate();
+  const { logout } = useAuth();
+
   const [alumnos, setAlumnos] = useState([]);
   const [cargando, setCargando] = useState(true);
   const [pagina, setPagina] = useState(1);
@@ -58,9 +62,19 @@ const ListadoAlumnos = () => {
   return (
     <div className="p-8 bg-gray-50 min-h-screen">
       
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold text-gray-800">Listado General de Alumnos</h1>
-        <p className="text-gray-500 text-sm">Gestión y visualización de matrícula escolar</p>
+      <div className="mb-6 flex justify-between items-start">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-800">Listado General de Alumnos</h1>
+          <p className="text-gray-500 text-sm">Gestión y visualización de matrícula escolar</p>
+        </div>
+        
+        <button 
+          onClick={logout}
+          className="flex items-center gap-2 px-4 py-2 bg-red-50 text-red-600 hover:bg-red-100 hover:text-red-700 rounded-lg text-sm font-bold transition-colors shadow-sm border border-red-100"
+        >
+          <LogOut className="w-4 h-4" />
+          Cerrar Sesión
+        </button>
       </div>
 
       <div className="flex flex-col md:flex-row justify-between items-center gap-4 mb-6">

@@ -32,6 +32,8 @@ const ImportarAlumnos = () => {
     const file = e.target.files[0];
     if (!file) return;
 
+    setReporte(null);
+
     if (!file.name.endsWith('.xlsx')) {
       setNotificacion({ mostrar: true, mensaje: "Solo se permiten archivos .xlsx", tipo: "error" });
       if (fileInputRef.current) fileInputRef.current.value = "";
@@ -60,7 +62,7 @@ const ImportarAlumnos = () => {
       const jsonData = [];
 
       worksheet.getRow(1).eachCell((cell, colNumber) => {
-        headers[colNumber] = cell.value ? cell.value.toString().trim() : "";
+        headers[colNumber] = cell.value ? cell.value.toString().replace(':', '').trim() : "";
       });
 
       worksheet.eachRow((row, rowNumber) => {
