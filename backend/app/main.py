@@ -6,6 +6,7 @@ from dotenv import load_dotenv
 from sqlalchemy import text 
 from app.db.database import engine
 from app.routers.students import router as students_router
+from app.routers import auth
 
 load_dotenv()
 
@@ -34,6 +35,7 @@ app.add_middleware(
 )
 
 app.include_router(students_router)
+app.include_router(auth.router)
 
 @app.get("/")
 def read_root():
