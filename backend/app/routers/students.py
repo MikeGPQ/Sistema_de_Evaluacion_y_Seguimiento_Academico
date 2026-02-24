@@ -48,7 +48,11 @@ async def importar_alumnos(file: UploadFile = File(...), db: Session = Depends(g
             errores_fila.append("La matrícula ya existe")
             campos_error.append("Matrícula")
 
-        
+            curp_str = str(row.get('Curp', '')).strip()
+        if db.query(Student).filter(Student.curp == curp_str).first():
+            errores_fila.append(f"El CURP {curp_str} ya está registrado")
+            campos_error.append("Curp")
+
         carrera_excel = str(row.get('Carrera', '')).strip()
         career = db.query(Career).filter(
             (Career.external_id == carrera_excel) | (Career.name == carrera_excel)

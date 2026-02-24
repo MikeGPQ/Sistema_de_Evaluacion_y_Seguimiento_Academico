@@ -48,7 +48,20 @@ const ListadoAlumnos = () => {
   };
 
   const handleCambiarEstatus = (alumno) => {
-    navigate('/alumnos/cambiar-estatus', { state: { alumno } });
+    
+    let estatusFormateado = "Activo"; // Default
+    if (alumno.estatus === "baja") estatusFormateado = "Baja";
+    if (alumno.estatus === "baja_temporal") estatusFormateado = "Baja Temporal";
+    if (alumno.estatus === "egresado") estatusFormateado = "Egresado";
+    if (alumno.estatus === "activo") estatusFormateado = "Activo";
+
+    
+    navigate('/alumnos/cambiar-estatus', { 
+        state: { 
+            alumno: alumno,
+            estatusActual: estatusFormateado 
+        } 
+    });
   };
 
   // Paginación
