@@ -13,6 +13,7 @@ import {
 import { useNavigate } from 'react-router-dom';
 import client from '../../lib/axios';
 import { useAuth } from '../../hooks/AuthContext';
+import ManualRegister from '../../components/form/ManualRegister';
 
 const ListadoAlumnos = () => {
   const navigate = useNavigate();
@@ -22,6 +23,8 @@ const ListadoAlumnos = () => {
   const [cargando, setCargando] = useState(true);
   const [pagina, setPagina] = useState(1);
   const [total, setTotal] = useState(0);
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  
   const limite = 10;
 
   const fetchAlumnos = async () => {
@@ -113,7 +116,7 @@ const ListadoAlumnos = () => {
           </button>
           
           <button
-            onClick={() => alert('Próximamente: Integrar con la rama de Agregar Alumno')}
+            onClick={() => setIsModalOpen(true)}
             className="flex-1 md:flex-none flex items-center justify-center gap-2 bg-[#1A237E] text-white px-5 py-2.5 rounded-lg text-sm font-bold hover:bg-[#283593] transition-colors shadow-sm"
           >
             <Plus className="w-4 h-4" />
@@ -218,6 +221,12 @@ const ListadoAlumnos = () => {
           </div>
         )}
       </div>
+
+      <ManualRegister 
+        isOpen={isModalOpen} 
+        onClose={() => setIsModalOpen(false)} 
+      />
+
     </div>
   );
 };

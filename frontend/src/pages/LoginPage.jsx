@@ -131,7 +131,7 @@ const LoginPage = () => {
       </div>
 
       <footer className="w-full p-6 flex flex-col md:flex-row justify-between items-center text-[10px] text-gray-400 gap-4">
-        <p>© 2024 Universidad Interamericana para el Desarrollo. Todos los derechos reservados.</p>
+        <p>© 2026 Universidad Interamericana para el Desarrollo. Todos los derechos reservados.</p>
         <div className="flex items-center gap-4">
           <a href="#" className="hover:text-gray-600">Aviso de Privacidad</a>
           <a href="#" className="hover:text-gray-600">Términos de Uso</a>
