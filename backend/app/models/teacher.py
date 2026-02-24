@@ -1,6 +1,5 @@
 from sqlalchemy import Column, Integer, String
 from sqlalchemy.orm import relationship
-# OJO: Revisa cómo importan 'Base' en student.py, puede ser de app.db.database o app.core...
 from app.db.database import Base 
 
 class Teacher(Base):

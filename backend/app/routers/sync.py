@@ -1,8 +1,6 @@
 from fastapi import APIRouter
 from sqlalchemy.orm import Session
 import requests
-
-# ⚠️ OJO AQUÍ: Asegúrate de importar SessionLocal (o la clase que crea tus sesiones en database.py)
 from app.db.database import SessionLocal 
 from app.models.teacher import Teacher
 from app.models.subject import Subject
@@ -16,8 +14,7 @@ router = APIRouter(
 URL_API_DOCENTES = "http://127.0.0.1:8000/api-externa-mock/carga-academica"
 
 def tarea_automatica_sincronizacion():
-    """Esta función se ejecutará sola en segundo plano sin peticiones web."""
-    db = SessionLocal() # Creamos una sesión de BD manual
+    db = SessionLocal()
     try:
         respuesta = requests.get(URL_API_DOCENTES)
         if respuesta.status_code != 200:
@@ -28,7 +25,6 @@ def tarea_automatica_sincronizacion():
         registros_procesados = 0
 
         for item in datos:
-            # --- DOCENTES ---
             docente = db.query(Teacher).filter(Teacher.external_id == item["ID_Docente"]).first()
             if not docente:
                 docente = Teacher(
@@ -39,7 +35,6 @@ def tarea_automatica_sincronizacion():
                 db.commit()
                 db.refresh(docente)
 
-            # --- MATERIAS ---
             materia = db.query(Subject).filter(Subject.external_id == item["ID_Materia"]).first()
             if not materia:
                 materia = Subject(
@@ -50,7 +45,6 @@ def tarea_automatica_sincronizacion():
                 db.commit()
                 db.refresh(materia)
 
-            # --- GRUPOS ---
             grupo = db.query(AcademicGroup).filter(
                 AcademicGroup.periodo == item["Periodo"],
                 AcademicGroup.identificador_grupo == item["Identificador_Grupo"],
@@ -76,10 +70,9 @@ def tarea_automatica_sincronizacion():
     except Exception as e:
         print(f"❌ Error en Sincronización Automática: {e}")
     finally:
-        db.close() # MUY IMPORTANTE: Cerrar la sesión manual para no saturar la BD
+        db.close()
 
 @router.post("/ejecutar")
 def sincronizar_datos_manual():
-    """Ruta para disparar la sincronización manualmente (Botón de Pánico)"""
     tarea_automatica_sincronizacion()
     return {"mensaje": "Sincronización manual disparada con éxito. Revisa la consola."}

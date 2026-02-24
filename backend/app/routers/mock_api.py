@@ -7,10 +7,6 @@ router = APIRouter(
 
 @router.get("/carga-academica")
 def obtener_carga_academica_falsa():
-    """
-    Simula la respuesta del endpoint del equipo de Docentes.
-    Una vez que ellos terminen, dejaremos de usar esta ruta.
-    """
     return [
         {
             "ID_Materia": "EXT-MAT-101",
