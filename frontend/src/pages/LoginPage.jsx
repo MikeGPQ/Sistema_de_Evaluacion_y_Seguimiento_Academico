@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
-import { Mail, Lock, Eye, EyeOff, Key, ArrowRight } from 'lucide-react';
-import { useAuth } from '../hooks/AuthContext'; // Para guardar la sesión
-import client from '../lib/axios'; // Tu instancia de axios ya configurada
+import { User, Lock, Eye, EyeOff, ArrowRight, HelpCircle, Globe, GraduationCap } from 'lucide-react';
+import { useAuth } from '../hooks/AuthContext';
+import client from '../lib/axios';
 
 const LoginPage = () => {
   const { login: authLogin } = useAuth();
@@ -16,20 +16,14 @@ const LoginPage = () => {
     setIsLoading(true);
 
     try {
-      // 1. Enviamos el identifier (Matrícula/ID) y password al Backend (HU-30a)
       const response = await client.post('/auth/login', {
         identifier: credentials.identifier,
         password: credentials.password
       });
 
-      // 2. Si es exitoso, guardamos los datos (rol, is_temp_password) en el contexto
       authLogin(response.data);
       
-      // Nota: No necesitamos redireccionar manualmente aquí. 
-      // AppRoutes detectará el cambio en el AuthContext y hará su magia.
-      
     } catch (err) {
-      // 3. Criterio HU-30a: Mensaje genérico por seguridad
       setError('Correo o contraseña incorrectos');
       console.error("Detalle técnico del error:", err.response?.data || err.message);
     } finally {
@@ -38,75 +32,111 @@ const LoginPage = () => {
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
-      <div className="bg-white p-8 rounded-3xl shadow-xl w-full max-w-md border border-slate-100 text-center">
-        {/* Logo */}
-        <div className="inline-flex items-center justify-center w-20 h-20 bg-gradient-to-br from-indigo-600 to-blue-500 rounded-2xl shadow-lg mb-6 text-white">
-          <svg className="w-10 h-10" fill="currentColor" viewBox="0 0 24 24">
-            <path d="M12 3L1 9l11 6 9-4.91V17h2V9L12 3zM3.89 9L12 4.57 20.11 9 12 13.43 3.89 9zM12 15l-6.19-3.37L4.57 13 12 17.05l7.43-4.05-1.24-1.37L12 15z" />
-          </svg>
-        </div>
+    <div className="min-h-screen bg-[#F8F9FA] flex flex-col relative font-sans">
+      
+      <div className="absolute top-6 right-8 hidden md:block">
+        <a href="#" className="flex items-center gap-1.5 text-xs text-gray-500 hover:text-gray-800 transition-colors font-medium">
+          <Globe size={14} /> Sitio Web UNID
+        </a>
+      </div>
 
-        <h1 className="text-3xl font-bold text-slate-800 mb-2">Sistema Académico</h1>
-        <p className="text-slate-500 mb-8 font-medium">Ingresa tus credenciales institucionales</p>
-
-        <form onSubmit={handleLogin} className="space-y-6 text-left">
-          <div className="space-y-2">
-            <label className="text-sm font-bold text-slate-700 ml-1">Matrícula o ID</label>
-            <div className="relative group">
-              <Mail className="absolute left-4 top-3.5 w-5 h-5 text-slate-400 group-focus-within:text-blue-500 transition-colors" />
-              <input 
-                type="text"
-                required
-                placeholder="Matrícula / Usuario"
-                className="w-full pl-12 pr-4 py-3.5 bg-white border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all text-slate-600"
-                onChange={(e) => setCredentials({...credentials, identifier: e.target.value})}
-              />
+      <div className="flex-1 flex items-center justify-center p-4">
+        <div className="bg-white rounded-[20px] shadow-[0_8px_30px_rgb(0,0,0,0.04)] w-full max-w-[420px] overflow-hidden border border-gray-100 flex flex-col">
+          
+          <div className="bg-[#0B172A] pt-8 pb-7 px-8 flex flex-col items-center justify-center text-white">
+            <div className="flex items-center gap-3">
+              <GraduationCap size={32} className="text-white" />
+              <div className="flex flex-col">
+                <span className="text-2xl font-black tracking-wide leading-none">UNID</span>
+                <span className="text-[8px] uppercase tracking-[0.2em] mt-0.5 text-gray-300">Universidad Interamericana</span>
+              </div>
             </div>
           </div>
 
-          <div className="space-y-2">
-            <label className="text-sm font-bold text-slate-700 ml-1">Contraseña</label>
-            <div className="relative group">
-              <Lock className="absolute left-4 top-3.5 w-5 h-5 text-slate-400 group-focus-within:text-blue-500 transition-colors" />
-              <input 
-                type={showPassword ? "text" : "password"}
-                required
-                placeholder="••••••••"
-                className="w-full pl-12 pr-12 py-3.5 bg-white border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all text-slate-600"
-                onChange={(e) => setCredentials({...credentials, password: e.target.value})}
-              />
+          <div className="p-8 pb-10 flex flex-col text-center">
+            <h1 className="text-[22px] font-bold text-[#1A1A1A] mb-1">Portal de Alumnos</h1>
+            <p className="text-sm text-gray-500 mb-8 font-medium">Ingresa tus credenciales para continuar</p>
+
+            <form onSubmit={handleLogin} className="space-y-5 text-left flex flex-col">
+              
+              <div className="space-y-1.5">
+                <label className="text-[10px] font-bold text-gray-700 uppercase tracking-wide ml-0.5">
+                  ID O CORREO INSTITUCIONAL
+                </label>
+                <div className="relative group">
+                  <User className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 group-focus-within:text-[#0B172A] transition-colors" />
+                  <input 
+                    type="text"
+                    required
+                    placeholder="ej. 00123456"
+                    className="w-full pl-10 pr-4 py-2.5 bg-white border border-gray-300 rounded-lg outline-none focus:ring-1 focus:ring-[#0B172A] focus:border-[#0B172A] transition-all text-sm text-gray-800 placeholder:text-gray-400"
+                    onChange={(e) => setCredentials({...credentials, identifier: e.target.value})}
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-[10px] font-bold text-gray-700 uppercase tracking-wide ml-0.5">
+                  Contraseña
+                </label>
+                <div className="relative group">
+                  <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 group-focus-within:text-[#0B172A] transition-colors" />
+                  <input 
+                    type={showPassword ? "text" : "password"}
+                    required
+                    placeholder="••••••••"
+                    className="w-full pl-10 pr-10 py-2.5 bg-white border border-gray-300 rounded-lg outline-none focus:ring-1 focus:ring-[#0B172A] focus:border-[#0B172A] transition-all text-sm text-gray-800 placeholder:text-gray-400 tracking-widest"
+                    onChange={(e) => setCredentials({...credentials, password: e.target.value})}
+                  />
+                  <button 
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute right-3.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 focus:outline-none"
+                  >
+                    {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                  </button>
+                </div>
+              </div>
+
+              <div className="flex justify-end mt-1 mb-2">
+                <a href="#" className="text-xs text-gray-500 hover:text-[#0B172A] font-medium transition-colors">
+                  ¿Olvidaste tu contraseña?
+                </a>
+              </div>
+
+              {error && (
+                <div className="bg-red-50 border border-red-100 p-2.5 rounded-lg text-center animate-in fade-in">
+                   <p className="text-red-600 text-xs font-bold">{error}</p>
+                </div>
+              )}
+
               <button 
-                type="button"
-                onClick={() => setShowPassword(!showPassword)}
-                className="absolute right-4 top-3.5 text-slate-400 hover:text-slate-600"
+                type="submit"
+                disabled={isLoading}
+                className={`w-full py-3 bg-[#F2A900] hover:bg-[#E59F00] text-[#1A1A1A] font-bold rounded-lg flex items-center justify-center gap-2 transition-transform shadow-sm text-sm ${isLoading ? 'opacity-70 cursor-not-allowed' : 'active:scale-[0.98]'}`}
               >
-                {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
+                {isLoading ? 'Verificando...' : 'Ingresar al Portal'} <ArrowRight size={16} className="ml-1" />
               </button>
+            </form>
+
+            <div className="mt-8 flex flex-col items-center">
+              <span className="text-[11px] text-gray-400 mb-1.5">¿Tienes problemas para ingresar?</span>
+              <a href="#" className="inline-flex items-center gap-1.5 text-[11px] font-bold text-gray-600 hover:text-[#0B172A] uppercase border-b border-gray-400 hover:border-[#0B172A] pb-0.5 transition-colors">
+                <HelpCircle size={13} /> CENTRO DE AYUDA
+              </a>
             </div>
+
           </div>
-
-          {error && (
-            <div className="bg-red-50 border-l-4 border-red-500 p-3 rounded shadow-sm">
-               <p className="text-red-700 text-sm font-medium">{error} </p>
-            </div>
-          )}
-
-          <button 
-            type="submit"
-            disabled={isLoading}
-            className={`w-full py-4 bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-bold rounded-xl shadow-lg flex items-center justify-center gap-2 transition-all ${isLoading ? 'opacity-70 cursor-not-allowed' : 'hover:scale-[1.02] active:scale-[0.98]'}`}
-          >
-            {isLoading ? 'Verificando...' : 'Iniciar Sesión'} <ArrowRight size={20} />
-          </button>
-        </form>
-
-        <div className="mt-8">
-          <a href="#" className="inline-flex items-center gap-2 text-blue-600 font-semibold hover:text-blue-800 text-sm">
-            <Key size={16} /> ¿Olvidaste tu contraseña? 
-          </a>
         </div>
       </div>
+
+      <footer className="w-full p-6 flex flex-col md:flex-row justify-between items-center text-[10px] text-gray-400 gap-4">
+        <p>© 2024 Universidad Interamericana para el Desarrollo. Todos los derechos reservados.</p>
+        <div className="flex items-center gap-4">
+          <a href="#" className="hover:text-gray-600">Aviso de Privacidad</a>
+          <a href="#" className="hover:text-gray-600">Términos de Uso</a>
+        </div>
+      </footer>
     </div>
   );
 };

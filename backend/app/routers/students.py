@@ -6,23 +6,29 @@ import string
 import io
 import pandas as pd
 from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Form
+from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 from sqlalchemy import func
+from passlib.context import CryptContext 
 from app.db.database import get_db
 from app.models.student import Student
 from app.models.student_addresses import StudentAddress
 from app.models.career import Career
 from app.models.origin_school import OriginSchool
-from app.models.user import User
+from app.models.user import User 
 from app.schemas.student import StudentCreate, OptionsResponse
 from app.core.security import get_password_hash
 
+pwd_context = CryptContext(
+    schemes=["bcrypt"], 
+    deprecated="auto", 
+    bcrypt__ident="2b" 
+)
 
-router = APIRouter(prefix="/students", tags=["students"])
+router = APIRouter(prefix="/alumnos", tags=["Alumnos"])
 
 UPLOAD_DIR = "uploads"
 os.makedirs(UPLOAD_DIR, exist_ok=True)
-
 
 @router.get("/options", response_model=OptionsResponse)
 def get_form_options(db: Session = Depends(get_db)):
@@ -112,8 +118,8 @@ def register_student(
         if cert_path and os.path.exists(cert_path): os.remove(cert_path)
         raise HTTPException(status_code=500, detail=f"Error en BD: {str(e)}")
 
-@router.post("/import")
-async def importar_alumnos_excel(file: UploadFile = File(...), db: Session = Depends(get_db)):
+@router.post("/importar")
+async def importar_alumnos(file: UploadFile = File(...), db: Session = Depends(get_db)):
     if not file.filename.endswith('.xlsx'):
         raise HTTPException(status_code=400, detail="Error: Solo se permiten archivos .xlsx")
 
@@ -122,26 +128,53 @@ async def importar_alumnos_excel(file: UploadFile = File(...), db: Session = Dep
     df.columns = [c.replace(':', '').strip() for c in df.columns]
 
     registros_nuevos = 0
-    errores = []
+    credenciales_generadas = []
+    
+  
+    errores_validacion = []
 
-    for index, row in df.iterrows():
+    for _, row in df.iterrows():
         matricula_str = str(row.get('Matrícula', '')).strip()
         if not matricula_str or matricula_str == 'nan': continue
+
+        errores_fila = []
+        campos_error = []
+
         
         if db.query(Student).filter(Student.matricula == matricula_str).first():
-            continue 
+            errores_fila.append("La matrícula ya existe")
+            campos_error.append("Matrícula")
 
+        
+        carrera_excel = str(row.get('Carrera', '')).strip()
+        career = db.query(Career).filter(
+            (Career.external_id == carrera_excel) | (Career.name == carrera_excel)
+        ).first()
+        
+        if not career:
+            errores_fila.append(f"Carrera '{carrera_excel}' no encontrada")
+            campos_error.append("Carrera")
+
+       
+        escuela_excel = str(row.get('Procedencia', '')).strip()
+        school = db.query(OriginSchool).filter(OriginSchool.name == escuela_excel).first()
+        
+        if not school:
+            errores_fila.append(f"Procedencia '{escuela_excel}' no registrada")
+            campos_error.append("Procedencia")
+
+        
+        if errores_fila:
+            errores_validacion.append({
+                "matricula": matricula_str,
+                "nombre": row.get('Nombre', 'Desconocido'),
+                "campos": campos_error,
+                "mensajes": errores_fila
+            })
+            continue
+
+        
         try:
-            carrera_excel = str(row.get('Carrera', '')).strip()
-            career = db.query(Career).filter((Career.external_id == carrera_excel) | (Career.name == carrera_excel)).first()
-            
-            escuela_excel = str(row.get('Procedencia', '')).strip()
-            school = db.query(OriginSchool).filter(OriginSchool.name == escuela_excel).first()
-
-            if not career:
-                errores.append(f"Fila {index}: Carrera '{carrera_excel}' no encontrada.")
-                continue
-
             email_inst = row.get('Correo Institucional') or row.get('Correo institucional')
 
             nuevo_alumno = Student(
@@ -153,43 +186,66 @@ async def importar_alumnos_excel(file: UploadFile = File(...), db: Session = Dep
                 email_personal=row.get('Correo Personal') or row.get('Correo personal'),
                 email_institucional=email_inst,
                 cuatrimestre_actual=int(row.get('Cuatrimestre') or 1),
-                status=str(row.get('Estatus', 'activo')).lower(), 
+                status=row.get('Estatus', 'activo').lower(), 
                 career_id=career.id,
-                origin_school_id=school.id if school else None,
+                origin_school_id=school.id,
                 promedio_procedencia=float(row.get('Promedio General', 0))
             )
             db.add(nuevo_alumno)
 
             if email_inst:
-                password_plana = str(matricula_str).strip()
-                
-                hashed_pw_excel = get_password_hash(password_plana)
+                caracteres = string.ascii_letters + string.digits
+                password_aleatoria = ''.join(secrets.choice(caracteres) for _ in range(10))
                 
                 nuevo_usuario = User(
                     identifier=matricula_str,
                     email=email_inst,
-                    password_hash=hashed_pw_excel,
+                    password_hash=pwd_context.hash(password_aleatoria),
                     role='alumno',
                     is_temp_password=True
                 )
                 db.add(nuevo_usuario)
+                
+                credenciales_generadas.append({
+                    "nombre": f"{row.get('Nombre')} {row.get('Apellido Paterno')}",
+                    "usuario": matricula_str,
+                    "password": password_aleatoria,
+                    "correo": email_inst
+                })
 
             nueva_direccion = StudentAddress(
                 student_matricula=matricula_str,
-                calle=row.get('Calle', 'Conocida'),
+                calle=row.get('Calle'),
                 numero_domicilio=str(row.get('Número de domicilio') or 'S/N'), 
-                colonia=row.get('Colonia', 'Centro'),
-                codigo_postal=str(row.get('Código Postal') or row.get('Código postal') or '00000'),
-                municipio=row.get('Municipio', 'Campeche'),
+                colonia=row.get('Colonia'),
+                codigo_postal=str(row.get('Código Postal') or row.get('Código postal')),
+                municipio=row.get('Municipio'),
                 estado=row.get('Estado', 'Campeche')
             )
             db.add(nueva_direccion)
             
-            db.commit()
             registros_nuevos += 1
 
         except Exception as e:
             db.rollback()
-            errores.append(f"Matrícula {matricula_str}: {str(e)}")
+            raise HTTPException(status_code=500, detail=str(e))
 
-    return {"message": f"Proceso finalizado. {registros_nuevos} alumnos creados.", "errores": errores}
+   
+    if errores_validacion:
+        
+        db.rollback()
+        return JSONResponse(
+            status_code=400,
+            content={
+                "detail": f"Se encontraron errores en {len(errores_validacion)} alumnos.",
+                "errores_detalle": errores_validacion
+            }
+        )
+
+   
+    db.commit()
+    
+    return {
+        "message": f"{registros_nuevos} alumnos y usuarios creados correctamente.",
+        "data": credenciales_generadas 
+    }

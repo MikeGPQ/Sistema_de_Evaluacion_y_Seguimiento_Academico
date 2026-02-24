@@ -4,6 +4,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
 from sqlalchemy import text 
+from app.routers import Listados
 from app.db.database import engine
 from app.routers.students import router as students_router
 from app.routers import auth
@@ -35,6 +36,7 @@ app.add_middleware(
 )
 
 app.include_router(students_router)
+app.include_router(Listados.router)
 app.include_router(auth.router)
 
 @app.get("/")
