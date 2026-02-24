@@ -6,9 +6,14 @@ import client from '../../lib/axios';
 const CambiarEstatusAlumno = () => {
     const location = useLocation();
     const navigate = useNavigate();
+    
     const alumnoSeleccionado = location.state?.alumno;
+    // estatus actual formateado para mostrar en el select (puede ser "Activo", "Baja", "Baja Temporal" o "Egresado")
+    const estatusActual = location.state?.estatusActual || 'Activo';
 
-    const [nuevoEstatus, setNuevoEstatus] = useState('Activo');
+    // estado real del alumno
+    const [nuevoEstatus, setNuevoEstatus] = useState(estatusActual); 
+    
     const [archivo, setArchivo] = useState(null);
     const [guardando, setGuardando] = useState(false);
 
