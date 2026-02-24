@@ -12,9 +12,15 @@
   "dependencies": {
     "@tailwindcss/vite": "^4.1.18",
     "axios": "^1.13.4",
+    "exceljs": "^4.4.0",
+    "jspdf": "^4.1.0",
+    "jspdf-autotable": "^5.0.7",
+    "lucide-react": "^0.564.0",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
     "react-router-dom": "^7.13.0",
+    "react-select": "^5.10.2",
+    "sweetalert2": "^11.26.20",
     "tailwindcss": "^4.1.18"
   },
   "devDependencies": {
