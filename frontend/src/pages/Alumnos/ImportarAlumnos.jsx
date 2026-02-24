@@ -1,11 +1,13 @@
 import React, { useState, useRef, useEffect } from 'react';
 import ExcelJS from 'exceljs';
-import { Upload, Search, CheckCircle, Database, Download, X, AlertCircle, FileSpreadsheet } from 'lucide-react'; 
+import { Upload, Search, CheckCircle, Database, Download, X, AlertCircle, FileSpreadsheet, ArrowLeft } from 'lucide-react';
 import client from '../../lib/axios'; 
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import { useNavigate } from 'react-router-dom';
 
 const ImportarAlumnos = () => {
+  const navigate = useNavigate();
   const [datos, setDatos] = useState([]);
   const [archivoNombre, setArchivoNombre] = useState("");
   const [fileObject, setFileObject] = useState(null); 
@@ -29,6 +31,8 @@ const ImportarAlumnos = () => {
   const handleFileUpload = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
+
+    setReporte(null);
 
     if (!file.name.endsWith('.xlsx')) {
       setNotificacion({ mostrar: true, mensaje: "Solo se permiten archivos .xlsx", tipo: "error" });
@@ -58,7 +62,7 @@ const ImportarAlumnos = () => {
       const jsonData = [];
 
       worksheet.getRow(1).eachCell((cell, colNumber) => {
-        headers[colNumber] = cell.value ? cell.value.toString().trim() : "";
+        headers[colNumber] = cell.value ? cell.value.toString().replace(':', '').trim() : "";
       });
 
       worksheet.eachRow((row, rowNumber) => {
@@ -206,7 +210,14 @@ const ImportarAlumnos = () => {
 
       <header className="bg-white border-b border-gray-200 h-16 flex items-center justify-between px-8 shrink-0">
         <div className="flex items-center text-sm text-gray-500">
-           Inicio &gt; Alumnos &gt; <span className="text-gray-900 ml-1 font-medium">Carga Masiva</span>
+           Inicio &gt; 
+           <button 
+             onClick={() => navigate('/alumnos/listado')} 
+             className="mx-1 hover:text-[#1A237E] hover:underline transition-colors focus:outline-none"
+           >
+             Alumnos
+           </button> 
+           &gt; <span className="text-gray-900 ml-1 font-medium">Carga Masiva</span>
         </div>
         <div className="flex items-center gap-3">
            <div className="flex items-center gap-2">
@@ -221,6 +232,14 @@ const ImportarAlumnos = () => {
       <main className="flex-1 p-8">
           <div className="max-w-7xl mx-auto">
               
+              <button 
+                onClick={() => navigate('/alumnos/listado')}
+                className="flex items-center text-sm text-gray-600 hover:text-[#1A237E] font-medium mb-4 transition-colors group focus:outline-none"
+              >
+                <ArrowLeft className="w-4 h-4 mr-1.5 group-hover:-translate-x-1 transition-transform" />
+                Volver al listado
+              </button>
+
               <h1 className="text-2xl font-bold text-gray-900 mb-2">Carga Masiva de Alumnos</h1>
               <p className="text-gray-500 text-sm mb-8">Importa registros desde un archivo Excel (.xlsx) para actualizar la base de datos de manera automática.</p>
 
@@ -236,14 +255,12 @@ const ImportarAlumnos = () => {
 
               <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
                   
-                  {/* TABLA PRINCIPAL */}
                   <div className="lg:col-span-8 bg-white border border-gray-200 rounded-md shadow-sm flex flex-col h-[600px] overflow-hidden">
                       <div className="p-4 border-b border-gray-200 bg-gray-50 flex justify-between items-center">
                           <h2 className="text-sm font-bold text-gray-800">Vista Previa de Datos</h2>
                           
                       </div>
 
-                      {/* Contenedor con overflow para permitir scroll horizontal y vertical */}
                       <div className="flex-1 overflow-auto">
                           <table className="w-full text-left text-xs whitespace-nowrap">
                               <thead className="bg-[#F8F9FA] sticky top-0 z-10 shadow-sm border-b border-gray-200">
@@ -271,7 +288,6 @@ const ImportarAlumnos = () => {
                                   {datos.length > 0 ? (
                                       datos.map((alumno, index) => {
                                           
-                                          // Validaciones de Error
                                           const matActual = String(alumno["Matrícula"] || alumno["Matrícula:"] || '');
                                           const errorFila = erroresDetalle.find(err => err.matricula === matActual);
                                           const errorCampos = errorFila ? errorFila.campos : [];
@@ -332,7 +348,6 @@ const ImportarAlumnos = () => {
                       </div>
                   </div>
 
-                  {/* PANEL LATERAL DE SUBIDA */}
                   <div className="lg:col-span-4 flex flex-col gap-5">
                       <div className="bg-white border border-gray-200 rounded-md p-6 text-center shadow-sm">
                           <div className="border-2 border-dashed border-[#B0BEC5] bg-[#F8F9FA] rounded-md p-8 flex flex-col items-center justify-center hover:bg-gray-100 transition-colors">

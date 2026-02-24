@@ -4,22 +4,26 @@ import {
   UserX, 
   ChevronLeft, 
   ChevronRight,
-  Loader2 
+  Loader2,
+  Search,
+  Upload,
+  Plus,
+  LogOut
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import client from '../../lib/axios';
+import { useAuth } from '../../hooks/AuthContext';
 
 const ListadoAlumnos = () => {
   const navigate = useNavigate();
+  const { logout } = useAuth();
 
-  // Estados
   const [alumnos, setAlumnos] = useState([]);
   const [cargando, setCargando] = useState(true);
   const [pagina, setPagina] = useState(1);
   const [total, setTotal] = useState(0);
   const limite = 10;
 
-  // Obtener datos
   const fetchAlumnos = async () => {
     try {
       setCargando(true);
@@ -64,7 +68,6 @@ const ListadoAlumnos = () => {
     });
   };
 
-  // Paginación
   const inicio = (pagina - 1) * limite + 1;
   const fin = Math.min(pagina * limite, total);
   const totalPaginas = Math.ceil(total / limite);
@@ -72,9 +75,51 @@ const ListadoAlumnos = () => {
   return (
     <div className="p-8 bg-gray-50 min-h-screen">
       
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold text-gray-800">Listado General de Alumnos</h1>
-        <p className="text-gray-500 text-sm">Gestión y visualización de matrícula escolar</p>
+      <div className="mb-6 flex justify-between items-start">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-800">Listado General de Alumnos</h1>
+          <p className="text-gray-500 text-sm">Gestión y visualización de matrícula escolar</p>
+        </div>
+        
+        <button 
+          onClick={logout}
+          className="flex items-center gap-2 px-4 py-2 bg-red-50 text-red-600 hover:bg-red-100 hover:text-red-700 rounded-lg text-sm font-bold transition-colors shadow-sm border border-red-100"
+        >
+          <LogOut className="w-4 h-4" />
+          Cerrar Sesión
+        </button>
+      </div>
+
+      <div className="flex flex-col md:flex-row justify-between items-center gap-4 mb-6">
+        
+        <div className="relative w-full md:w-96">
+          <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+            <Search className="h-5 w-5 text-gray-400" />
+          </div>
+          <input
+            type="text"
+            placeholder="Buscar por matrícula o nombre..."
+            className="block w-full pl-10 pr-3 py-2.5 border border-gray-300 rounded-lg leading-5 bg-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-[#1A237E] focus:border-[#1A237E] sm:text-sm transition duration-150 ease-in-out shadow-sm"
+          />
+        </div>
+
+        <div className="flex w-full md:w-auto items-center gap-3">
+          <button
+            onClick={() => navigate('/alumnos/importar')}
+            className="flex-1 md:flex-none flex items-center justify-center gap-2 bg-white border border-[#1A237E] text-[#1A237E] px-5 py-2.5 rounded-lg text-sm font-bold hover:bg-blue-50 transition-colors shadow-sm"
+          >
+            <Upload className="w-4 h-4" />
+            Importación
+          </button>
+          
+          <button
+            onClick={() => alert('Próximamente: Integrar con la rama de Agregar Alumno')}
+            className="flex-1 md:flex-none flex items-center justify-center gap-2 bg-[#1A237E] text-white px-5 py-2.5 rounded-lg text-sm font-bold hover:bg-[#283593] transition-colors shadow-sm"
+          >
+            <Plus className="w-4 h-4" />
+            Agregar Alumno
+          </button>
+        </div>
       </div>
 
       <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
@@ -89,7 +134,6 @@ const ListadoAlumnos = () => {
             <table className="w-full text-left border-collapse">
               <thead>
                 <tr className="bg-gray-50 border-b border-gray-100 text-xs uppercase text-gray-500 font-semibold tracking-wider">
-                  {/* Se eliminó el <th> del checkbox aquí */}
                   <th className="p-4">Matrícula</th>
                   <th className="p-4">Nombre Completo</th>
                   <th className="p-4">Carrera</th>
@@ -101,7 +145,6 @@ const ListadoAlumnos = () => {
                 {alumnos.length > 0 ? (
                   alumnos.map((alumno, index) => (
                     <tr key={index} className="hover:bg-blue-50/30 transition-colors">
-                      {/* Se eliminó el <td> del checkbox aquí */}
                       <td className="p-4 font-mono text-sm text-gray-600 font-bold">
                         {alumno.matricula}
                       </td>
