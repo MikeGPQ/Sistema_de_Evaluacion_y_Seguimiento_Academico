@@ -70,7 +70,7 @@ export default function ManualRegister({ isOpen, onClose }) {
       });
       setColoniasAPI([]);
 
-      client.get('/students/options').then(res => {
+      client.get('/alumnos/options').then(res => {
         setCareers(res.data.careers || []);
         setSchools(res.data.schools || []);
       }).catch(err => console.error("Error al cargar catálogos:", err));
@@ -175,7 +175,7 @@ export default function ManualRegister({ isOpen, onClose }) {
       }
 
       try {
-        const res = await client.get(`/students/check-curp?curp=${formData.curp}`);
+        const res = await client.get(`/alumnos/check-curp?curp=${formData.curp}`);
         if (res.data.exists) {
           setErroresEnVivo(prev => ({ ...prev, curp: '❌ Esta CURP ya está registrada.' }));
           setValidacionExitosa(prev => ({ ...prev, curp: false }));
@@ -199,7 +199,7 @@ export default function ManualRegister({ isOpen, onClose }) {
       }
 
       try {
-        const res = await client.get(`/students/check-email?email=${formData.email_personal.toLowerCase()}`);
+        const res = await client.get(`/alumnos/check-email?email=${formData.email_personal.toLowerCase()}`);
         if (res.data.exists) {
           setErroresEnVivo(prev => ({ ...prev, email: '❌ Este correo ya está en uso.' }));
           setValidacionExitosa(prev => ({ ...prev, email: false }));
@@ -273,7 +273,7 @@ export default function ManualRegister({ isOpen, onClose }) {
     if (files.certificado) dataToSend.append('certificado', files.certificado);
 
     try {
-      const res = await client.post('/students/register', dataToSend);
+      const res = await client.post('/alumnos/register', dataToSend);
       
       Swal.fire({
         title: '¡Alumno Guardado Exitosamente!',
@@ -316,7 +316,6 @@ export default function ManualRegister({ isOpen, onClose }) {
 
       <form onSubmit={handleSubmit} className="space-y-8 bg-slate-50 p-2 md:p-6 rounded-lg">
         
-        {/* 1. INFORMACIÓN PERSONAL */}
         <div className="bg-white rounded-lg p-6 shadow-sm border border-gray-100">
           <h4 className="flex items-center text-[#1e3a8a] font-bold mb-6 text-base">
             <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-blue-50 text-blue-600 mr-3">
@@ -354,7 +353,6 @@ export default function ManualRegister({ isOpen, onClose }) {
           </div>
         </div>
 
-        {/* 2. INFORMACIÓN ACADÉMICA */}
         <div className="bg-white rounded-lg p-6 shadow-sm border border-gray-100">
           <h4 className="flex items-center text-[#1e3a8a] font-bold mb-6 text-base">
             <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-blue-50 text-blue-600 mr-3">
@@ -391,7 +389,6 @@ export default function ManualRegister({ isOpen, onClose }) {
           </div>
         </div>
 
-        {/* 3. DIRECCIÓN / CONTACTO */}
         <div className="bg-white rounded-lg p-6 shadow-sm border border-gray-100">
           <h4 className="flex items-center text-[#1e3a8a] font-bold mb-6 text-base">
             <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-blue-50 text-blue-600 mr-3">
@@ -448,7 +445,6 @@ export default function ManualRegister({ isOpen, onClose }) {
           </div>
         </div>
 
-        {/* 4. DOCUMENTOS MULTIMEDIA */}
         <div className="bg-white rounded-lg p-6 shadow-sm border border-gray-100">
           <h4 className="flex items-center text-[#1e3a8a] font-bold mb-4 text-base">
             <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-blue-50 text-blue-600 mr-3">
@@ -472,7 +468,6 @@ export default function ManualRegister({ isOpen, onClose }) {
           </div>
         </div>
 
-        {/* BOTONES FINALES */}
         <div className="flex justify-between items-center pt-4">
           <span className="text-xs text-red-500">* Campos obligatorios</span>
           <div className="flex space-x-3">

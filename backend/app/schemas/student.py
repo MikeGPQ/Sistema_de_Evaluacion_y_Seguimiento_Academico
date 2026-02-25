@@ -3,12 +3,12 @@ from typing import Optional, List
 
 class CareerSelect(BaseModel):
     id: int
-    name: str #
+    name: str
     model_config = ConfigDict(from_attributes=True)
 
 class SchoolSelect(BaseModel):
     id: int
-    name: str #
+    name: str
     model_config = ConfigDict(from_attributes=True)
 
 class OptionsResponse(BaseModel):
