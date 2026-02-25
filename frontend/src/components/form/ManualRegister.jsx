@@ -20,7 +20,7 @@ export default function ManualRegister({ isOpen, onClose }) {
     curp: '', email_personal: '', email_institucional: '', career_id: '',
     origin_school_id: '', promedio_procedencia: '',
     calle: '', numero_domicilio: '', colonia: '',
-    codigo_postal: '', municipio: '', estado: '',
+    codigo_postal: '', municipio: 'Campeche', estado: 'Campeche',
     status: 'activo'
   });
 
@@ -65,7 +65,7 @@ export default function ManualRegister({ isOpen, onClose }) {
         curp: '', email_personal: '', email_institucional: '', career_id: '',
         origin_school_id: '', promedio_procedencia: '',
         calle: '', numero_domicilio: '', colonia: '',
-        codigo_postal: '', municipio: '', estado: '',
+        codigo_postal: '', municipio: 'Campeche', estado: 'Campeche',
         status: 'activo'
       });
       setColoniasAPI([]);
@@ -78,8 +78,10 @@ export default function ManualRegister({ isOpen, onClose }) {
   }, [isOpen]);
 
   useEffect(() => {
-    if (formData.codigo_postal.length === 5) {
-      fetch(`https://api.zippopotam.us/MX/${formData.codigo_postal}`)
+    const fullCP = formData.codigo_postal.length === 2 ? `240${formData.codigo_postal}` : '';
+    
+    if (fullCP.length === 5) {
+      fetch(`https://api.zippopotam.us/MX/${fullCP}`)
         .then(res => {
           if (!res.ok) throw new Error("C.P. no encontrado");
           return res.json();
@@ -87,21 +89,8 @@ export default function ManualRegister({ isOpen, onClose }) {
         .then(data => {
             const colonias = data.places.map(place => place['place name']);
             setColoniasAPI(colonias);
-            const estadoDetectado = data.places[0]['state'] || 'Campeche';
-            let municipioDetectado = '';
-
-            if (estadoDetectado === "Campeche") {
-              const prefijo = formData.codigo_postal.substring(0, 3);
-              const catalogoMunicipios = {
-                '240': 'Campeche', '241': 'Carmen', '242': 'Palizada', '243': 'Escárcega',
-                '244': 'Champotón', '245': 'Hecelchakán', '246': 'Hopelchén', '247': 'Tenabo',
-                '248': 'Calkiní', '249': 'Dzitbalché'
-              };
-              municipioDetectado = catalogoMunicipios[prefijo] || '';
-            }
-
             setFormData(prev => ({ 
-              ...prev, estado: estadoDetectado, municipio: municipioDetectado, colonia: '' 
+              ...prev, estado: 'Campeche', municipio: 'Campeche', colonia: '' 
             })); 
         })
         .catch(() => setColoniasAPI([]));
@@ -114,14 +103,33 @@ export default function ManualRegister({ isOpen, onClose }) {
     const { name, value } = e.target;
     let finalValue = value;
 
-    if (name === 'nombre' || name === 'apellido_paterno' || name === 'apellido_materno') {
-      finalValue = value.replace(/[^a-zA-ZáéíóúÁÉÍÓÚñÑ\s]/g, '');
+    if (typeof finalValue === 'string') {
+      finalValue = finalValue.replace(/^\s+/, '');
+      finalValue = finalValue.replace(/\s{2,}/g, ' ');
     }
 
-    if (name.includes('email')) {
-      finalValue = finalValue.toLowerCase(); 
+    if (name === 'nombre' || name === 'apellido_paterno' || name === 'apellido_materno') {
+      finalValue = finalValue.replace(/[^a-zA-ZáéíóúÁÉÍÓÚñÑ\s]/g, '');
+    }
+
+    if (name === 'numero_domicilio') {
+      finalValue = finalValue.replace(/[^a-zA-Z0-9\s]/g, '');
+    }
+
+    if (name === 'promedio_procedencia') {
+      finalValue = finalValue.replace(/[^0-9]/g, '');
+    }
+
+    if (name === 'codigo_postal') {
+      finalValue = finalValue.replace(/[^0-9]/g, '');
+    }
+
+   if (name.includes('email')) {
+      // 🌟 NUEVO CANDADO: Destruye cualquier espacio en los correos al instante
+      finalValue = finalValue.replace(/\s/g, '').toLowerCase(); 
     } else if (name === 'curp') {
-      finalValue = finalValue.toUpperCase(); 
+      // De paso, aseguramos que la CURP tampoco acepte espacios por error
+      finalValue = finalValue.replace(/\s/g, '').toUpperCase(); 
     }
 
     setFormData(prev => ({ ...prev, [name]: finalValue })); 
@@ -136,9 +144,9 @@ export default function ManualRegister({ isOpen, onClose }) {
     }
     
     if (name === 'promedio_procedencia') {
-      const num = parseFloat(finalValue);
+      const num = parseInt(finalValue, 10);
       if (finalValue !== '' && (num < 0 || num > 10)) {
-        setErroresEnVivo(prev => ({ ...prev, promedio: '❌ El promedio debe ser entre 0 y 10' }));
+        setErroresEnVivo(prev => ({ ...prev, promedio: '❌ El promedio debe ser entero entre 0 y 10' }));
       } else {
         setErroresEnVivo(prev => ({ ...prev, promedio: '' }));
       }
@@ -157,14 +165,13 @@ export default function ManualRegister({ isOpen, onClose }) {
     }
   };
 
- const handleCheckCurp = async () => {
+  const handleCheckCurp = async () => {
     if (formData.curp.length === 18) {
-      // 🌟 NUEVO CANDADO EN VIVO: Revisar formato oficial antes de buscar en la BD
       const curpRegex = /^[A-Z]{4}\d{6}[HM][A-Z]{5}[A-Z0-9]\d$/i;
       if (!curpRegex.test(formData.curp)) {
         setErroresEnVivo(prev => ({ ...prev, curp: '❌ El formato de la CURP es incorrecto.' }));
         setValidacionExitosa(prev => ({ ...prev, curp: false }));
-        return; // Detenemos la función aquí
+        return;
       }
 
       try {
@@ -183,8 +190,7 @@ export default function ManualRegister({ isOpen, onClose }) {
   };
 
   const handleCheckEmail = async () => {
-    if (formData.email_personal.length > 5) { // Para no revisar a cada letra
-      // 🌟 NUEVO CANDADO EN VIVO: Revisar formato de correo antes de buscar en la BD
+    if (formData.email_personal.length > 5) {
       const emailRegex = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/i;
       if (!emailRegex.test(formData.email_personal)) {
         setErroresEnVivo(prev => ({ ...prev, email: '❌ Formato de correo inválido.' }));
@@ -210,6 +216,10 @@ export default function ManualRegister({ isOpen, onClose }) {
   const handleSubmit = async (e) => {
     e.preventDefault();
 
+    if (formData.nombre.trim() === '' || formData.apellido_paterno.trim() === '' || formData.calle.trim() === '' || formData.numero_domicilio.trim() === '') {
+      return Swal.fire('Campos Vacíos', 'Existen campos vacíos. Por favor complétalos correctamente.', 'error');
+    }
+
     if (erroresEnVivo.curp || erroresEnVivo.email || erroresEnVivo.promedio) {
       return Swal.fire('Formulario Incompleto', 'Por favor corrige los errores antes de continuar.', 'warning');
     }
@@ -223,21 +233,21 @@ export default function ManualRegister({ isOpen, onClose }) {
     if (!formData.career_id) return Swal.fire('Falta Carrera', 'Debes seleccionar una carrera.', 'warning');
     if (!formData.origin_school_id) return Swal.fire('Falta Escuela', 'Debes seleccionar la escuela de procedencia.', 'warning');
     if (!formData.colonia) return Swal.fire('Falta Colonia', 'Debes seleccionar una colonia.', 'warning');
+    
+    if (formData.codigo_postal.length !== 2) return Swal.fire('C.P. Inválido', 'El código postal debe estar completo.', 'warning');
 
     if (!files.foto) return Swal.fire('Falta la Fotografía', 'La fotografía es obligatoria para el registro.', 'warning');
 
-    const promedio = parseFloat(formData.promedio_procedencia);
+    const promedio = parseInt(formData.promedio_procedencia, 10);
     if (promedio < 0 || promedio > 10) {
-      return Swal.fire('Promedio Inválido', 'El promedio debe ser entre 0 y 10.', 'error');
+      return Swal.fire('Promedio Inválido', 'El promedio debe ser un entero entre 0 y 10.', 'error');
     }
 
     setIsLoading(true);
 
-    // 🌟 CORRECCIÓN: Construimos el correo institucional completo antes de enviarlo
     let finalEmailInstitucional = null;
     if (formData.email_institucional.trim() !== "") {
       const rawEmail = formData.email_institucional.trim().toLowerCase();
-      // Si el usuario por error escribió el @red.unid.mx, no lo duplicamos
       finalEmailInstitucional = rawEmail.includes('@') ? rawEmail : `${rawEmail}@red.unid.mx`;
     }
 
@@ -246,12 +256,13 @@ export default function ManualRegister({ isOpen, onClose }) {
       career_id: parseInt(formData.career_id),
       origin_school_id: parseInt(formData.origin_school_id),
       promedio_procedencia: promedio,
-      email_institucional: finalEmailInstitucional, // Enviamos el correo ya armado
+      email_institucional: finalEmailInstitucional,
       cuatrimestre: 1,
       address: {
         calle: formData.calle, numero_domicilio: formData.numero_domicilio,
-        colonia: formData.colonia, codigo_postal: formData.codigo_postal,
-        municipio: formData.municipio, 
+        colonia: formData.colonia, 
+        codigo_postal: `240${formData.codigo_postal}`, 
+        municipio: 'Campeche', 
         estado: 'Campeche' 
       }
     };
@@ -369,9 +380,10 @@ export default function ManualRegister({ isOpen, onClose }) {
               <Select name="origin_school_id" options={schoolOptions} onChange={handleSelectChange} placeholder="Seleccione..." styles={customSelectStyles} isClearable />
             </div>
             <div className="md:col-span-2">
-              <label className="block text-xs font-bold text-gray-600 mb-1">Promedio General <span className="text-red-500">*</span></label>
+              <label className="block text-xs font-bold text-gray-600 mb-1">Promedio General (Entero) <span className="text-red-500">*</span></label>
+              {/* 🌟 FIX DE NÚMEROS: type="text" con inputMode="numeric" y maxLength */}
               <input 
-                type="number" step="0.01" min="0" max="10" placeholder="Ej: 8.5" name="promedio_procedencia" value={formData.promedio_procedencia} onChange={handleChange} 
+                type="text" inputMode="numeric" maxLength="2" placeholder="Ej: 9" name="promedio_procedencia" value={formData.promedio_procedencia} onChange={handleChange} 
                 className={`w-full border rounded-md p-2.5 text-sm outline-none transition-all focus:ring-1 ${erroresEnVivo.promedio ? 'border-red-500 bg-red-50 text-red-900 focus:border-red-500' : 'border-gray-300 focus:border-[#1e3a8a] focus:ring-[#1e3a8a]'}`} required 
               />
               {erroresEnVivo.promedio && <p className="text-xs text-red-600 mt-1.5 font-bold animate-pulse">{erroresEnVivo.promedio}</p>}
@@ -391,7 +403,6 @@ export default function ManualRegister({ isOpen, onClose }) {
             <div>
               <label className="block text-xs font-bold text-gray-600 mb-1">Correo Institucional</label>
               <div className="flex">
-                {/* 🌟 CORRECCIÓN: type="text" para engañar al navegador */}
                 <input type="text" name="email_institucional" value={formData.email_institucional} placeholder="Ej: darkminnk128" onChange={handleChange} className="w-full border border-gray-300 rounded-l-md p-2.5 text-sm lowercase focus:border-[#1e3a8a] focus:ring-1 focus:ring-[#1e3a8a] outline-none" />
                 <span className="inline-flex items-center px-3 rounded-r-md border border-l-0 border-gray-300 bg-gray-50 text-gray-500 text-sm">@red.unid.mx</span>
               </div>
@@ -412,23 +423,22 @@ export default function ManualRegister({ isOpen, onClose }) {
               </div>
               <div>
                 <label className="block text-xs font-bold text-gray-600 mb-1">Número Exterior <span className="text-red-500">*</span></label>
-                <input name="numero_domicilio" value={formData.numero_domicilio} placeholder="Ej: 123" onChange={handleChange} className="w-full border border-gray-300 rounded-md p-2.5 text-sm focus:border-[#1e3a8a] outline-none" required />
+                <input name="numero_domicilio" value={formData.numero_domicilio} placeholder="Ej: Casa 4B" onChange={handleChange} className="w-full border border-gray-300 rounded-md p-2.5 text-sm focus:border-[#1e3a8a] outline-none" required />
               </div>
               <div>
-                <label className="block text-xs font-bold text-gray-600 mb-1">Código Postal <span className="text-red-500">*</span></label>
-                <input name="codigo_postal" value={formData.codigo_postal} maxLength={5} placeholder="Ej: 06000" onChange={handleChange} className="w-full border border-gray-300 rounded-md p-2.5 text-sm focus:border-[#1e3a8a] outline-none font-bold" required />
+                <label className="block text-xs font-bold text-gray-600 mb-1">Código Postal (Capital) <span className="text-red-500">*</span></label>
+                <div className="flex">
+                  <span className="inline-flex items-center px-3 rounded-l-md border border-r-0 border-gray-300 bg-gray-50 text-gray-500 font-bold text-sm">240</span>
+                  <input name="codigo_postal" value={formData.codigo_postal} maxLength={2} placeholder="00" onChange={handleChange} className="w-full border border-gray-300 rounded-r-md p-2.5 text-sm focus:border-[#1e3a8a] outline-none font-bold tracking-wider" required />
+                </div>
               </div>
               <div>
                 <label className="block text-xs font-bold text-gray-600 mb-1">Colonia <span className="text-red-500">*</span></label>
-                <Select name="colonia" options={coloniaOptions} onChange={handleSelectChange} placeholder={coloniasAPI.length > 0 ? "Seleccione..." : "Escriba C.P."} styles={customSelectStyles} isDisabled={coloniasAPI.length === 0} />
+                <Select name="colonia" options={coloniaOptions} onChange={handleSelectChange} placeholder={coloniasAPI.length > 0 ? "Seleccione..." : "Escriba 2 dígitos"} styles={customSelectStyles} isDisabled={coloniasAPI.length === 0} />
               </div>
               <div>
                 <label className="block text-xs font-bold text-gray-600 mb-1">Ciudad / Municipio <span className="text-red-500">*</span></label>
-                <input 
-                  name="municipio" value={formData.municipio} onChange={handleChange} 
-                  readOnly={coloniasAPI.length > 0 && formData.municipio !== ''} 
-                  className={`w-full border rounded-md p-2.5 text-sm outline-none transition-colors ${coloniasAPI.length > 0 && formData.municipio !== '' ? 'bg-gray-100 text-gray-500 border-transparent' : 'border-gray-300 focus:border-[#1e3a8a]'}`} required 
-                />
+                <input value="Campeche" disabled className="w-full border border-gray-200 rounded-md p-2.5 text-sm bg-gray-50 outline-none text-gray-500 font-medium" />
               </div>
               <div>
                 <label className="block text-xs font-bold text-gray-600 mb-1">Estado <span className="text-red-500">*</span></label>
