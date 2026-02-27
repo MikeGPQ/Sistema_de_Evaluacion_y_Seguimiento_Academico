@@ -54,7 +54,7 @@ const LoginPage = () => {
           </div>
 
           <div className="p-8 pb-10 flex flex-col text-center">
-            <h1 className="text-[22px] font-bold text-[#1A1A1A] mb-1">Portal Institucional SESA</h1>
+            <h1 className="text-[22px] font-bold text-[#1A1A1A] mb-1">Portal de Alumnos</h1>
             <p className="text-sm text-gray-500 mb-8 font-medium">Ingresa tus credenciales para continuar</p>
 
             <form onSubmit={handleLogin} className="space-y-5 text-left flex flex-col">
