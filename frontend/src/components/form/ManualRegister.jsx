@@ -20,8 +20,7 @@ export default function ManualRegister({ isOpen, onClose }) {
     curp: '', email_personal: '', email_institucional: '', career_id: '',
     origin_school_id: '', promedio_procedencia: '',
     calle: '', numero_domicilio: '', colonia: '',
-    // 🌟 FIX MUNICIPIO: Inicia vacío en vez de "Campeche"
-    codigo_postal: '', municipio: '', estado: 'Campeche', 
+    codigo_postal: '', municipio: 'Campeche', estado: 'Campeche',
     status: 'activo'
   });
 
@@ -66,7 +65,7 @@ export default function ManualRegister({ isOpen, onClose }) {
         curp: '', email_personal: '', email_institucional: '', career_id: '',
         origin_school_id: '', promedio_procedencia: '',
         calle: '', numero_domicilio: '', colonia: '',
-        codigo_postal: '', municipio: '', estado: 'Campeche',
+        codigo_postal: '', municipio: 'Campeche', estado: 'Campeche',
         status: 'activo'
       });
       setColoniasAPI([]);
@@ -79,7 +78,6 @@ export default function ManualRegister({ isOpen, onClose }) {
   }, [isOpen]);
 
   useEffect(() => {
-    // 🌟 FIX C.P.: Ahora pegamos el "24" + los 3 dígitos que ingresa el alumno
     const fullCP = formData.codigo_postal.length === 3 ? `24${formData.codigo_postal}` : '';
     
     if (fullCP.length === 5) {
@@ -92,7 +90,6 @@ export default function ManualRegister({ isOpen, onClose }) {
             const colonias = data.places.map(place => place['place name']);
             setColoniasAPI(colonias);
             
-            // 🌟 VUELVE LA LÓGICA DEL MUNICIPIO DINÁMICO
             const prefijo = fullCP.substring(0, 3);
             const catalogoMunicipios = {
               '240': 'Campeche', '241': 'Carmen', '242': 'Palizada', '243': 'Escárcega',
@@ -132,19 +129,17 @@ export default function ManualRegister({ isOpen, onClose }) {
       finalValue = finalValue.replace(/[^0-9]/g, '');
     }
 
-    // 🌟 FIX RESETEO DE COLONIA Y MUNICIPIO AL CAMBIAR EL C.P.
     if (name === 'codigo_postal') {
       finalValue = finalValue.replace(/[^0-9]/g, '');
       setFormData(prev => ({ 
         ...prev, 
         [name]: finalValue, 
-        colonia: '',     // Vacía la colonia al instante
-        municipio: ''    // Vacía el municipio al instante
+        colonia: '',     
+        municipio: ''    
       }));
-      return; // Salimos temprano para no sobreescribir el state abajo
+      return; 
     }
 
-    // 🌟 FIX CORREO INSTITUCIONAL: Se bloquean espacios y @
     if (name === 'email_institucional') {
       finalValue = finalValue.replace(/[\s@]/g, '').toLowerCase(); 
     } else if (name === 'email_personal') {
@@ -255,7 +250,6 @@ export default function ManualRegister({ isOpen, onClose }) {
     if (!formData.origin_school_id) return Swal.fire('Falta Escuela', 'Debes seleccionar la escuela de procedencia.', 'warning');
     if (!formData.colonia) return Swal.fire('Falta Colonia', 'Debes seleccionar una colonia.', 'warning');
     
-    // 🌟 FIX C.P.: Validamos que llenen los 3 dígitos
     if (formData.codigo_postal.length !== 3) return Swal.fire('C.P. Inválido', 'El código postal debe estar completo.', 'warning');
 
     if (!files.foto) return Swal.fire('Falta la Fotografía', 'La fotografía es obligatoria para el registro.', 'warning');
@@ -270,7 +264,6 @@ export default function ManualRegister({ isOpen, onClose }) {
     let finalEmailInstitucional = null;
     if (formData.email_institucional.trim() !== "") {
       const rawEmail = formData.email_institucional.trim().toLowerCase();
-      // Ya no comprobamos si trae '@' porque se lo bloqueamos desde el teclado
       finalEmailInstitucional = `${rawEmail}@red.unid.mx`;
     }
 
@@ -284,7 +277,7 @@ export default function ManualRegister({ isOpen, onClose }) {
       address: {
         calle: formData.calle, numero_domicilio: formData.numero_domicilio,
         colonia: formData.colonia, 
-        codigo_postal: `24${formData.codigo_postal}`, // 🌟 Se guarda el C.P. Completo
+        codigo_postal: `24${formData.codigo_postal}`, 
         municipio: formData.municipio, 
         estado: 'Campeche' 
       }
@@ -316,6 +309,7 @@ export default function ManualRegister({ isOpen, onClose }) {
     }
   };
 
+  // Preparamos las listas
   const careerOptions = careers.map(c => ({ value: c.id, label: c.name }));
   const schoolOptions = schools.map(s => ({ value: s.id, label: s.name }));
   const coloniaOptions = coloniasAPI.map(col => ({ value: col, label: col }));
@@ -354,7 +348,6 @@ export default function ManualRegister({ isOpen, onClose }) {
             </div>
             <div>
               <label className="block text-xs font-bold text-gray-600 mb-1">Nombre(s) <span className="text-red-500">*</span></label>
-              {/* 🌟 LÍMITE DE 50 CARACTERES APLICADO */}
               <input name="nombre" value={formData.nombre} maxLength={50} placeholder="Ej: Juan Carlos" onChange={handleChange} className="w-full border border-gray-300 rounded-md p-2.5 text-sm focus:border-[#1e3a8a] focus:ring-1 focus:ring-[#1e3a8a] outline-none transition-all" required />
             </div>
             <div>
@@ -389,7 +382,16 @@ export default function ManualRegister({ isOpen, onClose }) {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
             <div className="md:col-span-2">
               <label className="block text-xs font-bold text-gray-600 mb-1">Programa Académico <span className="text-red-500">*</span></label>
-              <Select name="career_id" options={careerOptions} onChange={handleSelectChange} placeholder="Seleccione una carrera..." styles={customSelectStyles} isClearable />
+              {/* 🌟 FIX: AMARRE VISUAL CON value={...} */}
+              <Select 
+                name="career_id" 
+                options={careerOptions} 
+                onChange={handleSelectChange} 
+                value={careerOptions.find(opt => opt.value === formData.career_id) || null}
+                placeholder="Seleccione una carrera..." 
+                styles={customSelectStyles} 
+                isClearable 
+              />
             </div>
             <div>
               <label className="block text-xs font-bold text-gray-600 mb-1">Cuatrimestre <span className="text-red-500">*</span></label>
@@ -401,7 +403,16 @@ export default function ManualRegister({ isOpen, onClose }) {
             </div>
             <div className="md:col-span-2">
               <label className="block text-xs font-bold text-gray-600 mb-1">Escuela de Procedencia <span className="text-red-500">*</span></label>
-              <Select name="origin_school_id" options={schoolOptions} onChange={handleSelectChange} placeholder="Seleccione..." styles={customSelectStyles} isClearable />
+              {/* 🌟 FIX: AMARRE VISUAL CON value={...} */}
+              <Select 
+                name="origin_school_id" 
+                options={schoolOptions} 
+                onChange={handleSelectChange} 
+                value={schoolOptions.find(opt => opt.value === formData.origin_school_id) || null}
+                placeholder="Seleccione..." 
+                styles={customSelectStyles} 
+                isClearable 
+              />
             </div>
             <div className="md:col-span-2">
               <label className="block text-xs font-bold text-gray-600 mb-1">Promedio General (Entero) <span className="text-red-500">*</span></label>
@@ -449,7 +460,6 @@ export default function ManualRegister({ isOpen, onClose }) {
                 <input name="numero_domicilio" value={formData.numero_domicilio} placeholder="Ej: Casa 4B" onChange={handleChange} className="w-full border border-gray-300 rounded-md p-2.5 text-sm focus:border-[#1e3a8a] outline-none" required />
               </div>
               <div>
-                {/* 🌟 FIX C.P.: Ahora dice 24 y acepta 3 dígitos */}
                 <label className="block text-xs font-bold text-gray-600 mb-1">Código Postal (Estado) <span className="text-red-500">*</span></label>
                 <div className="flex">
                   <span className="inline-flex items-center px-3 rounded-l-md border border-r-0 border-gray-300 bg-gray-50 text-gray-500 font-bold text-sm">24</span>
@@ -458,10 +468,18 @@ export default function ManualRegister({ isOpen, onClose }) {
               </div>
               <div>
                 <label className="block text-xs font-bold text-gray-600 mb-1">Colonia <span className="text-red-500">*</span></label>
-                <Select name="colonia" options={coloniaOptions} onChange={handleSelectChange} placeholder={coloniasAPI.length > 0 ? "Seleccione..." : "Escriba 3 dígitos"} styles={customSelectStyles} isDisabled={coloniasAPI.length === 0} />
+                {/* 🌟 FIX FANTASMA COLONIA: AMARRE VISUAL CON value={...} */}
+                <Select 
+                  name="colonia" 
+                  options={coloniaOptions} 
+                  onChange={handleSelectChange} 
+                  value={coloniaOptions.find(opt => opt.value === formData.colonia) || null}
+                  placeholder={coloniasAPI.length > 0 ? "Seleccione..." : "Escriba 3 dígitos"} 
+                  styles={customSelectStyles} 
+                  isDisabled={coloniasAPI.length === 0} 
+                />
               </div>
               <div>
-                {/* 🌟 VUELVE EL MUNICIPIO DINÁMICO */}
                 <label className="block text-xs font-bold text-gray-600 mb-1">Ciudad / Municipio <span className="text-red-500">*</span></label>
                 <input 
                   name="municipio" value={formData.municipio} onChange={handleChange} 
