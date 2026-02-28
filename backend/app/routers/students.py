@@ -4,12 +4,14 @@ import os
 import secrets
 import string
 import io
+import re
 import pandas as pd
 from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Form
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 from passlib.context import CryptContext 
+
 from app.db.database import get_db
 from app.models.student import Student
 from app.models.student_addresses import StudentAddress
@@ -35,6 +37,45 @@ def get_form_options(db: Session = Depends(get_db)):
     careers = db.query(Career).all()
     schools = db.query(OriginSchool).filter(OriginSchool.is_active == True).all()
     return {"careers": careers, "schools": schools}
+
+
+# ENDPOINT: CONFIGURAR MATRÍCULA BASE
+
+@router.post("/set-base-id")
+def set_base_id(nueva_matricula: str = Form(...), db: Session = Depends(get_db)):
+    if not nueva_matricula.isdigit():
+        raise HTTPException(status_code=400, detail="La matrícula base debe contener solo números.")
+    
+    existe = db.query(Student).filter(Student.matricula == nueva_matricula).first()
+    if existe:
+        raise HTTPException(status_code=400, detail="Esta matrícula ya existe en el sistema.")
+        
+    try:
+        career = db.query(Career).first()
+        school = db.query(OriginSchool).first()
+        
+        dummy_student = Student(
+            matricula=nueva_matricula,
+            nombre="REGISTRO",
+            apellido_paterno="BASE",
+            apellido_materno="SISTEMA",
+            curp=f"BASE{nueva_matricula}",
+            email_personal="base@sistema.com",
+            promedio_procedencia=0.0,
+            career_id=career.id if career else 1,
+            origin_school_id=school.id if school else 1,
+            cuatrimestre_actual=1,
+            status='baja'
+        )
+        db.add(dummy_student)
+        db.commit()
+        return {"message": f"Matrícula base actualizada correctamente a: {nueva_matricula}"}
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Error al fijar ID: {str(e)}")
+
+
+# ENDPOINT: REGISTRO MANUAL
 
 @router.post("/register", status_code=status.HTTP_201_CREATED)
 def register_student(
@@ -97,7 +138,6 @@ def register_student(
 
         alphabet = string.ascii_letters + string.digits
         raw_pass = ''.join(secrets.choice(alphabet) for _ in range(10))
-        
         hashed_pw = get_password_hash(raw_pass)
 
         new_user = User(
@@ -118,6 +158,10 @@ def register_student(
         if cert_path and os.path.exists(cert_path): os.remove(cert_path)
         raise HTTPException(status_code=500, detail=f"Error en BD: {str(e)}")
 
+
+
+# ENDPOINT: IMPORTACIÓN MASIVA MEJORADA
+
 @router.post("/importar")
 async def importar_alumnos(file: UploadFile = File(...), db: Session = Depends(get_db)):
     if not file.filename.endswith('.xlsx'):
@@ -129,75 +173,215 @@ async def importar_alumnos(file: UploadFile = File(...), db: Session = Depends(g
 
     registros_nuevos = 0
     credenciales_generadas = []
-    
-  
     errores_validacion = []
 
-    for _, row in df.iterrows():
-        matricula_str = str(row.get('Matrícula', '')).strip()
-        if not matricula_str or matricula_str == 'nan': continue
+    regex_solo_letras = r'^[A-Za-záéíóúÁÉÍÓÚñÑüÜ\s]+$'
+    regex_curp = r'^[A-Z]{4}\d{6}[HM][A-Z]{5}[A-Z0-9]\d$'
+    regex_cp = r'^\d{5}$'
+    regex_email_pers = r'^[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+$'
+    regex_email_inst = r'^[a-zA-Z0-9_.+-]+@red\.unid\.mx$'
 
+    matriculas_vistas = set()
+    curps_vistos = set()
+    correos_inst_vistos = set()
+    correos_pers_vistos = set()
+    nombres_completos_vistos = set() 
+
+    for index, row in df.iterrows():
+        fila_excel = index + 2 
         errores_fila = []
         campos_error = []
 
         
-        if db.query(Student).filter(Student.matricula == matricula_str).first():
-            errores_fila.append("La matrícula ya existe")
-            campos_error.append("Matrícula")
+        matricula_str = str(row.get('Matrícula', '')).strip()
+        if matricula_str.endswith('.0'): matricula_str = matricula_str[:-2]
+        if not matricula_str or matricula_str == 'nan': continue
 
-            curp_str = str(row.get('Curp', '')).strip()
-        if db.query(Student).filter(Student.curp == curp_str).first():
+        if not re.match(r'^\d+$', matricula_str):
+            errores_fila.append("La matrícula debe contener solo números")
+            campos_error.append("Matrícula")
+        elif matricula_str in matriculas_vistas:
+            errores_fila.append("Matrícula duplicada en este mismo archivo Excel")
+            campos_error.append("Matrícula")
+        elif db.query(Student).filter(Student.matricula == matricula_str).first():
+            errores_fila.append("La matrícula ya existe en la base de datos")
+            campos_error.append("Matrícula")
+        else:
+            matriculas_vistas.add(matricula_str)
+
+        
+        nombre = str(row.get('Nombre', '')).strip()
+        ap_paterno = str(row.get('Apellido Paterno', '')).strip()
+        ap_materno = str(row.get('Apellido Materno', '')).strip()
+
+        if not nombre or nombre == 'nan':
+            errores_fila.append("El nombre no puede estar vacío")
+            campos_error.append("Nombre")
+        elif not re.match(regex_solo_letras, nombre):
+            errores_fila.append("El nombre no debe contener números ni símbolos")
+            campos_error.append("Nombre")
+
+        if ap_paterno and ap_paterno != 'nan' and not re.match(regex_solo_letras, ap_paterno):
+            errores_fila.append("El apellido paterno no debe contener números")
+            campos_error.append("Apellido Paterno")
+
+        if ap_materno and ap_materno != 'nan' and not re.match(regex_solo_letras, ap_materno):
+            errores_fila.append("El apellido materno no debe contener números")
+            campos_error.append("Apellido Materno")
+
+        
+        if nombre and nombre != 'nan':
+            ap_pat_limpio = ap_paterno if ap_paterno != 'nan' else ""
+            ap_mat_limpio = ap_materno if ap_materno != 'nan' else ""
+            
+            
+            nombre_completo_norm = f"{nombre} {ap_pat_limpio} {ap_mat_limpio}".lower()
+            nombre_completo_norm = " ".join(nombre_completo_norm.split())
+
+            if nombre_completo_norm in nombres_completos_vistos:
+                errores_fila.append("Este nombre completo (nombre y apellidos) está duplicado en el archivo Excel")
+                campos_error.extend(["Nombre", "Apellido Paterno", "Apellido Materno"])
+            else:
+                
+                existe_homonimo = db.query(Student).filter(
+                    func.lower(func.trim(Student.nombre)) == nombre.lower(),
+                    func.lower(func.trim(Student.apellido_paterno)) == ap_pat_limpio.lower(),
+                    func.lower(func.trim(Student.apellido_materno)) == ap_mat_limpio.lower()
+                ).first()
+
+                if existe_homonimo:
+                    errores_fila.append("Ya existe un alumno registrado exactamente con este mismo nombre y apellidos")
+                    campos_error.extend(["Nombre", "Apellido Paterno", "Apellido Materno"])
+                else:
+                    nombres_completos_vistos.add(nombre_completo_norm)
+
+        
+        curp_str = str(row.get('Curp', '')).strip().upper()
+        if not curp_str or curp_str == 'nan':
+            errores_fila.append("El CURP es obligatorio")
+            campos_error.append("Curp")
+        elif len(curp_str) != 18 or not re.match(regex_curp, curp_str):
+            errores_fila.append("Formato de CURP inválido (Deben ser 18 caracteres reales)")
+            campos_error.append("Curp")
+        elif curp_str in curps_vistos:
+            errores_fila.append("CURP duplicado en este mismo archivo Excel")
+            campos_error.append("Curp")
+        elif db.query(Student).filter(Student.curp == curp_str).first():
             errores_fila.append(f"El CURP {curp_str} ya está registrado")
             campos_error.append("Curp")
+        else:
+            curps_vistos.add(curp_str)
 
+        
+        cp_str = str(row.get('Código Postal', '')).strip()
+        if cp_str.endswith('.0'): cp_str = cp_str[:-2]
+        if cp_str and cp_str != 'nan' and not re.match(regex_cp, cp_str):
+            errores_fila.append("El Código Postal debe tener exactamente 5 números")
+            campos_error.append("Código Postal")
+
+        
+        municipio_str = str(row.get('Municipio', '')).strip()
+        if municipio_str and municipio_str != 'nan' and not re.match(regex_solo_letras, municipio_str):
+            errores_fila.append("El municipio solo debe contener letras")
+            campos_error.append("Municipio")
+
+       
+        email_pers = str(row.get('Correo Personal', '')).strip()
+        if email_pers and email_pers != 'nan':
+            if not re.match(regex_email_pers, email_pers):
+                errores_fila.append("Formato de correo personal inválido")
+                campos_error.append("Correo Personal")
+            elif email_pers in correos_pers_vistos:
+                errores_fila.append("Correo personal duplicado en este mismo Excel")
+                campos_error.append("Correo Personal")
+            elif db.query(Student).filter(Student.email_personal == email_pers).first():
+                errores_fila.append("Este correo personal ya está en uso")
+                campos_error.append("Correo Personal")
+            else:
+                correos_pers_vistos.add(email_pers)
+
+        email_inst = str(row.get('Correo Institucional', '')).strip()
+        if email_inst and email_inst != 'nan':
+            if not re.match(regex_email_inst, email_inst):
+                errores_fila.append("El correo institucional debe pertenecer al dominio @red.unid.mx")
+                campos_error.append("Correo Institucional")
+            elif email_inst in correos_inst_vistos:
+                errores_fila.append("Correo institucional duplicado en este mismo Excel")
+                campos_error.append("Correo Institucional")
+            elif db.query(User).filter(User.email == email_inst).first() or \
+                 db.query(Student).filter(Student.email_institucional == email_inst).first():
+                errores_fila.append("Este correo institucional ya está registrado en el sistema")
+                campos_error.append("Correo Institucional")
+            else:
+                correos_inst_vistos.add(email_inst)
+
+       
+        cuat_str = str(row.get('Cuatrimestre', '')).strip()
+        if cuat_str.endswith('.0'): cuat_str = cuat_str[:-2]
+        cuat_final = 1
+        if cuat_str and cuat_str != 'nan':
+            if not cuat_str.isdigit() or not (1 <= int(cuat_str) <= 10):
+                errores_fila.append("El cuatrimestre debe ser un número del 1 al 10")
+                campos_error.append("Cuatrimestre")
+            else:
+                cuat_final = int(cuat_str)
+
+        
+        promedio_str = str(row.get('Promedio General', '')).strip()
+        promedio_final = 0.0
+        if promedio_str and promedio_str != 'nan':
+            try:
+                promedio_final = float(promedio_str)
+            except ValueError:
+                errores_fila.append("El promedio debe ser un valor numérico (ej. 8.5)")
+                campos_error.append("Promedio General")
+
+        
         carrera_excel = str(row.get('Carrera', '')).strip()
         career = db.query(Career).filter(
             (Career.external_id == carrera_excel) | (Career.name == carrera_excel)
         ).first()
-        
         if not career:
             errores_fila.append(f"Carrera '{carrera_excel}' no encontrada")
             campos_error.append("Carrera")
 
-       
         escuela_excel = str(row.get('Procedencia', '')).strip()
         school = db.query(OriginSchool).filter(OriginSchool.name == escuela_excel).first()
-        
         if not school:
             errores_fila.append(f"Procedencia '{escuela_excel}' no registrada")
             campos_error.append("Procedencia")
 
         
         if errores_fila:
+            
+            campos_error = list(set(campos_error))
             errores_validacion.append({
+                "fila": fila_excel,
                 "matricula": matricula_str,
-                "nombre": row.get('Nombre', 'Desconocido'),
+                "nombre": nombre,
                 "campos": campos_error,
                 "mensajes": errores_fila
             })
             continue
 
-        
         try:
-            email_inst = row.get('Correo Institucional') or row.get('Correo institucional')
-
             nuevo_alumno = Student(
                 matricula=matricula_str,
-                nombre=row.get('Nombre'),
-                apellido_paterno=row.get('Apellido Paterno'), 
-                apellido_materno=row.get('Apellido Materno'),
-                curp=row.get('Curp'),
-                email_personal=row.get('Correo Personal') or row.get('Correo personal'),
-                email_institucional=email_inst,
-                cuatrimestre_actual=int(row.get('Cuatrimestre') or 1),
+                nombre=nombre,
+                apellido_paterno=ap_pat_limpio, 
+                apellido_materno=ap_mat_limpio,
+                curp=curp_str,
+                email_personal=email_pers,
+                email_institucional=email_inst if email_inst and email_inst != 'nan' else None,
+                cuatrimestre_actual=cuat_final,
                 status=row.get('Estatus', 'activo').lower(), 
                 career_id=career.id,
                 origin_school_id=school.id,
-                promedio_procedencia=float(row.get('Promedio General', 0))
+                promedio_procedencia=promedio_final
             )
             db.add(nuevo_alumno)
 
-            if email_inst:
+            if email_inst and email_inst != 'nan':
                 caracteres = string.ascii_letters + string.digits
                 password_aleatoria = ''.join(secrets.choice(caracteres) for _ in range(10))
                 
@@ -211,7 +395,7 @@ async def importar_alumnos(file: UploadFile = File(...), db: Session = Depends(g
                 db.add(nuevo_usuario)
                 
                 credenciales_generadas.append({
-                    "nombre": f"{row.get('Nombre')} {row.get('Apellido Paterno')}",
+                    "nombre": f"{nombre} {ap_pat_limpio}",
                     "usuario": matricula_str,
                     "password": password_aleatoria,
                     "correo": email_inst
@@ -219,34 +403,42 @@ async def importar_alumnos(file: UploadFile = File(...), db: Session = Depends(g
 
             nueva_direccion = StudentAddress(
                 student_matricula=matricula_str,
-                calle=row.get('Calle'),
+                calle=str(row.get('Calle', '')).strip(),
                 numero_domicilio=str(row.get('Número de domicilio') or 'S/N'), 
-                colonia=row.get('Colonia'),
-                codigo_postal=str(row.get('Código Postal') or row.get('Código postal')),
-                municipio=row.get('Municipio'),
-                estado=row.get('Estado', 'Campeche')
+                colonia=str(row.get('Colonia', '')).strip(),
+                codigo_postal=cp_str,
+                municipio=municipio_str,
+                estado=str(row.get('Estado', 'Campeche')).strip()
             )
             db.add(nueva_direccion)
             
+            db.flush()
             registros_nuevos += 1
 
         except Exception as e:
             db.rollback()
-            raise HTTPException(status_code=500, detail=str(e))
+            errores_validacion.append({
+                "fila": fila_excel,
+                "matricula": matricula_str,
+                "nombre": nombre,
+                "campos": ["Base de Datos"],
+                "mensajes": [f"Error interno al guardar: El registro choca con datos existentes ({str(e).split('for key')[0]})"]
+            })
 
-   
+    # si hubo un problema de validacion en cualquier fila, esto lo retorna al frontend
     if errores_validacion:
+        db.rollback() 
+        filas_con_error = [str(err['fila']) for err in errores_validacion]
+        filas_str = ", ".join(filas_con_error)
         
-        db.rollback()
         return JSONResponse(
             status_code=400,
             content={
-                "detail": f"Se encontraron errores en {len(errores_validacion)} alumnos.",
+                "detail": f"Las filas {filas_str} no pasaron el sistema de validación. Por favor descargue el reporte, revise y vuelva a intentar.",
                 "errores_detalle": errores_validacion
             }
         )
 
-   
     db.commit()
     
     return {
