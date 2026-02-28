@@ -11,6 +11,9 @@ class Student(Base):
     apellido_materno = Column(String(100))
     status = Column(String(50), default="activo")
     
+    # NUEVO: Agregamos el campo que ya existe en tu DB
+    cuatrimestre_actual = Column(Integer, nullable=False, default=1)
+    
     # Relación con Carrera
     career_id = Column(Integer, ForeignKey("careers.id"))
     career = relationship("Career")

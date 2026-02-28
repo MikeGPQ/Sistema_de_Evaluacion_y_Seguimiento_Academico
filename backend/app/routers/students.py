@@ -1,13 +1,14 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
-from sqlalchemy import func
+from sqlalchemy import func, or_
 from pydantic import BaseModel
-from typing import List
+from typing import List, Optional
 
-# Importamos SOLO lo que acabamos de crear
+# Importamos lo que acabamos de crear
 from app.db.database import get_db
 from app.models.student import Student
 from app.models.career import Career
+# from app.models.subject import Subject  # Lo usarás cuando tengas la tabla intermedia
 
 router = APIRouter(prefix="/alumnos", tags=["Alumnos"])
 
@@ -25,10 +26,14 @@ class AlumnoListado(BaseModel):
 @router.get("/listado", response_model=dict)
 def listar_alumnos(
     skip: int = 0, 
-    limit: int = 10, 
+    limit: int = 10,
+    # NUEVO: Parámetros opcionales para los filtros
+    carrera_id: Optional[int] = Query(None, description="ID de la carrera a filtrar"),
+    cuatrimestre: Optional[int] = Query(None, description="Número de cuatrimestre a filtrar"),
+    materia_busqueda: Optional[str] = Query(None, description="Nombre o clave de la materia"),
     db: Session = Depends(get_db)
 ):
-    # Consulta optimizada: JOIN entre Alumno y Carrera
+    # 1. Consulta Base: Solo los datos y el JOIN obligatorio
     query = db.query(
         Student.matricula,
         (Student.nombre + " " + Student.apellido_paterno + " " + Student.apellido_materno).label('nombre_completo'),
@@ -38,7 +43,34 @@ def listar_alumnos(
         Career, Student.career_id == Career.id
     )
 
+    # 2. Aplicar Filtros Dinámicos
+    if carrera_id:
+        query = query.filter(Student.career_id == carrera_id)
+
+    if cuatrimestre:
+        query = query.filter(Student.cuatrimestre_actual == cuatrimestre)
+
+    if materia_busqueda:
+        # ATENCIÓN: Esta parte requiere la tabla de inscripciones.
+        # Te dejo la estructura exacta de cómo será el código cuando la crees:
+        """
+        query = query.join(
+            Inscripcion, Student.matricula == Inscripcion.student_matricula
+        ).join(
+            Subject, Inscripcion.subject_id == Subject.id
+        ).filter(
+            or_(
+                Subject.nombre.ilike(f"%{materia_busqueda}%"),
+                Subject.external_id.ilike(f"%{materia_busqueda}%")
+            )
+        )
+        """
+        pass # Quita este pass cuando descomentes el código de arriba
+
+    # 3. Contar el total de registros YA FILTRADOS (vital para que tu paginación no se rompa)
     total = query.count()
+    
+    # 4. Aplicar Paginación (offset y limit van SIEMPRE al final)
     alumnos = query.offset(skip).limit(limit).all()
 
     # Formateo de datos para el frontend
