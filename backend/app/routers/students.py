@@ -27,10 +27,12 @@ class AlumnoListado(BaseModel):
 def listar_alumnos(
     skip: int = 0, 
     limit: int = 10,
-    # NUEVO: Parámetros opcionales para los filtros
+    # NUEVO: Parámetro para la búsqueda de texto
+    busqueda: Optional[str] = Query(None, description="Búsqueda por matrícula o nombre"),
+    # Parámetros opcionales para los filtros
     carrera_id: Optional[int] = Query(None, description="ID de la carrera a filtrar"),
     cuatrimestre: Optional[int] = Query(None, description="Número de cuatrimestre a filtrar"),
-    materia_busqueda: Optional[str] = Query(None, description="Nombre o clave de la materia"),
+
     db: Session = Depends(get_db)
 ):
     # 1. Consulta Base: Solo los datos y el JOIN obligatorio
@@ -44,28 +46,23 @@ def listar_alumnos(
     )
 
     # 2. Aplicar Filtros Dinámicos
+    
+    # Filtro de Búsqueda de Texto (Matrícula o Nombre Completo)
+    if busqueda:
+        termino = f"%{busqueda}%"
+        query = query.filter(
+            or_(
+                Student.matricula.ilike(termino),
+                (Student.nombre + " " + Student.apellido_paterno + " " + Student.apellido_materno).ilike(termino)
+            )
+        )
+
     if carrera_id:
         query = query.filter(Student.career_id == carrera_id)
 
     if cuatrimestre:
         query = query.filter(Student.cuatrimestre_actual == cuatrimestre)
 
-    if materia_busqueda:
-        # ATENCIÓN: Esta parte requiere la tabla de inscripciones.
-        # Te dejo la estructura exacta de cómo será el código cuando la crees:
-        """
-        query = query.join(
-            Inscripcion, Student.matricula == Inscripcion.student_matricula
-        ).join(
-            Subject, Inscripcion.subject_id == Subject.id
-        ).filter(
-            or_(
-                Subject.nombre.ilike(f"%{materia_busqueda}%"),
-                Subject.external_id.ilike(f"%{materia_busqueda}%")
-            )
-        )
-        """
-        pass # Quita este pass cuando descomentes el código de arriba
 
     # 3. Contar el total de registros YA FILTRADOS (vital para que tu paginación no se rompa)
     total = query.count()

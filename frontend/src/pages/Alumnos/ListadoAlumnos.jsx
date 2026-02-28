@@ -23,7 +23,7 @@ const ListadoAlumnos = () => {
   const limite = 10;
 
   // --- ESTADOS DE FILTROS (HU-25a) ---
-  const [busquedaMateria, setBusquedaMateria] = useState('');
+  const [busquedaAlumno, setBusquedaAlumno] = useState('');
   const [filtroCarrera, setFiltroCarrera] = useState('');
   const [filtroCuatrimestre, setFiltroCuatrimestre] = useState('');
 
@@ -39,7 +39,7 @@ const ListadoAlumnos = () => {
         limit: limite
       });
 
-      if (busquedaMateria) params.append('materia_busqueda', busquedaMateria);
+      if (busquedaAlumno) params.append('busqueda', busquedaAlumno);
       if (filtroCarrera) params.append('carrera_id', filtroCarrera);
       if (filtroCuatrimestre) params.append('cuatrimestre', filtroCuatrimestre);
 
@@ -60,7 +60,7 @@ const ListadoAlumnos = () => {
     }, 400); // 400ms de espera al teclear
 
     return () => clearTimeout(retardoBusqueda);
-  }, [pagina, busquedaMateria, filtroCarrera, filtroCuatrimestre]);
+  }, [pagina, busquedaAlumno, filtroCarrera, filtroCuatrimestre]);
 
   // --- MANEJADORES DE EVENTOS ---
   const handleCambioFiltro = (setter, valor) => {
@@ -69,13 +69,13 @@ const ListadoAlumnos = () => {
   };
 
   const limpiarFiltros = () => {
-    setBusquedaMateria('');
+    setBusquedaAlumno('');
     setFiltroCarrera('');
     setFiltroCuatrimestre('');
     setPagina(1);
   };
 
-  const hayFiltrosActivos = busquedaMateria || filtroCarrera || filtroCuatrimestre;
+  const hayFiltrosActivos = busquedaAlumno || filtroCarrera || filtroCuatrimestre;
 
   // --- UTILIDADES DE INTERFAZ ---
   const getStatusColor = (status) => {
@@ -116,16 +116,16 @@ const ListadoAlumnos = () => {
         {/* --- PANEL DE BUSCADOR MULTICRITERIO (HU-25a) --- */}
         <div className="p-4 border-b border-gray-100 bg-gray-50/50 flex flex-wrap gap-4 items-end">
           
-          {/* 1. Buscador de Materia */}
+          {/* 1. Buscador por Nombre o Matrícula */}
           <div className="flex-1 min-w-[250px]">
-            <label className="block text-xs font-semibold text-gray-600 mb-1">Búsqueda por Materia</label>
+            <label className="block text-xs font-semibold text-gray-600 mb-1">Búsqueda de Alumno</label>
             <div className="relative">
               <Search className="w-4 h-4 absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
               <input 
                 type="text" 
-                placeholder="Nombre o clave de la materia..." 
-                value={busquedaMateria}
-                onChange={(e) => handleCambioFiltro(setBusquedaMateria, e.target.value)}
+                placeholder="Nombre, apellidos o matrícula..." 
+                value={busquedaAlumno}
+                onChange={(e) => handleCambioFiltro(setBusquedaAlumno, e.target.value)}
                 className="w-full pl-9 pr-4 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-colors"
               />
             </div>
@@ -151,7 +151,6 @@ const ListadoAlumnos = () => {
                 <option value="7">Licenciatura en Contabilidad Financiera (LCFIN)</option>
                 <option value="8">Licenciatura en Educación y Tecnologías para el Aprendizaje (LETA)</option>
                 <option value="9">Licenciatura en Ingenieria de Software y Sistemas Computacionales (LISSC)</option>
-
               </select>
             </div>
           </div>
