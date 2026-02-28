@@ -1,12 +1,11 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 from pydantic import BaseModel
-from typing import List
+from datetime import datetime
 from app.db.database import get_db
 from app.models.student import Student
 from app.models.career import Career
-from fastapi import HTTPException
 
 router = APIRouter(prefix="/alumnos", tags=["Alumnos"])
 
@@ -51,8 +50,10 @@ def listar_alumnos(
         "data": data
     }
 
+# Actualizamos el modelo para recibir al usuario que hace el cambio
 class UpdateEstatusRequest(BaseModel):
     estatus: str
+    usuario_accion: str = None # el frontend puede enviar el nombre del usuario que realiza la accion
 
 @router.put("/{matricula}/estatus")
 def cambiar_estatus(
@@ -68,6 +69,15 @@ def cambiar_estatus(
     estatus_validos = ['activo', 'baja', 'baja_temporal', 'egresado']
     if request.estatus not in estatus_validos:
         raise HTTPException(status_code=400, detail="Estatus no válido")
+
+    # Si se cambia a baja o baja temporal, registramos quién y cuándo
+    if request.estatus in ['baja', 'baja_temporal']:
+        alumno.baja_por = request.usuario_accion or "Administrador Desconocido"
+        alumno.fecha_baja = datetime.now()
+    else:
+        # si se reactiva el alumno o se egresa, limpiamos los campos de baja
+        alumno.baja_por = None
+        alumno.fecha_baja = None
 
     alumno.status = request.estatus
     db.commit()

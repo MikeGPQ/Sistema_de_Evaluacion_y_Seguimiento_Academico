@@ -18,5 +18,10 @@ class Student(Base):
     promedio_procedencia = Column(Numeric(4, 2), nullable=False)
     cuatrimestre_actual = Column(Integer, nullable=False, server_default=text("1"))
     status = Column(Enum('activo', 'baja', 'baja_temporal', 'egresado'), server_default='activo')
+    
+    # campos para bajas 
+    baja_por = Column(String(150), nullable=True) # guardara el nombre de quien hizo la baja
+    fecha_baja = Column(TIMESTAMP, nullable=True) # guardara la fecha de cuando se realizo la baja
+    
     created_at = Column(TIMESTAMP, server_default=text("CURRENT_TIMESTAMP"))
     updated_at = Column(TIMESTAMP, server_default=text("NULL ON UPDATE CURRENT_TIMESTAMP"), nullable=True)
