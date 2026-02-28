@@ -3,7 +3,8 @@ import LoginPage from '../pages/LoginPage';
 import ImportarAlumnos from '../pages/Alumnos/ImportarAlumnos';
 import ListadoAlumnos from '../pages/Alumnos/ListadoAlumnos';
 import CambiarEstatusAlumno from '../pages/Alumnos/CambiarEstatusAlumno';
-import { useAuth } from '../hooks/AuthContext'; 
+import PortalAlumno from '../pages/Alumnos/PortalAlumno'; 
+import { useAuth } from '../hooks/AuthContext';
 
 const ChangePasswordPage = () => {
   const { logout } = useAuth();
@@ -16,7 +17,7 @@ const ChangePasswordPage = () => {
 };
 
 const AppRoutes = () => {
-  const { isAuthenticated, loading } = useAuth();
+  const { isAuthenticated, loading, user } = useAuth();
 
   if (loading) {
     return (
@@ -26,31 +27,63 @@ const AppRoutes = () => {
     );
   }
 
+  const isAdmin = user?.role === 'admin';
+  const isAlumno = user?.role === 'alumno';
+
   return (
     <BrowserRouter>
       <Routes>
         <Route 
           path="/login" 
-          element={!isAuthenticated ? <LoginPage /> : <Navigate to="/alumnos/listado" />} 
+          element={
+            !isAuthenticated ? <LoginPage /> : 
+            isAdmin ? <Navigate to="/alumnos/listado" /> : 
+            <Navigate to="/portal-alumno" />
+          } 
         />
 
         <Route path="/" element={
-          isAuthenticated ? <Navigate to="/alumnos/listado" /> : <Navigate to="/login" />
+          !isAuthenticated ? <Navigate to="/login" /> : 
+          isAdmin ? <Navigate to="/alumnos/listado" /> : 
+          <Navigate to="/portal-alumno" />
         } />
+
 
         <Route 
           path="/alumnos/listado" 
-          element={isAuthenticated ? <ListadoAlumnos /> : <Navigate to="/login" />} 
+          element={
+            !isAuthenticated ? <Navigate to="/login" /> :
+            isAdmin ? <ListadoAlumnos /> : 
+            <Navigate to="/portal-alumno" />
+          } 
         />
         
         <Route 
           path="/alumnos/importar" 
-          element={isAuthenticated ? <ImportarAlumnos /> : <Navigate to="/login" />} 
+          element={
+            !isAuthenticated ? <Navigate to="/login" /> :
+            isAdmin ? <ImportarAlumnos /> : 
+            <Navigate to="/portal-alumno" />
+          } 
         />
 
         <Route 
           path="/alumnos/cambiar-estatus" 
-          element={isAuthenticated ? <CambiarEstatusAlumno /> : <Navigate to="/login" />} 
+          element={
+            !isAuthenticated ? <Navigate to="/login" /> :
+            isAdmin ? <CambiarEstatusAlumno /> : 
+            <Navigate to="/portal-alumno" />
+          } 
+        />
+
+
+        <Route 
+          path="/portal-alumno" 
+          element={
+            !isAuthenticated ? <Navigate to="/login" /> :
+            isAlumno ? <PortalAlumno /> : 
+            <Navigate to="/alumnos/listado" />
+          } 
         />
         
         <Route path="/change-password" element={<ChangePasswordPage />} />

@@ -3,9 +3,13 @@ import shutil
 import os
 import secrets
 import string
+import bcrypt
 import io
 import re
 import pandas as pd
+import smtplib
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
 from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Form
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
@@ -17,9 +21,8 @@ from app.models.student import Student
 from app.models.student_addresses import StudentAddress
 from app.models.career import Career
 from app.models.origin_school import OriginSchool
-from app.models.user import User 
+from app.models.user import User
 from app.schemas.student import StudentCreate, OptionsResponse
-from app.core.security import get_password_hash
 
 pwd_context = CryptContext(
     schemes=["bcrypt"], 
@@ -104,7 +107,21 @@ def register_student(
         cert_path = os.path.join(UPLOAD_DIR, f"cert_{final_matricula}.{cert_ext}")
         with open(cert_path, "wb") as buffer:
             shutil.copyfileobj(certificado.file, buffer)
+            
+    alumno_existente = db.query(Student).filter(
+        (Student.curp == student_in.curp) | 
+        (Student.email_personal == student_in.email_personal)
+    ).first()
 
+    if alumno_existente:
+        if os.path.exists(foto_path): os.remove(foto_path)
+        if cert_path and os.path.exists(cert_path): os.remove(cert_path)
+        
+        if alumno_existente.curp == student_in.curp:
+            raise HTTPException(status_code=400, detail="Esta CURP ya se encuentra registrada en el sistema.")
+        if alumno_existente.email_personal == student_in.email_personal:
+            raise HTTPException(status_code=400, detail="Este correo personal ya está en uso por otro alumno.")
+    
     try:
         new_student = Student(
             matricula=final_matricula,
@@ -118,7 +135,7 @@ def register_student(
             origin_school_id=student_in.origin_school_id,
             promedio_procedencia=student_in.promedio_procedencia,
             cuatrimestre_actual=1, 
-            status='activo',
+            status=data_dict.get('status', 'activo'), 
             foto_path=foto_path,
             certificado_path=cert_path
         )
@@ -148,8 +165,69 @@ def register_student(
             is_temp_password=True
         )
         db.add(new_user)
-        
         db.commit()
+
+        try:
+            remitente = "sesacorp10@gmail.com" 
+            password_aplicacion = "enecpjvwkoseedip" 
+
+            msg = MIMEMultipart()
+            msg['From'] = remitente
+            msg['To'] = student_in.email_personal
+            msg['Subject'] = "¡Bienvenido a SESA! Tu alta ha sido exitosa"
+
+            cuerpo_html = f"""
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <meta charset="utf-8">
+            </head>
+            <body style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f4f7f6; margin: 0; padding: 20px;">
+                <div style="max-width: 600px; margin: 0 auto; background-color: #ffffff; border-radius: 8px; overflow: hidden; box-shadow: 0 4px 10px rgba(0,0,0,0.1);">
+                    
+                    <div style="background-color: #4f46e5; padding: 25px; text-align: center;">
+                        <h1 style="margin: 0; font-size: 24px; color: #ffffff;">Sistema Escolar SESA</h1>
+                    </div>
+                    
+                    <div style="padding: 30px; color: #374151; line-height: 1.6;">
+                        <h2 style="margin-top: 0; font-size: 20px; color: #111827;">¡Hola, {student_in.nombre}!</h2>
+                        <p style="font-size: 16px;">Tu alta en el <strong>Sistema de Evaluación y Seguimiento Académico</strong> se ha procesado exitosamente.</p>
+                        
+                        <div style="background-color: #f8fafc; border-left: 5px solid #4f46e5; padding: 20px; margin: 30px 0; border-radius: 0 6px 6px 0;">
+                            <h3 style="margin-top: 0; color: #4f46e5; font-size: 16px;">🔑 Tus credenciales de acceso:</h3>
+                            <p style="margin: 8px 0; font-size: 16px;"><strong>Matrícula (Usuario):</strong> <span style="font-size: 18px; color: #111827;">{final_matricula}</span></p>
+                            <p style="margin: 8px 0; font-size: 16px;"><strong>Contraseña Temporal:</strong> <span style="font-family: monospace; background-color: #e2e8f0; padding: 4px 8px; border-radius: 4px; font-size: 18px; color: #b91c1c; font-weight: bold;">{raw_pass}</span></p>
+                        </div>
+                        
+                        <p style="font-size: 14px; color: #6b7280; background-color: #fef2f2; border: 1px solid #fecaca; padding: 10px; border-radius: 5px;">
+                            <em>⚠️ <strong>Nota importante:</strong> Te recomendamos cambiar tu contraseña al iniciar sesión por primera vez por motivos de seguridad.</em>
+                        </p>
+                        
+                        <br>
+                        <p style="font-size: 16px; margin-bottom: 0;">Saludos cordiales,</p>
+                        <p style="font-size: 16px; font-weight: bold; margin-top: 5px; color: #4f46e5;">Administración Escolar SESA</p>
+                    </div>
+                    
+                    <div style="background-color: #f9fafb; padding: 15px; text-align: center; font-size: 12px; color: #9ca3af; border-top: 1px solid #e5e7eb;">
+                        Este es un mensaje automático generado por el sistema. Por favor, no respondas a este correo.
+                    </div>
+                    
+                </div>
+            </body>
+            </html>
+            """
+            
+            msg.attach(MIMEText(cuerpo_html, 'html'))
+
+            server = smtplib.SMTP('smtp.gmail.com', 587)
+            server.starttls()
+            server.login(remitente, password_aplicacion)
+            server.sendmail(remitente, student_in.email_personal, msg.as_string())
+            server.quit()
+            print(f"Correo HTML enviado a {student_in.email_personal}")
+        except Exception as email_err:
+            print(f"Registro exitoso, pero fallo correo: {email_err}")
+
         return {"status": "success", "matricula": final_matricula, "temporal_password": raw_pass}
 
     except Exception as e:
@@ -351,7 +429,6 @@ async def importar_alumnos(file: UploadFile = File(...), db: Session = Depends(g
             errores_fila.append(f"Procedencia '{escuela_excel}' no registrada")
             campos_error.append("Procedencia")
 
-        
         if errores_fila:
             
             campos_error = list(set(campos_error))
