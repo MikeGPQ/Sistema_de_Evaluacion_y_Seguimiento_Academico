@@ -27,8 +27,17 @@ class AlumnoListado(BaseModel):
 def listar_alumnos(
     skip: int = 0, 
     limit: int = 10,
-    # NUEVO: Parámetro para la búsqueda de texto
-    busqueda: Optional[str] = Query(None, description="Búsqueda por matrícula o nombre"),
+
+    
+    # NUEVO: Parámetro para la búsqueda de texto con validación alfanumérica
+    busqueda: Optional[str] = Query(
+        None, 
+        min_length=3,
+        max_length=50,
+        description="Búsqueda por matrícula o nombre",
+        pattern=r"^[a-zA-Z0-9 áéíóúÁÉÍÓÚñÑ]+$"
+    ),
+    
     # Parámetros opcionales para los filtros
     carrera_id: Optional[int] = Query(None, description="ID de la carrera a filtrar"),
     cuatrimestre: Optional[int] = Query(None, description="Número de cuatrimestre a filtrar"),
@@ -44,7 +53,7 @@ def listar_alumnos(
     ).join(
         Career, Student.career_id == Career.id
     )
-
+     
     # 2. Aplicar Filtros Dinámicos
     
     # Filtro de Búsqueda de Texto (Matrícula o Nombre Completo)

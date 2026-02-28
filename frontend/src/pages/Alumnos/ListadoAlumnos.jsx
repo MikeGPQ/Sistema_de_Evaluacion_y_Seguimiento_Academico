@@ -39,7 +39,10 @@ const ListadoAlumnos = () => {
         limit: limite
       });
 
-      if (busquedaAlumno) params.append('busqueda', busquedaAlumno);
+      // Limpiamos espacios de los extremos y normalizamos espacios internos
+      const terminoBusqueda = busquedaAlumno.trim().replace(/\s+/g, ' ');
+
+      if (terminoBusqueda) params.append('busqueda', terminoBusqueda);
       if (filtroCarrera) params.append('carrera_id', filtroCarrera);
       if (filtroCuatrimestre) params.append('cuatrimestre', filtroCuatrimestre);
 
@@ -125,7 +128,11 @@ const ListadoAlumnos = () => {
                 type="text" 
                 placeholder="Nombre, apellidos o matrícula..." 
                 value={busquedaAlumno}
-                onChange={(e) => handleCambioFiltro(setBusquedaAlumno, e.target.value)}
+                // VALIDACIÓN EN TIEMPO REAL: Solo letras, números y espacios.
+                onChange={(e) => {
+                  const valorLimpio = e.target.value.replace(/[^a-zA-Z0-9 áéíóúÁÉÍÓÚñÑüÜ]/g, '');
+                  handleCambioFiltro(setBusquedaAlumno, valorLimpio);
+                }}
                 className="w-full pl-9 pr-4 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-colors"
               />
             </div>
@@ -181,7 +188,7 @@ const ListadoAlumnos = () => {
           )}
         </div>
 
-        {/* --- TABLA DE DATOS ORIGINAL --- */}
+        {/* --- TABLA DE DATOS --- */}
         <div className="overflow-x-auto min-h-[400px]">
           {cargando ? (
             <div className="flex flex-col items-center justify-center h-full py-20">
