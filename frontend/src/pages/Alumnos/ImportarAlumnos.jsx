@@ -32,8 +32,6 @@ const ImportarAlumnos = () => {
     const file = e.target.files[0];
     if (!file) return;
 
-    setReporte(null);
-
     if (!file.name.endsWith('.xlsx')) {
       setNotificacion({ mostrar: true, mensaje: "Solo se permiten archivos .xlsx", tipo: "error" });
       if (fileInputRef.current) fileInputRef.current.value = "";
@@ -308,7 +306,12 @@ const ImportarAlumnos = () => {
                                                   </td>
                                                   
                                                   <td className="p-3 text-blue-600 font-bold">{String(alumno["Promedio General"] || alumno["Promedio General:"] || '0.00')}</td>
-                                                  <td className="p-3 text-gray-500 font-mono">{String(alumno["Curp"] || alumno["Curp:"] || '---')}</td>
+                                                  <td 
+    className={`p-3 font-mono ${errorCampos.includes("Curp") ? 'text-red-700 bg-red-100 rounded shadow-sm border border-red-200' : 'text-gray-500'}`} 
+    title={errorCampos.includes("Curp") ? mensajeError : ""}
+>
+    {String(alumno["Curp"] || alumno["Curp:"] || '---')}
+</td>
                                                   <td className="p-3 text-gray-600">{String(alumno["Calle"] || alumno["Calle:"] || '---')}</td>
                                                   <td className="p-3 text-gray-600">{String(alumno["Colonia"] || alumno["Colonia:"] || '---')}</td>
                                                   <td className="p-3 text-blue-800 font-bold">{String(alumno["Código Postal"] || alumno["Código Postal:"] || '---')}</td>
