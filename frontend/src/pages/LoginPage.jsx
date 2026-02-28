@@ -10,27 +10,45 @@ const LoginPage = () => {
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
 
-  const handleLogin = async (e) => {
+const handleLogin = async (e) => {
     e.preventDefault();
     setError('');
+
+    const cleanIdentifier = credentials.identifier;
+
+    if (!cleanIdentifier || !credentials.password) {
+      setError('Por favor, completa todos los campos.');
+      return;
+    }
+
+    const isExactLength = /^\d{8}$/.test(cleanIdentifier);
+    if (!isExactLength) {
+      setError('El ID institucional debe tener exactamente 8 números.');
+      return;
+    }
+
+    if (!cleanIdentifier || !credentials.password.trim()) {
+      setError('Por favor, completa todos los campos.');
+      return;
+    }
+
     setIsLoading(true);
 
     try {
       const response = await client.post('/auth/login', {
-        identifier: credentials.identifier,
-        password: credentials.password
+        identifier: cleanIdentifier,
+        password: credentials.password 
       });
 
       authLogin(response.data);
       
     } catch (err) {
-      setError('Correo o contraseña incorrectos');
+      setError('ID o contraseña incorrectos');
       console.error("Detalle técnico del error:", err.response?.data || err.message);
     } finally {
       setIsLoading(false);
     }
   };
-
   return (
     <div className="min-h-screen bg-[#F8F9FA] flex flex-col relative font-sans">
       
@@ -61,16 +79,22 @@ const LoginPage = () => {
               
               <div className="space-y-1.5">
                 <label className="text-[10px] font-bold text-gray-700 uppercase tracking-wide ml-0.5">
-                  ID O CORREO INSTITUCIONAL
+                  ID
                 </label>
                 <div className="relative group">
                   <User className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 group-focus-within:text-[#0B172A] transition-colors" />
                   <input 
-                    type="text"
+                    type="text" 
                     required
+                    maxLength={8} 
                     placeholder="ej. 00123456"
                     className="w-full pl-10 pr-4 py-2.5 bg-white border border-gray-300 rounded-lg outline-none focus:ring-1 focus:ring-[#0B172A] focus:border-[#0B172A] transition-all text-sm text-gray-800 placeholder:text-gray-400"
-                    onChange={(e) => setCredentials({...credentials, identifier: e.target.value})}
+                    value={credentials.identifier} 
+                    onChange={(e) => {
+                      const onlyNumbers = e.target.value.replace(/\D/g, '');
+                      setCredentials({ ...credentials, identifier: onlyNumbers });
+                      if (error) setError('');
+                    }}
                   />
                 </div>
               </div>
@@ -86,7 +110,10 @@ const LoginPage = () => {
                     required
                     placeholder="••••••••"
                     className="w-full pl-10 pr-10 py-2.5 bg-white border border-gray-300 rounded-lg outline-none focus:ring-1 focus:ring-[#0B172A] focus:border-[#0B172A] transition-all text-sm text-gray-800 placeholder:text-gray-400 tracking-widest"
-                    onChange={(e) => setCredentials({...credentials, password: e.target.value})}
+                    onChange={(e) => {
+                        setCredentials({...credentials, password: e.target.value});
+                        if (error) setError(''); 
+                      }}
                   />
                   <button 
                     type="button"
@@ -118,13 +145,6 @@ const LoginPage = () => {
                 {isLoading ? 'Verificando...' : 'Ingresar al Portal'} <ArrowRight size={16} className="ml-1" />
               </button>
             </form>
-
-            <div className="mt-8 flex flex-col items-center">
-              <span className="text-[11px] text-gray-400 mb-1.5">¿Tienes problemas para ingresar?</span>
-              <a href="#" className="inline-flex items-center gap-1.5 text-[11px] font-bold text-gray-600 hover:text-[#0B172A] uppercase border-b border-gray-400 hover:border-[#0B172A] pb-0.5 transition-colors">
-                <HelpCircle size={13} /> CENTRO DE AYUDA
-              </a>
-            </div>
 
           </div>
         </div>
