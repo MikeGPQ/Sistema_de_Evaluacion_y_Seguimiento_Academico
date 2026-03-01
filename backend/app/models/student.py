@@ -1,10 +1,14 @@
 from sqlalchemy import Column, String, Integer, ForeignKey, Enum, Numeric, TIMESTAMP, text
+from sqlalchemy.orm import relationship  # 🌟 FIX: Agregamos esto para que Pylance no se queje
 from app.db.database import Base
 
 class Student(Base):
     __tablename__ = "students"
 
-    matricula = Column(String(20), primary_key=True)
+    # 🌟 Fusionamos la llave primaria con el index de Jorge para mayor velocidad
+    matricula = Column(String(20), primary_key=True, index=True) 
+    
+    # 🌟 Tus campos súper completos (HEAD)
     nombre = Column(String(100), nullable=False)
     apellido_paterno = Column(String(100), nullable=False)
     apellido_materno = Column(String(100), nullable=False)
@@ -20,3 +24,6 @@ class Student(Base):
     status = Column(Enum('activo', 'baja', 'baja_temporal', 'egresado'), server_default='activo')
     created_at = Column(TIMESTAMP, server_default=text("CURRENT_TIMESTAMP"))
     updated_at = Column(TIMESTAMP, server_default=text("NULL ON UPDATE CURRENT_TIMESTAMP"), nullable=True)
+
+    # 🌟 Agregamos la relación que Jorge construyó para su listado
+    career = relationship("Career")
