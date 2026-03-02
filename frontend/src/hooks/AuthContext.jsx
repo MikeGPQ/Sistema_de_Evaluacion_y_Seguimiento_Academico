@@ -1,4 +1,4 @@
-import React, { createContext, useState, useContext, useEffect } from 'react';
+import React, { createContext, useState, useContext, useEffect } from "react";
 
 const AuthContext = createContext(null);
 
@@ -7,7 +7,7 @@ export const AuthProvider = ({ children }) => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const savedUser = localStorage.getItem('user');
+    const savedUser = localStorage.getItem("user");
     if (savedUser) {
       setUser(JSON.parse(savedUser));
     }
@@ -16,17 +16,22 @@ export const AuthProvider = ({ children }) => {
 
   const login = (userData) => {
     setUser(userData);
-    localStorage.setItem('user', JSON.stringify(userData));
+    localStorage.setItem("user", JSON.stringify(userData));
+  };
+
+  const updateUser = (newUserData) => {
+    setUser(newUserData);
+    localStorage.setItem("user", JSON.stringify(newUserData));
   };
 
   const logout = () => {
     setUser(null);
-    localStorage.removeItem('user');
-    localStorage.removeItem('token');
+    localStorage.removeItem("user");
+    localStorage.removeItem("token");
   };
 
   return (
-    <AuthContext.Provider value={{ user, login, logout, isAuthenticated: !!user, loading }}>
+    <AuthContext.Provider value={{ user, login, updateUser, logout, isAuthenticated: !!user, loading }}>
       {!loading && children}
     </AuthContext.Provider>
   );
@@ -34,8 +39,6 @@ export const AuthProvider = ({ children }) => {
 
 export const useAuth = () => {
   const context = useContext(AuthContext);
-  if (!context) {
-    throw new Error('useAuth debe usarse dentro de un AuthProvider');
-  }
+  if (!context) throw new Error("useAuth debe usarse dentro de un AuthProvider");
   return context;
 };
