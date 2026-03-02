@@ -6,6 +6,7 @@ from datetime import datetime
 from app.db.database import get_db
 from app.models.student import Student
 from app.models.career import Career
+from app.models.student_status_log import StudentStatusLog 
 
 router = APIRouter(prefix="/alumnos", tags=["Alumnos"])
 
@@ -50,10 +51,10 @@ def listar_alumnos(
         "data": data
     }
 
-# Actualizamos el modelo para recibir al usuario que hace el cambio
+# Actualizamos el modelo para recibir el ID o identificador del usuario
 class UpdateEstatusRequest(BaseModel):
     estatus: str
-    usuario_accion: str = None # el frontend puede enviar el nombre del usuario que realiza la accion
+    usuario_id: str = None # Recibimos el ID real del admin/docente
 
 @router.put("/{matricula}/estatus")
 def cambiar_estatus(
@@ -70,16 +71,23 @@ def cambiar_estatus(
     if request.estatus not in estatus_validos:
         raise HTTPException(status_code=400, detail="Estatus no válido")
 
-    # Si se cambia a baja o baja temporal, registramos quién y cuándo
-    if request.estatus in ['baja', 'baja_temporal']:
-        alumno.baja_por = request.usuario_accion or "Administrador Desconocido"
-        alumno.fecha_baja = datetime.now()
-    else:
-        # si se reactiva el alumno o se egresa, limpiamos los campos de baja
-        alumno.baja_por = None
-        alumno.fecha_baja = None
-
+    # 1. Capturamos el estatus viejo antes de cambiarlo
+    estatus_anterior = alumno.status
+    
+    # 2. Actualizamos el estatus del alumno
     alumno.status = request.estatus
+    
+    # 3. Guardamos el movimiento en la tabla de Logs SIEMPRE que haya un cambio real
+    if estatus_anterior != request.estatus:
+        nuevo_log = StudentStatusLog(
+            student_matricula=alumno.matricula,
+            changed_by_user=request.usuario_id or "Sistema Desconocido",
+            previous_status=estatus_anterior,
+            new_status=request.estatus
+        )
+        db.add(nuevo_log)
+
+    # Confirmamos los cambios en ambas tablas al mismo tiempo (Transacción atómica)
     db.commit()
     
-    return {"message": "Estatus actualizado correctamente", "nuevo_estatus": alumno.status}
+    return {"message": "Estatus y Log actualizados correctamente", "nuevo_estatus": alumno.status}

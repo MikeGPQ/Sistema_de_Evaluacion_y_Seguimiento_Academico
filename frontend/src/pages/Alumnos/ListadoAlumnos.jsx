@@ -73,11 +73,14 @@ const ListadoAlumnos = () => {
     try {
         setGuardandoEstatus(true);
         const estatusFormateado = nuevoEstatus.toLowerCase().replace(' ', '_');
-        const usuarioAccion = user?.email || user?.name || "Administrador Actual";
+        
+        // CORRECCIÓN 1: Tomamos el identificador único del usuario
+        const usuarioActual = user?.identifier || user?.email || "Admin Local";
 
+        // CORRECCIÓN 2: Cambiamos "usuario_accion" por "usuario_id"
         await client.put(`/alumnos/${alumnoSeleccionado.matricula}/estatus`, {
             estatus: estatusFormateado,
-            usuario_accion: usuarioAccion
+            usuario_id: usuarioActual 
         });
 
         Swal.fire({
