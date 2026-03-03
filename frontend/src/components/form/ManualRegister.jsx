@@ -500,7 +500,7 @@ export default function ManualRegister({ isOpen, onClose, alumnoAEditar }) {
               </div>
               <div>
                 <label className="block text-xs font-bold text-gray-600 mb-1">Colonia <span className="text-red-500">*</span></label>
-                <Select name="colonia" options={coloniaOptions} onChange={handleSelectChange} value={coloniaOptions.find(opt => opt.value === formData.colonia) || null} placeholder={coloniasAPI.length > 0 ? "Seleccione..." : "Escriba 3 dígitos"} styles={customSelectStyles} isDisabled={coloniasAPI.length === 0} />
+                <Select name="colonia" options={coloniaOptions} onChange={handleSelectChange} value={coloniaOptions.find(opt => opt.value === formData.colonia) || null} placeholder={coloniasAPI.length > 0 ? "Seleccione..." : "Escriba Código Postal"} styles={customSelectStyles} isDisabled={coloniasAPI.length === 0} />
               </div>
               <div>
                 <label className="block text-xs font-bold text-gray-600 mb-1">Ciudad / Municipio <span className="text-red-500">*</span></label>
