@@ -1,10 +1,12 @@
 from sqlalchemy import Column, String, Integer, ForeignKey, Enum, Numeric, TIMESTAMP, text
+from sqlalchemy.orm import relationship
 from app.db.database import Base
 
 class Student(Base):
     __tablename__ = "students"
 
-    matricula = Column(String(20), primary_key=True)
+    matricula = Column(String(20), primary_key=True, index=True) 
+    
     nombre = Column(String(100), nullable=False)
     apellido_paterno = Column(String(100), nullable=False)
     apellido_materno = Column(String(100), nullable=False)
@@ -18,6 +20,6 @@ class Student(Base):
     promedio_procedencia = Column(Numeric(4, 2), nullable=False)
     cuatrimestre_actual = Column(Integer, nullable=False, server_default=text("1"))
     status = Column(Enum('activo', 'baja', 'baja_temporal', 'egresado'), server_default='activo')
-    
     created_at = Column(TIMESTAMP, server_default=text("CURRENT_TIMESTAMP"))
     updated_at = Column(TIMESTAMP, server_default=text("NULL ON UPDATE CURRENT_TIMESTAMP"), nullable=True)
+    career = relationship("Career")

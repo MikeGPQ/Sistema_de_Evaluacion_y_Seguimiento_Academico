@@ -10,11 +10,12 @@ import pandas as pd
 import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
-from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Form
+from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Form, Query
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
-from sqlalchemy import func
+from sqlalchemy import func, or_
 from passlib.context import CryptContext 
+from typing import Optional
 
 from app.db.database import get_db
 from app.models.student import Student
@@ -23,6 +24,7 @@ from app.models.career import Career
 from app.models.origin_school import OriginSchool
 from app.models.user import User
 from app.schemas.student import StudentCreate, OptionsResponse
+from app.core.security import get_password_hash
 
 pwd_context = CryptContext(
     schemes=["bcrypt"], 
@@ -79,6 +81,55 @@ def set_base_id(nueva_matricula: str = Form(...), db: Session = Depends(get_db))
 
 
 # ENDPOINT: REGISTRO MANUAL
+
+# --- ENDPOINT DE LISTADO DE JORGE ---
+@router.get("/listado", response_model=dict)
+def listar_alumnos(
+    skip: int = 0, 
+    limit: int = 10,
+    busqueda: Optional[str] = Query(
+        None, 
+        min_length=3,
+        max_length=50,
+        description="Búsqueda por matrícula o nombre",
+        pattern=r"^[a-zA-Z0-9 áéíóúÁÉÍÓÚñÑ]+$"
+    ),
+    carrera_id: Optional[int] = Query(None, description="ID de la carrera a filtrar"),
+    cuatrimestre: Optional[int] = Query(None, description="Número de cuatrimestre a filtrar"),
+    db: Session = Depends(get_db)
+):
+    query = db.query(
+        Student.matricula,
+        (Student.nombre + " " + Student.apellido_paterno + " " + Student.apellido_materno).label('nombre_completo'),
+        Career.name.label('carrera'),
+        Student.status.label('estatus')
+    ).join(
+        Career, Student.career_id == Career.id
+    )
+     
+    if busqueda:
+        termino = f"%{busqueda}%"
+        query = query.filter(
+            or_(
+                Student.matricula.ilike(termino),
+                (Student.nombre + " " + Student.apellido_paterno + " " + Student.apellido_materno).ilike(termino)
+            )
+        )
+
+    if carrera_id:
+        query = query.filter(Student.career_id == carrera_id)
+
+    if cuatrimestre:
+        query = query.filter(Student.cuatrimestre_actual == cuatrimestre)
+
+    total = query.count()
+    alumnos = query.offset(skip).limit(limit).all()
+    
+    # Formateamos para que el JSON sea un diccionario como espera React
+    return {
+        "total": total,
+        "data": [dict(row._mapping) for row in alumnos]
+    }
 
 @router.post("/register", status_code=status.HTTP_201_CREATED)
 def register_student(
@@ -179,39 +230,19 @@ def register_student(
             cuerpo_html = f"""
             <!DOCTYPE html>
             <html>
-            <head>
-                <meta charset="utf-8">
-            </head>
             <body style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f4f7f6; margin: 0; padding: 20px;">
                 <div style="max-width: 600px; margin: 0 auto; background-color: #ffffff; border-radius: 8px; overflow: hidden; box-shadow: 0 4px 10px rgba(0,0,0,0.1);">
-                    
                     <div style="background-color: #4f46e5; padding: 25px; text-align: center;">
                         <h1 style="margin: 0; font-size: 24px; color: #ffffff;">Sistema Escolar SESA</h1>
                     </div>
-                    
                     <div style="padding: 30px; color: #374151; line-height: 1.6;">
                         <h2 style="margin-top: 0; font-size: 20px; color: #111827;">¡Hola, {student_in.nombre}!</h2>
-                        <p style="font-size: 16px;">Tu alta en el <strong>Sistema de Evaluación y Seguimiento Académico</strong> se ha procesado exitosamente.</p>
-                        
-                        <div style="background-color: #f8fafc; border-left: 5px solid #4f46e5; padding: 20px; margin: 30px 0; border-radius: 0 6px 6px 0;">
-                            <h3 style="margin-top: 0; color: #4f46e5; font-size: 16px;">🔑 Tus credenciales de acceso:</h3>
-                            <p style="margin: 8px 0; font-size: 16px;"><strong>Matrícula (Usuario):</strong> <span style="font-size: 18px; color: #111827;">{final_matricula}</span></p>
-                            <p style="margin: 8px 0; font-size: 16px;"><strong>Contraseña Temporal:</strong> <span style="font-family: monospace; background-color: #e2e8f0; padding: 4px 8px; border-radius: 4px; font-size: 18px; color: #b91c1c; font-weight: bold;">{raw_pass}</span></p>
+                        <p style="font-size: 16px;">Tu alta se ha procesado exitosamente.</p>
+                        <div style="background-color: #f8fafc; border-left: 5px solid #4f46e5; padding: 20px; margin: 30px 0;">
+                            <p style="margin: 8px 0; font-size: 16px;"><strong>Matrícula:</strong> {final_matricula}</p>
+                            <p style="margin: 8px 0; font-size: 16px;"><strong>Contraseña:</strong> {raw_pass}</p>
                         </div>
-                        
-                        <p style="font-size: 14px; color: #6b7280; background-color: #fef2f2; border: 1px solid #fecaca; padding: 10px; border-radius: 5px;">
-                            <em>⚠️ <strong>Nota importante:</strong> Te recomendamos cambiar tu contraseña al iniciar sesión por primera vez por motivos de seguridad.</em>
-                        </p>
-                        
-                        <br>
-                        <p style="font-size: 16px; margin-bottom: 0;">Saludos cordiales,</p>
-                        <p style="font-size: 16px; font-weight: bold; margin-top: 5px; color: #4f46e5;">Administración Escolar SESA</p>
                     </div>
-                    
-                    <div style="background-color: #f9fafb; padding: 15px; text-align: center; font-size: 12px; color: #9ca3af; border-top: 1px solid #e5e7eb;">
-                        Este es un mensaje automático generado por el sistema. Por favor, no respondas a este correo.
-                    </div>
-                    
                 </div>
             </body>
             </html>
@@ -224,7 +255,6 @@ def register_student(
             server.login(remitente, password_aplicacion)
             server.sendmail(remitente, student_in.email_personal, msg.as_string())
             server.quit()
-            print(f"Correo HTML enviado a {student_in.email_personal}")
         except Exception as email_err:
             print(f"Registro exitoso, pero fallo correo: {email_err}")
 
@@ -522,3 +552,114 @@ async def importar_alumnos(file: UploadFile = File(...), db: Session = Depends(g
         "message": f"{registros_nuevos} alumnos y usuarios creados correctamente.",
         "data": credenciales_generadas 
     }
+
+# --- NUEVO ENDPOINT DE DETALLES PARA LA EDICIÓN (HU-04) ---
+@router.get("/detalle/{matricula}")
+def get_student_detail(matricula: str, db: Session = Depends(get_db)):
+    student = db.query(Student).filter(Student.matricula == matricula).first()
+    if not student:
+        raise HTTPException(status_code=404, detail="Alumno no encontrado")
+    
+    address = db.query(StudentAddress).filter(StudentAddress.student_matricula == matricula).first()
+    
+    return {
+        "student": {
+            "matricula": student.matricula,
+            "nombre": student.nombre,
+            "apellido_paterno": student.apellido_paterno,
+            "apellido_materno": student.apellido_materno,
+            "curp": student.curp,
+            "email_personal": student.email_personal,
+            "email_institucional": student.email_institucional,
+            "career_id": student.career_id,
+            "origin_school_id": student.origin_school_id,
+            "promedio_procedencia": float(student.promedio_procedencia) if student.promedio_procedencia else '',
+            "status": student.status,
+            "foto_path": student.foto_path
+        },
+        "address": {
+            "calle": address.calle if address else '',
+            "numero_domicilio": address.numero_domicilio if address else '',
+            "colonia": address.colonia if address else '',
+            "codigo_postal": address.codigo_postal if address else '',
+            "municipio": address.municipio if address else '',
+            "estado": address.estado if address else ''
+        }
+    }
+
+# --- NUEVO ENDPOINT PARA ACTUALIZAR ALUMNO (HU-04) ---
+@router.put("/actualizar/{matricula}")
+def update_student(
+    matricula: str,
+    student_data: str = Form(...),
+    foto_perfil: UploadFile = File(None), 
+    certificado: UploadFile = File(None),
+    db: Session = Depends(get_db)
+):
+    try:
+        data_dict = json.loads(student_data)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail="Error en formato JSON de los datos.")
+
+    # 1. Buscamos al alumno y su dirección
+    student = db.query(Student).filter(Student.matricula == matricula).first()
+    if not student:
+        raise HTTPException(status_code=404, detail="Alumno no encontrado")
+        
+    address = db.query(StudentAddress).filter(StudentAddress.student_matricula == matricula).first()
+
+    # 2. Validación de Unicidad: Que la CURP o el Correo no choquen con OTROS alumnos
+    nueva_curp = data_dict.get('curp')
+    nuevo_email = data_dict.get('email_personal')
+    
+    curp_existente = db.query(Student).filter(Student.curp == nueva_curp, Student.matricula != matricula).first()
+    if curp_existente:
+        raise HTTPException(status_code=400, detail="Esta CURP ya está registrada en otro alumno.")
+        
+    email_existente = db.query(Student).filter(Student.email_personal == nuevo_email, Student.matricula != matricula).first()
+    if email_existente:
+        raise HTTPException(status_code=400, detail="Este correo personal ya está en uso por otro alumno.")
+
+    # 3. Actualizamos la información principal 
+    # (NOTA: Matrícula y Promedio no se tocan, protegiendo el historial académico)
+    student.nombre = data_dict.get('nombre', student.nombre)
+    student.apellido_paterno = data_dict.get('apellido_paterno', student.apellido_paterno)
+    student.apellido_materno = data_dict.get('apellido_materno', student.apellido_materno)
+    student.curp = nueva_curp
+    student.email_personal = nuevo_email
+    student.email_institucional = data_dict.get('email_institucional', student.email_institucional)
+    student.career_id = data_dict.get('career_id', student.career_id)
+    student.origin_school_id = data_dict.get('origin_school_id', student.origin_school_id)
+
+    # 4. Actualizamos la dirección
+    addr_data = data_dict.get('address', {})
+    if address:
+        address.calle = addr_data.get('calle', address.calle)
+        address.numero_domicilio = addr_data.get('numero_domicilio', address.numero_domicilio)
+        address.colonia = addr_data.get('colonia', address.colonia)
+        address.codigo_postal = addr_data.get('codigo_postal', address.codigo_postal)
+        address.municipio = addr_data.get('municipio', address.municipio)
+        address.estado = addr_data.get('estado', address.estado)
+
+    # 5. Si el administrador subió nuevos archivos, reemplazamos los viejos
+    if foto_perfil:
+        foto_ext = foto_perfil.filename.split('.')[-1]
+        foto_path = os.path.join(UPLOAD_DIR, f"foto_{matricula}.{foto_ext}")
+        with open(foto_path, "wb") as buffer:
+            shutil.copyfileobj(foto_perfil.file, buffer)
+        student.foto_path = foto_path
+
+    if certificado:
+        cert_ext = certificado.filename.split('.')[-1]
+        cert_path = os.path.join(UPLOAD_DIR, f"cert_{matricula}.{cert_ext}")
+        with open(cert_path, "wb") as buffer:
+            shutil.copyfileobj(certificado.file, buffer)
+        student.certificado_path = cert_path
+
+    # Guardamos los cambios
+    try:
+        db.commit()
+        return {"status": "success", "message": "Alumno actualizado correctamente"}
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Error al guardar en base de datos: {str(e)}")
