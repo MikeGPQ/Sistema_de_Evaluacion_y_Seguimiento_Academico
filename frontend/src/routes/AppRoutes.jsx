@@ -43,10 +43,10 @@ const ProtectedRoute = ({ children, allowedRole }) => {
   // ✅ HU-31: forzar cambio si es temporal
   if (user?.is_temp_password) return <Navigate to="/change-password?forced=1" replace />;
 
-  if (allowedRole && user?.role !== allowedRole) {
-    if (user?.role === "admin") return <Navigate to="/alumnos/listado" replace />;
-    if (user?.role === "alumno") return <Navigate to="/alumno/horario" replace />;
-    if (user?.role === "docente") return <Navigate to="/docente/pase-lista" replace />;
+  if (allowedRole && user?.role?.name !== allowedRole) {
+    if (user?.role?.name === "admin") return <Navigate to="/alumnos/listado" replace />;
+    if (user?.role?.name === "alumno") return <Navigate to="/alumno/horario" replace />;
+    if (user?.role?.name === "docente") return <Navigate to="/docente/pase-lista" replace />;
     return <Navigate to="/login" replace />;
   }
 
@@ -75,9 +75,9 @@ const AppRoutes = () => {
               <LoginPage />
             ) : user?.is_temp_password ? (
               <Navigate to="/change-password?forced=1" replace />
-            ) : user?.role === "admin" ? (
+            ) : user?.role?.name === "admin" ? (
               <Navigate to="/alumnos/listado" replace />
-            ) : user?.role === "docente" ? (
+            ) : user?.role?.name === "docente" ? (
               <Navigate to="/docente/pase-lista" replace />
             ) : (
               <Navigate to="/alumno/horario" replace />
@@ -124,9 +124,9 @@ const AppRoutes = () => {
               <Navigate to="/login" replace />
             ) : user?.is_temp_password ? (
               <Navigate to="/change-password?forced=1" replace />
-            ) : user?.role === "admin" ? (
+            ) : user?.role?.name === "admin" ? (
               <Navigate to="/alumnos/listado" replace />
-            ) : user?.role === "docente" ? (
+            ) : user?.role?.name === "docente" ? (
               <Navigate to="/docente/pase-lista" replace />
             ) : (
               <Navigate to="/alumno/horario" replace />

@@ -1,4 +1,3 @@
-import React from 'react';
 import { AuthProvider } from './hooks/AuthContext';
 import AppRoutes from './routes/AppRoutes';
 

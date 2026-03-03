@@ -1,4 +1,4 @@
-from sqlalchemy import Column, String, Integer, ForeignKey, Enum, Numeric, TIMESTAMP, text
+from sqlalchemy import Column, String, Integer, ForeignKey, Numeric, TIMESTAMP, text
 from sqlalchemy.orm import relationship
 from app.db.database import Base
 
@@ -19,7 +19,8 @@ class Student(Base):
     career_id = Column(Integer, ForeignKey("careers.id"), nullable=False)
     promedio_procedencia = Column(Numeric(4, 2), nullable=False)
     cuatrimestre_actual = Column(Integer, nullable=False, server_default=text("1"))
-    status = Column(Enum('activo', 'baja', 'baja_temporal', 'egresado'), server_default='activo')
+    status_id = Column(Integer, ForeignKey("student_statuses.id"), nullable=False, server_default=text("1"))
     created_at = Column(TIMESTAMP, server_default=text("CURRENT_TIMESTAMP"))
     updated_at = Column(TIMESTAMP, server_default=text("NULL ON UPDATE CURRENT_TIMESTAMP"), nullable=True)
     career = relationship("Career")
+    status = relationship("StudentStatus")

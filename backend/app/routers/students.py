@@ -20,9 +20,11 @@ from typing import Optional
 from app.db.database import get_db
 from app.models.student import Student
 from app.models.student_addresses import StudentAddress
+from app.models.student_status import StudentStatus
 from app.models.career import Career
 from app.models.origin_school import OriginSchool
 from app.models.user import User
+from app.models.role import Role
 from app.schemas.student import StudentCreate, OptionsResponse
 from app.core.security import get_password_hash
 
@@ -59,6 +61,7 @@ def set_base_id(nueva_matricula: str = Form(...), db: Session = Depends(get_db))
         career = db.query(Career).first()
         school = db.query(OriginSchool).first()
         
+        baja_status = db.query(StudentStatus).filter(StudentStatus.name == 'baja').first()
         dummy_student = Student(
             matricula=nueva_matricula,
             nombre="REGISTRO",
@@ -70,7 +73,7 @@ def set_base_id(nueva_matricula: str = Form(...), db: Session = Depends(get_db))
             career_id=career.id if career else 1,
             origin_school_id=school.id if school else 1,
             cuatrimestre_actual=1,
-            status='baja'
+            status_id=baja_status.id if baja_status else 2
         )
         db.add(dummy_student)
         db.commit()
@@ -102,9 +105,11 @@ def listar_alumnos(
         Student.matricula,
         (Student.nombre + " " + Student.apellido_paterno + " " + Student.apellido_materno).label('nombre_completo'),
         Career.name.label('carrera'),
-        Student.status.label('estatus')
+        StudentStatus.name.label('estatus')
     ).join(
         Career, Student.career_id == Career.id
+    ).join(
+        StudentStatus, Student.status_id == StudentStatus.id
     )
      
     if busqueda:
@@ -174,6 +179,7 @@ def register_student(
             raise HTTPException(status_code=400, detail="Este correo personal ya está en uso por otro alumno.")
     
     try:
+        activo_status = db.query(StudentStatus).filter(StudentStatus.name == 'activo').first()
         new_student = Student(
             matricula=final_matricula,
             nombre=student_in.nombre,
@@ -185,8 +191,8 @@ def register_student(
             career_id=student_in.career_id,
             origin_school_id=student_in.origin_school_id,
             promedio_procedencia=student_in.promedio_procedencia,
-            cuatrimestre_actual=1, 
-            status=data_dict.get('status', 'activo'), 
+            cuatrimestre_actual=1,
+            status_id=data_dict.get('status_id') or (activo_status.id if activo_status else 1),
             foto_path=foto_path,
             certificado_path=cert_path
         )
@@ -208,11 +214,12 @@ def register_student(
         raw_pass = ''.join(secrets.choice(alphabet) for _ in range(10))
         hashed_pw = get_password_hash(raw_pass)
 
+        alumno_role = db.query(Role).filter(Role.name == 'alumno').first()
         new_user = User(
             identifier=final_matricula,
             email=student_in.email_personal,
             password_hash=hashed_pw,
-            role='alumno',
+            role_id=alumno_role.id if alumno_role else 3,
             is_temp_password=True
         )
         db.add(new_user)
@@ -282,6 +289,10 @@ async def importar_alumnos(file: UploadFile = File(...), db: Session = Depends(g
     registros_nuevos = 0
     credenciales_generadas = []
     errores_validacion = []
+
+    alumno_role = db.query(Role).filter(Role.name == 'alumno').first()
+    todos_estatus = db.query(StudentStatus).all()
+    status_map = {s.name.lower(): s.id for s in todos_estatus}
 
     regex_solo_letras = r'^[A-Za-záéíóúÁÉÍÓÚñÑüÜ\s]+$'
     regex_curp = r'^[A-Z]{4}\d{6}[HM][A-Z]{5}[A-Z0-9]\d$'
@@ -477,16 +488,17 @@ async def importar_alumnos(file: UploadFile = File(...), db: Session = Depends(g
             continue
 
         try:
+            estatus_excel = str(row.get('Estatus', 'activo')).strip().lower() if pd.notna(row.get('Estatus', 'activo')) else 'activo'
             nuevo_alumno = Student(
                 matricula=matricula_str,
                 nombre=nombre,
-                apellido_paterno=ap_pat_limpio, 
+                apellido_paterno=ap_pat_limpio,
                 apellido_materno=ap_mat_limpio,
                 curp=curp_str,
                 email_personal=email_pers,
                 email_institucional=email_inst if email_inst and email_inst != 'nan' else None,
                 cuatrimestre_actual=cuat_final,
-                status=row.get('Estatus', 'activo').lower(), 
+                status_id=status_map.get(estatus_excel, 1),
                 career_id=career.id,
                 origin_school_id=school.id,
                 promedio_procedencia=promedio_final
@@ -501,7 +513,7 @@ async def importar_alumnos(file: UploadFile = File(...), db: Session = Depends(g
                     identifier=matricula_str,
                     email=email_inst,
                     password_hash=pwd_context.hash(password_aleatoria),
-                    role='alumno',
+                    role_id=alumno_role.id if alumno_role else 3,
                     is_temp_password=True
                 )
                 db.add(nuevo_usuario)
@@ -579,7 +591,8 @@ def get_student_detail(matricula: str, db: Session = Depends(get_db)):
             "career_id": student.career_id,
             "origin_school_id": student.origin_school_id,
             "promedio_procedencia": float(student.promedio_procedencia) if student.promedio_procedencia else '',
-            "status": student.status,
+            "status_id": student.status_id,
+            "status": student.status.name if student.status else None,
             "foto_path": student.foto_path
         },
         "address": {
