@@ -45,11 +45,11 @@ def get_form_options(db: Session = Depends(get_db)):
 
 
 # ENDPOINT: CONFIGURAR MATRÍCULA BASE
-
 @router.post("/set-base-id")
 def set_base_id(nueva_matricula: str = Form(...), db: Session = Depends(get_db)):
-    if not nueva_matricula.isdigit():
-        raise HTTPException(status_code=400, detail="La matrícula base debe contener solo números.")
+    # 1. Validación estricta: Exactamente 8 dígitos numéricos
+    if not nueva_matricula.isdigit() or len(nueva_matricula) != 8:
+        raise HTTPException(status_code=400, detail="La matrícula base debe tener exactamente 8 dígitos numéricos.")
     
     existe = db.query(Student).filter(Student.matricula == nueva_matricula).first()
     if existe:
@@ -305,8 +305,8 @@ async def importar_alumnos(file: UploadFile = File(...), db: Session = Depends(g
         if matricula_str.endswith('.0'): matricula_str = matricula_str[:-2]
         if not matricula_str or matricula_str == 'nan': continue
 
-        if not re.match(r'^\d+$', matricula_str):
-            errores_fila.append("La matrícula debe contener solo números")
+        if not re.match(r'^\d{8}$', matricula_str):
+            errores_fila.append("La matrícula debe tener exactamente 8 dígitos numéricos")
             campos_error.append("Matrícula")
         elif matricula_str in matriculas_vistas:
             errores_fila.append("Matrícula duplicada en este mismo archivo Excel")
@@ -436,14 +436,19 @@ async def importar_alumnos(file: UploadFile = File(...), db: Session = Depends(g
 
         
         promedio_str = str(row.get('Promedio General', '')).strip()
+        
+        # Quitamos el '.0' fantasma de pandas
+        if promedio_str.endswith('.0'): 
+            promedio_str = promedio_str[:-2]
+            
         promedio_final = 0.0
         if promedio_str and promedio_str != 'nan':
-            try:
-                promedio_final = float(promedio_str)
-            except ValueError:
-                errores_fila.append("El promedio debe ser un valor numérico (ej. 8.5)")
+            # Validamos que sea un número Y además que esté en el rango de 0 a 10
+            if not promedio_str.isdigit() or not (0 <= int(promedio_str) <= 10):
+                errores_fila.append("El promedio debe ser un número entero del 0 al 10 (No se aceptan decimales ni números mayores)")
                 campos_error.append("Promedio General")
-
+            else:
+                promedio_final = float(promedio_str)
         
         carrera_excel = str(row.get('Carrera', '')).strip()
         career = db.query(Career).filter(
