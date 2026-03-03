@@ -4,17 +4,22 @@ class LoginRequest(BaseModel):
     identifier: str
     password: str
 
+class RoleResponse(BaseModel):
+    id: int
+    name: str
+
+    class Config:
+        from_attributes = True
+
 class UserResponse(BaseModel):
     identifier: str
-    role: str
+    role: RoleResponse
     is_temp_password: bool
 
     class Config:
         from_attributes = True
 
 class PasswordChangeRequest(BaseModel):
-    # Como ahorita NO tienes JWT, mantenemos identifier.
-    # (Más abajo te digo cómo se mejora cuando metan token.)
     identifier: str
     current_password: str
     new_password: str = Field(..., min_length=8, description="Mínimo 8 caracteres")

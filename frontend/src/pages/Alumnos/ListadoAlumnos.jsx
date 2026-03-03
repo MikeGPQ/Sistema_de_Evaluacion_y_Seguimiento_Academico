@@ -43,13 +43,26 @@ const ListadoAlumnos = () => {
   const [nuevoEstatus, setNuevoEstatus] = useState('');
   const [archivoBaja, setArchivoBaja] = useState(null);
   const [guardandoEstatus, setGuardandoEstatus] = useState(false);
-  
+  const [estatusCatalogo, setEstatusCatalogo] = useState([]);
+
+  const STATUS_UI = {
+    'activo':       { label: 'Activo',        desc: 'Inscripción vigente',   color: 'text-green-600',  activeBg: 'bg-green-50 border-green-500',   Icon: CheckCircle },
+    'egresado':     { label: 'Egresado',       desc: 'Conclusión de créditos', color: 'text-blue-900',   activeBg: 'bg-blue-50 border-blue-900',     Icon: GraduationCap },
+    'baja_temporal':{ label: 'Baja Temporal',  desc: 'Suspensión temporal',   color: 'text-orange-500', activeBg: 'bg-orange-50 border-orange-500',  Icon: AlertTriangle },
+    'baja':         { label: 'Baja',           desc: 'Baja definitiva',       color: 'text-red-600',    activeBg: 'bg-red-50 border-red-500',        Icon: XCircle },
+  };
+
   const limite = 10;
 
   // --- ESTADOS DE FILTROS DE JORGE (HU-25a) ---
   const [busquedaAlumno, setBusquedaAlumno] = useState('');
   const [filtroCarrera, setFiltroCarrera] = useState('');
   const [filtroCuatrimestre, setFiltroCuatrimestre] = useState('');
+
+  // --- CATÁLOGO DE ESTATUS DESDE API ---
+  useEffect(() => {
+    client.get('/catalogos/estatus').then(res => setEstatusCatalogo(res.data)).catch(() => {});
+  }, []);
 
   // --- FUNCIÓN PARA OBTENER ALUMNOS ---
   const fetchAlumnos = async () => {
@@ -125,29 +138,23 @@ const ListadoAlumnos = () => {
 
   // --- MANEJADORES DE ALEJANDRO (MODAL ESTATUS) ---
   const abrirModalEstatus = (alumno) => {
-    let estatusActual = "Activo";
-    if (alumno.estatus === "baja") estatusActual = "Baja";
-    if (alumno.estatus === "baja_temporal") estatusActual = "Baja Temporal";
-    if (alumno.estatus === "egresado") estatusActual = "Egresado";
-    if (alumno.estatus === "activo") estatusActual = "Activo";
-    
     setAlumnoSeleccionado(alumno);
-    setNuevoEstatus(estatusActual);
+    setNuevoEstatus(alumno.estatus);
     setArchivoBaja(null);
     setModalEstatusOpen(true);
   };
 
-  const requiereArchivo = nuevoEstatus === 'Baja' || nuevoEstatus === 'Baja Temporal';
+  const requiereArchivo = nuevoEstatus === 'baja' || nuevoEstatus === 'baja_temporal';
 
   const handleConfirmarCambioEstatus = async () => {
     try {
       setGuardandoEstatus(true);
-      const estatusFormateado = nuevoEstatus.toLowerCase().replace(' ', '_');
       const usuarioActual = user?.identifier || user?.email || "Admin Local";
+      const statusSeleccionado = estatusCatalogo.find(s => s.name === nuevoEstatus);
 
       await client.put(`/alumnos/${alumnoSeleccionado.matricula}/estatus`, {
-        estatus: estatusFormateado,
-        usuario_id: usuarioActual 
+        status_id: statusSeleccionado.id,
+        usuario_id: usuarioActual
       });
 
       Swal.fire({
@@ -172,7 +179,7 @@ const ListadoAlumnos = () => {
   };
 
   const renderAlertaDinamica = () => {
-    if (nuevoEstatus === 'Baja' || nuevoEstatus === 'Baja Temporal') {
+    if (nuevoEstatus === 'baja' || nuevoEstatus === 'baja_temporal') {
       return (
         <div className="flex gap-3 p-4 bg-red-50 rounded-lg mb-5 border border-red-100 animate-in fade-in duration-300">
           <AlertTriangle className="w-8 h-8 text-red-600 flex-shrink-0" />
@@ -183,7 +190,7 @@ const ListadoAlumnos = () => {
         </div>
       );
     }
-    if (nuevoEstatus === 'Egresado') {
+    if (nuevoEstatus === 'egresado') {
       return (
         <div className="flex gap-3 p-4 bg-blue-50 rounded-lg mb-5 border border-blue-200 animate-in fade-in duration-300">
           <GraduationCap className="w-8 h-8 text-blue-900 flex-shrink-0" />
@@ -194,7 +201,7 @@ const ListadoAlumnos = () => {
         </div>
       );
     }
-    return null; 
+    return null;
   };
 
   const inicio = (pagina - 1) * limite + 1;
@@ -417,20 +424,19 @@ const ListadoAlumnos = () => {
 
               <div className="space-y-2 mb-5">
                 <p className="text-xs font-bold text-gray-700 mb-2 border-b pb-1">Seleccione el nuevo estatus:</p>
-                {[
-                  { id: 'Activo', desc: 'Inscripción vigente', color: 'text-green-600', activeBg: 'bg-green-50 border-green-500', Icon: CheckCircle },
-                  { id: 'Egresado', desc: 'Conclusión de créditos', color: 'text-blue-900', activeBg: 'bg-blue-50 border-blue-900', Icon: GraduationCap },
-                  { id: 'Baja Temporal', desc: 'Suspensión temporal', color: 'text-orange-500', activeBg: 'bg-orange-50 border-orange-500', Icon: AlertTriangle },
-                  { id: 'Baja', desc: 'Baja definitiva', color: 'text-red-600', activeBg: 'bg-red-50 border-red-500', Icon: XCircle }
-                ].map((item) => (
-                  <label key={item.id} className={`flex items-center p-2.5 border rounded-lg cursor-pointer transition-all ${nuevoEstatus === item.id ? `${item.activeBg} shadow-sm` : 'border-gray-200 hover:bg-gray-50'}`}>
-                    <input type="radio" name="estatus" value={item.id} checked={nuevoEstatus === item.id} onChange={(e) => setNuevoEstatus(e.target.value)} className="mr-3 w-3.5 h-3.5 text-blue-900 focus:ring-blue-900" />
-                    <item.Icon className={`w-4 h-4 mr-2 ${item.color}`} />
-                    <div>
-                      <p className="text-sm font-bold text-gray-800">{item.id}</p>
-                    </div>
-                  </label>
-                ))}
+                {estatusCatalogo.map((estatus) => {
+                  const ui = STATUS_UI[estatus.name] || {};
+                  const Icon = ui.Icon;
+                  return (
+                    <label key={estatus.id} className={`flex items-center p-2.5 border rounded-lg cursor-pointer transition-all ${nuevoEstatus === estatus.name ? `${ui.activeBg} shadow-sm` : 'border-gray-200 hover:bg-gray-50'}`}>
+                      <input type="radio" name="estatus" value={estatus.name} checked={nuevoEstatus === estatus.name} onChange={(e) => setNuevoEstatus(e.target.value)} className="mr-3 w-3.5 h-3.5 text-blue-900 focus:ring-blue-900" />
+                      {Icon && <Icon className={`w-4 h-4 mr-2 ${ui.color}`} />}
+                      <div>
+                        <p className="text-sm font-bold text-gray-800">{ui.label || estatus.name}</p>
+                      </div>
+                    </label>
+                  );
+                })}
               </div>
 
               {renderAlertaDinamica()}

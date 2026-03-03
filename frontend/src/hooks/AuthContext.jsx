@@ -1,4 +1,4 @@
-import React, { createContext, useState, useContext, useEffect } from "react";
+import { createContext, useState, useContext, useEffect } from "react";
 
 const AuthContext = createContext(null);
 
@@ -9,7 +9,15 @@ export const AuthProvider = ({ children }) => {
   useEffect(() => {
     const savedUser = localStorage.getItem("user");
     if (savedUser) {
-      setUser(JSON.parse(savedUser));
+      const parsed = JSON.parse(savedUser);
+      // Valida que el usuario tenga la estructura nueva (role como objeto)
+      if (parsed?.role && typeof parsed.role === 'object' && parsed.role.name) {
+        setUser(parsed);
+      } else {
+        // Limpia datos del formato anterior (role era string ENUM)
+        localStorage.removeItem("user");
+        localStorage.removeItem("token");
+      }
     }
     setLoading(false);
   }, []);

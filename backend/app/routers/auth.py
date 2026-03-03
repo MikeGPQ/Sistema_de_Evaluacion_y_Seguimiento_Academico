@@ -33,11 +33,7 @@ def login(data: LoginRequest, db: Session = Depends(get_db)):
     db.commit()
     db.refresh(user)
 
-    return {
-        "identifier": user.identifier,
-        "role": user.role,
-        "is_temp_password": bool(user.is_temp_password),
-    }
+    return user
 
 
 @router.put("/change-password")
