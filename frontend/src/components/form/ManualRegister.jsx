@@ -15,6 +15,7 @@ export default function ManualRegister({ isOpen, onClose, alumnoAEditar }) {
 
   const [erroresEnVivo, setErroresEnVivo] = useState({ curp: '', email: '', promedio: '' });
   const [validacionExitosa, setValidacionExitosa] = useState({ curp: false, email: false, promedio: false });
+  const [datosOriginales, setDatosOriginales] = useState(null);
 
   const [formData, setFormData] = useState({
     matricula: '', 
@@ -23,8 +24,9 @@ export default function ManualRegister({ isOpen, onClose, alumnoAEditar }) {
     origin_school_id: '', promedio_procedencia: '',
     calle: '', numero_domicilio: '', colonia: '',
     codigo_postal: '', municipio: '', estado: 'Campeche',
-    status: 'activo', 
-    foto_path: ''
+    status: 'activo',
+    foto_id: null, foto_nombre: null,
+    certificado_id: null, certificado_nombre: null
   });
 
   const customSelectStyles = {
@@ -57,7 +59,8 @@ export default function ManualRegister({ isOpen, onClose, alumnoAEditar }) {
         curp: '', email_personal: '', email_institucional: '', career_id: '',
         origin_school_id: '', promedio_procedencia: '',
         calle: '', numero_domicilio: '', colonia: '',
-        codigo_postal: '', municipio: '', estado: 'Campeche', status: 'activo', foto_path: ''
+        codigo_postal: '', municipio: '', estado: 'Campeche', status: 'activo',
+        foto_id: null, foto_nombre: null, certificado_id: null, certificado_nombre: null
       });
 
       client.get('/alumnos/options').then(res => {
@@ -89,11 +92,7 @@ export default function ManualRegister({ isOpen, onClose, alumnoAEditar }) {
             const esPromedioInvalido = ['', 'nan', 'null', 'none', 'undefined', '0'].includes(promRaw);
             const promedioValor = esPromedioInvalido ? '' : Math.round(student.promedio_procedencia).toString();
 
-            const fotoRaw = String(student.foto_path || '').trim().toLowerCase();
-            // Si el texto es muy corto (ej. un espacio) o es una palabra trampa, lo vaciamos
-            const esFotoInvalida = fotoRaw.length < 3 || ['', 'nan', 'null', 'none', 'undefined', 'false'].includes(fotoRaw);
-            const fotoReal = esFotoInvalida ? '' : student.foto_path;
-            setFormData({
+            const dataCargada = {
                 matricula: student.matricula,
                 nombre: student.nombre,
                 apellido_paterno: student.apellido_paterno,
@@ -111,8 +110,13 @@ export default function ManualRegister({ isOpen, onClose, alumnoAEditar }) {
                 municipio: address.municipio,
                 estado: address.estado || 'Campeche',
                 status: student.status,
-                foto_path: fotoReal 
-            });
+                foto_id: student.foto_id ?? null,
+                foto_nombre: student.foto_nombre ?? null,
+                certificado_id: student.certificado_id ?? null,
+                certificado_nombre: student.certificado_nombre ?? null
+            };
+            setFormData(dataCargada);
+            setDatosOriginales(dataCargada);
             
             // 🌟 NUEVO REGEX ESTRICTO PARA CORREOS EN MÉXICO
             const curpRegex = /^[A-Z]{4}\d{6}[HM][A-Z]{5}[A-Z0-9]\d$/i;
@@ -122,10 +126,10 @@ export default function ManualRegister({ isOpen, onClose, alumnoAEditar }) {
             const emailValido = emailRegex.test(student.email_personal);
             const promedioValido = promedioValor !== '';
 
-            setValidacionExitosa({ 
-              curp: curpValida, 
-              email: emailValido, 
-              promedio: promedioValido 
+            setValidacionExitosa({
+              curp: false,
+              email: false,
+              promedio: promedioValido
             });
 
             setErroresEnVivo({
@@ -195,6 +199,10 @@ export default function ManualRegister({ isOpen, onClose, alumnoAEditar }) {
       finalValue = finalValue.replace(/[^a-zA-Z0-9\s]/g, '');
     }
 
+    if (name === 'calle') {
+      finalValue = finalValue.replace(/[^a-zA-ZáéíóúÁÉÍÓÚñÑ0-9\s]/g, '');
+    }
+
     if (name === 'promedio_procedencia') {
       finalValue = finalValue.replace(/[^0-9]/g, '');
     }
@@ -206,22 +214,64 @@ export default function ManualRegister({ isOpen, onClose, alumnoAEditar }) {
     }
 
     if (name === 'email_institucional') {
-      finalValue = finalValue.replace(/[\s@]/g, '').toLowerCase(); 
+      finalValue = finalValue.replace(/[\s@]/g, '').toLowerCase();
     } else if (name === 'email_personal') {
-      finalValue = finalValue.replace(/\s/g, '').toLowerCase(); 
+      // Sin espacios y solo un arroba
+      finalValue = finalValue.replace(/\s/g, '').toLowerCase();
+      const atIdx = finalValue.indexOf('@');
+      if (atIdx !== -1) {
+        finalValue = finalValue.slice(0, atIdx + 1) + finalValue.slice(atIdx + 1).replace(/@/g, '');
+      }
     } else if (name === 'curp') {
-      finalValue = finalValue.replace(/\s/g, '').toUpperCase(); 
+      // Solo caracteres alfanuméricos
+      finalValue = finalValue.replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
     }
 
-    setFormData(prev => ({ ...prev, [name]: finalValue })); 
+    setFormData(prev => ({ ...prev, [name]: finalValue }));
 
-    if (name === 'curp' && (!alumnoAEditar || finalValue !== alumnoAEditar.curp)) {
-      setErroresEnVivo(prev => ({ ...prev, curp: '' }));
-      setValidacionExitosa(prev => ({ ...prev, curp: false }));
+    if (name === 'curp') {
+      const curpRegex = /^[A-Z]{4}\d{6}[HM][A-Z]{5}[A-Z0-9]\d$/i;
+      if (finalValue.length === 18) {
+        if (!curpRegex.test(finalValue)) {
+          setErroresEnVivo(prev => ({ ...prev, curp: '❌ El formato de la CURP es incorrecto.' }));
+          setValidacionExitosa(prev => ({ ...prev, curp: false }));
+        } else if (alumnoAEditar && finalValue === alumnoAEditar.curp) {
+          setErroresEnVivo(prev => ({ ...prev, curp: '' }));
+          setValidacionExitosa(prev => ({ ...prev, curp: true }));
+        } else {
+          setErroresEnVivo(prev => ({ ...prev, curp: '' }));
+          setValidacionExitosa(prev => ({ ...prev, curp: false }));
+        }
+      } else {
+        setErroresEnVivo(prev => ({ ...prev, curp: '' }));
+        setValidacionExitosa(prev => ({ ...prev, curp: false }));
+      }
     }
-    if (name === 'email_personal' && (!alumnoAEditar || finalValue !== alumnoAEditar.email_personal)) {
-      setErroresEnVivo(prev => ({ ...prev, email: '' }));
-      setValidacionExitosa(prev => ({ ...prev, email: false }));
+
+    if (name === 'email_personal') {
+      const emailRegex = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.(com|mx|org|net|edu|gob)$/i;
+      const afterAt = finalValue.split('@')[1] || '';
+      const looksComplete = finalValue.includes('@') && afterAt.includes('.') && afterAt.split('.').pop().length >= 2;
+      if (finalValue.length === 0) {
+        setErroresEnVivo(prev => ({ ...prev, email: '' }));
+        setValidacionExitosa(prev => ({ ...prev, email: false }));
+      } else if (looksComplete) {
+        if (emailRegex.test(finalValue)) {
+          if (alumnoAEditar && finalValue === alumnoAEditar.email_personal) {
+            setErroresEnVivo(prev => ({ ...prev, email: '' }));
+            setValidacionExitosa(prev => ({ ...prev, email: true }));
+          } else {
+            setErroresEnVivo(prev => ({ ...prev, email: '' }));
+            setValidacionExitosa(prev => ({ ...prev, email: false }));
+          }
+        } else {
+          setErroresEnVivo(prev => ({ ...prev, email: '❌ Formato inválido o dominio no permitido.' }));
+          setValidacionExitosa(prev => ({ ...prev, email: false }));
+        }
+      } else {
+        setErroresEnVivo(prev => ({ ...prev, email: '' }));
+        setValidacionExitosa(prev => ({ ...prev, email: false }));
+      }
     }
     
     if (name === 'promedio_procedencia') {
@@ -320,12 +370,13 @@ export default function ManualRegister({ isOpen, onClose, alumnoAEditar }) {
     // 🌟 LÓGICA INFALIBLE PARA LA FOTOGRAFÍA
    // 🌟 VALIDACIÓN DE FOTO INTELIGENTE (HU-04)
 // 🌟 VALIDACIÓN DE FOTO INTELIGENTE (HU-04)
-    const tieneFotoPrevia = formData.foto_path && formData.foto_path.length > 2;
+    const tieneFotoPrevia = !!formData.foto_id;
     const esEstatusExento = formData.status?.toLowerCase().includes('baja'); // Atrapa 'baja' y 'baja_temporal'
     
     if (!files.foto && !tieneFotoPrevia && !esEstatusExento) {
         return Swal.fire('Falta la Fotografía', 'La fotografía es obligatoria para alumnos activos. Este alumno no tiene una foto registrada.', 'warning');
     }
+
     setIsLoading(true);
 
     let finalEmailInstitucional = null;
@@ -334,7 +385,7 @@ export default function ManualRegister({ isOpen, onClose, alumnoAEditar }) {
       finalEmailInstitucional = `${rawEmail}@red.unid.mx`;
     }
 
-    const { status, foto_path, ...restFormData } = formData;
+    const { status, foto_id, foto_nombre, certificado_id, certificado_nombre, ...restFormData } = formData;
     const dataPayload = {
       ...restFormData,
       career_id: parseInt(formData.career_id),
@@ -428,8 +479,16 @@ export default function ManualRegister({ isOpen, onClose, alumnoAEditar }) {
               <label className="block text-xs font-bold text-gray-600 mb-1">CURP <span className="text-red-500">*</span></label>
               <input name="curp" value={formData.curp} onChange={handleChange} onBlur={handleCheckCurp} 
                 className={`w-full border rounded-md p-2.5 text-sm uppercase outline-none font-bold tracking-wider transition-all focus:ring-1 ${erroresEnVivo.curp ? 'border-red-500 bg-red-50 focus:ring-red-500 text-red-700' : validacionExitosa.curp ? 'border-green-500 bg-green-50 focus:ring-green-500 text-green-700' : 'border-gray-300 focus:border-[#1e3a8a]'}`} maxLength={18} required />
-              {erroresEnVivo.curp && <p className="text-xs text-red-600 mt-1.5 font-bold animate-pulse">{erroresEnVivo.curp}</p>}
-              {validacionExitosa.curp && !erroresEnVivo.curp && <p className="text-xs text-green-600 mt-1.5 font-bold">✓ CURP válida</p>}
+              <div className="flex justify-between items-start mt-1">
+                <div>
+                  {erroresEnVivo.curp && <p className="text-xs text-red-600 font-bold animate-pulse">{erroresEnVivo.curp}</p>}
+                  {validacionExitosa.curp && !erroresEnVivo.curp && <p className="text-xs text-green-600 font-bold">✓ CURP válida</p>}
+                  {!erroresEnVivo.curp && !validacionExitosa.curp && formData.curp.length === 18 && <p className="text-xs text-blue-600 font-medium">✓ Formato correcto</p>}
+                </div>
+                <span className={`text-xs font-mono ${formData.curp.length === 18 ? (erroresEnVivo.curp ? 'text-red-500' : 'text-green-600') : 'text-gray-400'}`}>
+                  {formData.curp.length}/18
+                </span>
+              </div>
             </div>
           </div>
         </div>
@@ -451,12 +510,13 @@ export default function ManualRegister({ isOpen, onClose, alumnoAEditar }) {
             </div>
             <div className="md:col-span-2">
               <label className="block text-xs font-bold text-gray-600 mb-1">Promedio General <span className="text-red-500">*</span></label>
-              <input 
-                type="text" inputMode="numeric" maxLength="2" name="promedio_procedencia" value={formData.promedio_procedencia} 
+              <input
+                type="text" inputMode="numeric" maxLength="2" name="promedio_procedencia" value={formData.promedio_procedencia}
                 onChange={handleChange} disabled={!!alumnoAEditar}
-                className={`w-full border rounded-md p-2.5 text-sm outline-none transition-all ${alumnoAEditar ? 'bg-gray-100 text-gray-500 border-gray-200' : erroresEnVivo.promedio ? 'border-red-500 bg-red-50 focus:ring-red-500 text-red-700' : validacionExitosa.promedio ? 'border-green-500 bg-green-50 focus:ring-green-500 text-green-700' : 'border-gray-300 focus:border-[#1e3a8a]'}`} required 
+                className={`w-full border rounded-md p-2.5 text-sm outline-none transition-all ${alumnoAEditar ? 'bg-gray-100 text-gray-500 border-gray-200' : erroresEnVivo.promedio ? 'border-red-500 bg-red-50 focus:ring-red-500 text-red-700' : 'border-gray-300 focus:border-[#1e3a8a]'}`} required
               />
               {erroresEnVivo.promedio && <p className="text-xs text-red-600 mt-1.5 font-bold animate-pulse">{erroresEnVivo.promedio}</p>}
+              {validacionExitosa.promedio && !erroresEnVivo.promedio && <p className="text-xs text-blue-600 mt-1.5 font-medium">✓ Promedio correcto</p>}
             </div>
           </div>
         </div>
@@ -477,10 +537,12 @@ export default function ManualRegister({ isOpen, onClose, alumnoAEditar }) {
             </div>
             <div>
               <label className="block text-xs font-bold text-gray-600 mb-1">Correo Personal <span className="text-red-500">*</span></label>
-              <input type="email" name="email_personal" value={formData.email_personal} onChange={handleChange} onBlur={handleCheckEmail} 
+              <input type="email" name="email_personal" value={formData.email_personal} onChange={handleChange} onBlur={handleCheckEmail} onKeyDown={(e) => e.key === ' ' && e.preventDefault()}
                 className={`w-full border rounded-md p-2.5 text-sm lowercase outline-none transition-all ${erroresEnVivo.email ? 'border-red-500 bg-red-50 focus:ring-red-500 text-red-700' : validacionExitosa.email ? 'border-green-500 bg-green-50 focus:ring-green-500 text-green-700' : 'border-gray-300 focus:border-[#1e3a8a]'}`} required />
               {erroresEnVivo.email && <p className="text-xs text-red-600 mt-1.5 font-bold animate-pulse">{erroresEnVivo.email}</p>}
               {validacionExitosa.email && !erroresEnVivo.email && <p className="text-xs text-green-600 mt-1.5 font-bold">✓ Correo válido</p>}
+              {!erroresEnVivo.email && !validacionExitosa.email && /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.(com|mx|org|net|edu|gob)$/i.test(formData.email_personal) &&
+                <p className="text-xs text-blue-600 mt-1.5 font-medium">✓ Formato correcto</p>}
             </div>
 
             <div className="md:col-span-2 mt-4 border-t border-gray-100 pt-5 grid grid-cols-1 md:grid-cols-2 gap-5">
@@ -527,11 +589,13 @@ export default function ManualRegister({ isOpen, onClose, alumnoAEditar }) {
               <label htmlFor="f-foto" className={`flex flex-col items-center justify-center h-24 border-2 border-dashed rounded-lg cursor-pointer transition-all ${files.foto ? 'border-green-500 bg-green-50 text-green-700' : 'border-gray-300 bg-gray-50 hover:border-blue-400 hover:bg-blue-50 text-gray-400'}`}>
                 {/* 🌟 LA ETIQUETA SE ADAPTA: Si el importado no tiene foto, avisa que es obligatoria */}
                 <span className="text-xs font-bold uppercase tracking-wider text-center px-2">
-                    {files.foto 
-                      ? `✅ ${files.foto.name}` 
-                      : (alumnoAEditar && (formData.foto_path || formData.status?.toLowerCase().includes('baja')) 
-                          ? "Actualizar Fotografía (Opcional)" 
-                          : "Subir Fotografía *")}
+                    {files.foto
+                      ? `✅ ${files.foto.name}`
+                      : alumnoAEditar
+                        ? formData.foto_id
+                          ? formData.foto_nombre ? `📷 ${formData.foto_nombre}` : "Actualizar Fotografía (Opcional)"
+                          : formData.status?.toLowerCase().includes('baja') ? "Agregar Fotografía (Opcional)" : "Agregar Fotografía *"
+                        : "Subir Fotografía *"}
                 </span>
               </label>
             </div>
@@ -539,7 +603,13 @@ export default function ManualRegister({ isOpen, onClose, alumnoAEditar }) {
               <input type="file" name="certificado" id="f-cert" accept=".pdf" onChange={handleFileChange} className="hidden" />
               <label htmlFor="f-cert" className={`flex flex-col items-center justify-center h-24 border-2 border-dashed rounded-lg cursor-pointer transition-all ${files.certificado ? 'border-green-500 bg-green-50 text-green-700' : 'border-gray-300 bg-gray-50 hover:border-blue-400 hover:bg-blue-50 text-gray-400'}`}>
                 <span className="text-xs font-bold uppercase tracking-wider text-center px-2">
-                    {files.certificado ? `✅ ${files.certificado.name}` : (alumnoAEditar ? "Actualizar Certificado (Opcional)" : "Subir Certificado")}
+                    {files.certificado
+                      ? `✅ ${files.certificado.name}`
+                      : alumnoAEditar
+                        ? formData.certificado_id
+                          ? formData.certificado_nombre ? `📄 ${formData.certificado_nombre}` : "Actualizar Certificado (Opcional)"
+                          : "Agregar Certificado (Opcional)"
+                        : "Subir Certificado"}
                 </span>
               </label>
             </div>
@@ -552,10 +622,17 @@ export default function ManualRegister({ isOpen, onClose, alumnoAEditar }) {
             <button type="button" onClick={onClose} className="px-5 py-2 border border-gray-300 rounded-md text-sm font-semibold text-gray-700 bg-white hover:bg-gray-50 transition-colors">
               Cancelar
             </button>
-            <button type="submit" disabled={isLoading || erroresEnVivo.curp || erroresEnVivo.email || erroresEnVivo.promedio} className={`flex items-center px-6 py-2 rounded-md text-sm font-bold text-white shadow-sm transition-all ${isLoading || erroresEnVivo.curp || erroresEnVivo.email || erroresEnVivo.promedio ? 'bg-amber-300 cursor-not-allowed' : 'bg-amber-500 hover:bg-amber-600'}`}>
-              <span className="mr-2">💾</span> 
-              {isLoading ? 'Procesando...' : (alumnoAEditar ? 'Actualizar Alumno' : 'Guardar Alumno')}
-            </button>
+            {(() => {
+              const camposEditables = ['nombre', 'apellido_paterno', 'apellido_materno', 'curp', 'email_personal', 'email_institucional', 'career_id', 'origin_school_id', 'calle', 'numero_domicilio', 'colonia', 'codigo_postal', 'municipio', 'estado'];
+              const sinCambios = !!(alumnoAEditar && datosOriginales && !camposEditables.some(c => String(formData[c] ?? '') !== String(datosOriginales[c] ?? '')) && !files.foto && !files.certificado);
+              const deshabilitado = isLoading || !!erroresEnVivo.curp || !!erroresEnVivo.email || !!erroresEnVivo.promedio || sinCambios;
+              return (
+                <button type="submit" disabled={deshabilitado} className={`flex items-center px-6 py-2 rounded-md text-sm font-bold text-white shadow-sm transition-all ${deshabilitado ? 'bg-amber-300 cursor-not-allowed' : 'bg-amber-500 hover:bg-amber-600'}`}>
+                  <span className="mr-2">💾</span>
+                  {isLoading ? 'Procesando...' : (alumnoAEditar ? 'Actualizar Alumno' : 'Guardar Alumno')}
+                </button>
+              );
+            })()}
           </div>
         </div>
       </form>
