@@ -333,7 +333,7 @@ const ListadoAlumnos = () => {
                           <button 
                             onClick={() => handleEditarAlumno(alumno)} 
                             className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors border border-transparent hover:border-blue-100" 
-                            title="Editar / Ver Kárdex"
+                            title="Editar"
                           >
                             <Edit2 className="w-4 h-4" />
                           </button>
