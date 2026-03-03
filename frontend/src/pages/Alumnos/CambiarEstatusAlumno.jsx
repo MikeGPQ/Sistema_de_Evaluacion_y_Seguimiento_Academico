@@ -23,10 +23,19 @@ const CambiarEstatusAlumno = () => {
     const [estatusCatalogo, setEstatusCatalogo] = useState([]);
     const [archivo, setArchivo] = useState(null);
     const [guardando, setGuardando] = useState(false);
+    const [logEvidencia, setLogEvidencia] = useState(null);
 
     useEffect(() => {
         client.get('/catalogos/estatus').then(res => setEstatusCatalogo(res.data)).catch(() => {});
     }, []);
+
+    useEffect(() => {
+        if ((estatusActual === 'baja' || estatusActual === 'baja_temporal') && alumnoSeleccionado) {
+            client.get(`/alumnos/${alumnoSeleccionado.matricula}/ultimo-log-estatus`)
+                .then(res => setLogEvidencia(res.data))
+                .catch(() => {});
+        }
+    }, [estatusActual, alumnoSeleccionado]);
 
     if (!alumnoSeleccionado) {
         return (
@@ -39,22 +48,25 @@ const CambiarEstatusAlumno = () => {
         );
     }
 
-    const requiereArchivo = nuevoEstatus === 'baja' || nuevoEstatus === 'baja_temporal';
+    const esBaja = nuevoEstatus === 'baja' || nuevoEstatus === 'baja_temporal';
+    const requiereArchivo = esBaja && !logEvidencia?.evidence_file_id;
 
     const handleConfirmarCambio = async () => {
         try {
             setGuardando(true);
             const statusSeleccionado = estatusCatalogo.find(s => s.name === nuevoEstatus);
 
-            await client.put(`/alumnos/${alumnoSeleccionado.matricula}/estatus`, {
-                status_id: statusSeleccionado.id,
-                usuario_id: user?.identifier || user?.email || "Admin Local"
-            });
+            const formData = new FormData();
+            formData.append('status_id', statusSeleccionado.id);
+            formData.append('usuario_id', user?.identifier || user?.email || "Admin Local");
+            if (archivo) formData.append('evidence_file', archivo);
+
+            await client.put(`/alumnos/${alumnoSeleccionado.matricula}/estatus`, formData);
 
             navigate('/alumnos/listado');
         } catch (error) {
             console.error("Error al cambiar estatus:", error);
-            alert("Hubo un error al actualizar el estatus.");
+            alert(error?.response?.data?.detail || "Hubo un error al actualizar el estatus.");
         } finally {
             setGuardando(false);
         }
@@ -133,9 +145,31 @@ const CambiarEstatusAlumno = () => {
                     {renderAlertaDinamica()}
 
                     
-                    {requiereArchivo && (
+                    {logEvidencia?.evidence_file_name && (
+                        <div className="mb-4 p-3 bg-blue-50 rounded-xl border border-blue-200 flex items-center gap-2">
+                            <FileText className="w-4 h-4 text-blue-700 flex-shrink-0" />
+                            <div className="flex-1 overflow-hidden">
+                                <p className="text-[10px] font-bold text-blue-600 uppercase tracking-wider">Documento registrado</p>
+                                <a
+                                    href={`/api/alumnos/archivos/${logEvidencia.evidence_file_id}`}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="text-xs font-semibold text-blue-900 hover:underline truncate block"
+                                    title={logEvidencia.evidence_file_name}
+                                >
+                                    {logEvidencia.evidence_file_name}
+                                </a>
+                            </div>
+                        </div>
+                    )}
+
+                    {esBaja && (
                         <div className="mb-6 animate-in fade-in duration-300">
-                            <p className="text-xs font-bold text-gray-700 uppercase mb-2">Carta de No Adeudo <span className="text-red-500">*</span></p>
+                            <p className="text-xs font-bold text-gray-700 uppercase mb-2">
+                                {logEvidencia?.evidence_file_id ? 'Reemplazar Carta de No Adeudo' : 'Carta de No Adeudo'}
+                                {requiereArchivo && <span className="text-red-500 ml-1">*</span>}
+                                {logEvidencia?.evidence_file_id && <span className="text-gray-400 font-normal normal-case ml-1">(opcional)</span>}
+                            </p>
                             <label className="flex flex-col items-center justify-center w-full h-24 border-2 border-dashed border-gray-300 rounded-xl cursor-pointer bg-gray-50 hover:bg-gray-100 transition">
                                 <Upload className="w-5 h-5 text-gray-400 mb-1" />
                                 <p className="text-xs text-gray-500 font-medium">Haga clic para adjuntar documento</p>

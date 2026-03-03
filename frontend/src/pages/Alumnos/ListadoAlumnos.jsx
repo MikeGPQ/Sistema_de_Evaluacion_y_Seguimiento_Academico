@@ -44,6 +44,7 @@ const ListadoAlumnos = () => {
   const [archivoBaja, setArchivoBaja] = useState(null);
   const [guardandoEstatus, setGuardandoEstatus] = useState(false);
   const [estatusCatalogo, setEstatusCatalogo] = useState([]);
+  const [logEvidencia, setLogEvidencia] = useState(null);
 
   const STATUS_UI = {
     'activo':       { label: 'Activo',        desc: 'Inscripción vigente',   color: 'text-green-600',  activeBg: 'bg-green-50 border-green-500',   Icon: CheckCircle },
@@ -137,14 +138,25 @@ const ListadoAlumnos = () => {
   };
 
   // --- MANEJADORES DE ALEJANDRO (MODAL ESTATUS) ---
-  const abrirModalEstatus = (alumno) => {
+  const abrirModalEstatus = async (alumno) => {
     setAlumnoSeleccionado(alumno);
     setNuevoEstatus(alumno.estatus);
     setArchivoBaja(null);
+    setLogEvidencia(null);
     setModalEstatusOpen(true);
+
+    if (alumno.estatus === 'baja' || alumno.estatus === 'baja_temporal') {
+      try {
+        const res = await client.get(`/alumnos/${alumno.matricula}/ultimo-log-estatus`);
+        setLogEvidencia(res.data);
+      } catch {
+        // no hay log previo, ignoramos
+      }
+    }
   };
 
-  const requiereArchivo = nuevoEstatus === 'baja' || nuevoEstatus === 'baja_temporal';
+  const esBaja = nuevoEstatus === 'baja' || nuevoEstatus === 'baja_temporal';
+  const requiereArchivo = esBaja && !logEvidencia?.evidence_file_id;
 
   const handleConfirmarCambioEstatus = async () => {
     try {
@@ -152,10 +164,12 @@ const ListadoAlumnos = () => {
       const usuarioActual = user?.identifier || user?.email || "Admin Local";
       const statusSeleccionado = estatusCatalogo.find(s => s.name === nuevoEstatus);
 
-      await client.put(`/alumnos/${alumnoSeleccionado.matricula}/estatus`, {
-        status_id: statusSeleccionado.id,
-        usuario_id: usuarioActual
-      });
+      const formData = new FormData();
+      formData.append('status_id', statusSeleccionado.id);
+      formData.append('usuario_id', usuarioActual);
+      if (archivoBaja) formData.append('evidence_file', archivoBaja);
+
+      await client.put(`/alumnos/${alumnoSeleccionado.matricula}/estatus`, formData);
 
       Swal.fire({
         icon: 'success',
@@ -166,12 +180,12 @@ const ListadoAlumnos = () => {
       });
 
       setModalEstatusOpen(false);
-      fetchAlumnos(); 
+      fetchAlumnos();
     } catch (error) {
       Swal.fire({
         icon: 'error',
         title: 'Error',
-        text: 'No se pudo cambiar el estatus del alumno.'
+        text: error?.response?.data?.detail || 'No se pudo cambiar el estatus del alumno.'
       });
     } finally {
       setGuardandoEstatus(false);
@@ -441,9 +455,31 @@ const ListadoAlumnos = () => {
 
               {renderAlertaDinamica()}
 
-              {requiereArchivo && (
+              {logEvidencia?.evidence_file_name && (
+                <div className="mb-4 p-3 bg-blue-50 rounded-lg border border-blue-200 flex items-center gap-2">
+                  <FileText className="w-4 h-4 text-blue-700 flex-shrink-0" />
+                  <div className="flex-1 overflow-hidden">
+                    <p className="text-[10px] font-bold text-blue-600 uppercase tracking-wider">Documento registrado</p>
+                    <a
+                      href={`/api/alumnos/archivos/${logEvidencia.evidence_file_id}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-xs font-semibold text-blue-900 hover:underline truncate block"
+                      title={logEvidencia.evidence_file_name}
+                    >
+                      {logEvidencia.evidence_file_name}
+                    </a>
+                  </div>
+                </div>
+              )}
+
+              {esBaja && (
                 <div className="mb-5 animate-in fade-in duration-300">
-                  <p className="text-xs font-bold text-gray-700 uppercase mb-2">Carta de No Adeudo <span className="text-red-500">*</span></p>
+                  <p className="text-xs font-bold text-gray-700 uppercase mb-2">
+                    {logEvidencia?.evidence_file_id ? 'Reemplazar Carta de No Adeudo' : 'Carta de No Adeudo'}
+                    {requiereArchivo && <span className="text-red-500 ml-1">*</span>}
+                    {logEvidencia?.evidence_file_id && <span className="text-gray-400 font-normal normal-case ml-1">(opcional)</span>}
+                  </p>
                   <label className={`relative flex items-center justify-center w-full h-20 border-2 rounded-lg cursor-pointer transition overflow-hidden ${archivoBaja ? 'border-green-500 bg-green-50 shadow-inner' : 'border-dashed border-gray-300 bg-gray-50 hover:bg-gray-100'}`}>
                     <input type="file" className="hidden" onChange={(e) => setArchivoBaja(e.target.files[0])} accept=".pdf, image/*" />
                     {archivoBaja ? (
