@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 from pydantic import BaseModel
@@ -8,6 +8,7 @@ from app.models.student import Student
 from app.models.student_status import StudentStatus
 from app.models.career import Career
 from app.models.student_status_log import StudentStatusLog
+from app.models.file import File as FileModel
 
 router = APIRouter(prefix="/alumnos", tags=["Alumnos"])
 
@@ -54,41 +55,74 @@ def listar_alumnos(
         "data": data
     }
 
-class UpdateEstatusRequest(BaseModel):
-    status_id: int
-    usuario_id: str = None
-
 @router.put("/{matricula}/estatus")
 def cambiar_estatus(
     matricula: str,
-    request: UpdateEstatusRequest,
+    status_id: int = Form(...),
+    usuario_id: str = Form(None),
+    evidence_file: UploadFile = File(None),
     db: Session = Depends(get_db)
 ):
     alumno = db.query(Student).filter(Student.matricula == matricula).first()
     if not alumno:
         raise HTTPException(status_code=404, detail="Alumno no encontrado")
 
-    nuevo_estatus = db.query(StudentStatus).filter(StudentStatus.id == request.status_id).first()
+    nuevo_estatus = db.query(StudentStatus).filter(StudentStatus.id == status_id).first()
     if not nuevo_estatus:
         raise HTTPException(status_code=400, detail="Estatus no válido")
 
-    # 1. Capturamos el status_id anterior antes de cambiarlo
-    status_id_anterior = alumno.status_id
+    if nuevo_estatus.name in ('baja', 'baja_temporal') and not evidence_file:
+        raise HTTPException(status_code=400, detail="Se requiere un archivo de evidencia para este estatus.")
 
-    # 2. Actualizamos el status_id del alumno
-    alumno.status_id = request.status_id
+    try:
+        evidence_file_id = None
+        if evidence_file:
+            content = evidence_file.file.read()
+            file_record = FileModel(
+                file_name=evidence_file.filename,
+                mime_type=evidence_file.content_type or "application/octet-stream",
+                size_bytes=len(content),
+                file_content=content
+            )
+            db.add(file_record)
+            db.flush()
+            evidence_file_id = file_record.id
 
-    # 3. Guardamos el movimiento en la tabla de Logs si hubo cambio real
-    if status_id_anterior != request.status_id:
-        nuevo_log = StudentStatusLog(
-            student_matricula=alumno.matricula,
-            changed_by_user=request.usuario_id or "Sistema Desconocido",
-            previous_status_id=status_id_anterior,
-            new_status_id=request.status_id
-        )
-        db.add(nuevo_log)
+        status_id_anterior = alumno.status_id
+        alumno.status_id = status_id
 
-    # Confirmamos los cambios en ambas tablas al mismo tiempo (Transacción atómica)
-    db.commit()
+        if status_id_anterior != status_id or evidence_file_id is not None:
+            nuevo_log = StudentStatusLog(
+                student_matricula=alumno.matricula,
+                changed_by_user=usuario_id or "Sistema Desconocido",
+                previous_status_id=status_id_anterior,
+                new_status_id=status_id,
+                evidence_file_id=evidence_file_id
+            )
+            db.add(nuevo_log)
 
-    return {"message": "Estatus y Log actualizados correctamente", "nuevo_estatus": nuevo_estatus.name}
+        db.commit()
+        return {"message": "Estatus y Log actualizados correctamente", "nuevo_estatus": nuevo_estatus.name}
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Error al actualizar estatus: {str(e)}")
+
+
+@router.get("/{matricula}/ultimo-log-estatus")
+def get_ultimo_log_estatus(matricula: str, db: Session = Depends(get_db)):
+    log = db.query(StudentStatusLog).filter(
+        StudentStatusLog.student_matricula == matricula
+    ).order_by(StudentStatusLog.changed_at.desc()).first()
+
+    if not log:
+        return None
+
+    return {
+        "id": log.id,
+        "previous_status": log.previous_status.name if log.previous_status else None,
+        "new_status": log.new_status.name if log.new_status else None,
+        "changed_by_user": log.changed_by_user,
+        "changed_at": str(log.changed_at),
+        "evidence_file_id": log.evidence_file_id,
+        "evidence_file_name": log.evidence_file.file_name if log.evidence_file else None
+    }
