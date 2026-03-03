@@ -8,7 +8,6 @@ import {
   Search,
   Upload,
   Plus,
-  LogOut,
   X,
   Filter,
   User, 
@@ -26,7 +25,7 @@ import Swal from 'sweetalert2';
 
 const ListadoAlumnos = () => {
   const navigate = useNavigate();
-  const { logout, user } = useAuth(); 
+  const { user } = useAuth(); 
 
   // --- ESTADOS DE DATOS Y PAGINACIÓN ---
   const [alumnos, setAlumnos] = useState([]);
@@ -217,9 +216,6 @@ const ListadoAlumnos = () => {
           </button>
           <button onClick={handleAgregarAlumno} className="flex items-center gap-2 bg-[#1A237E] text-white px-4 py-2 rounded-lg text-sm font-bold hover:bg-[#283593] transition-colors shadow-sm">
             <Plus className="w-4 h-4" /> Agregar Alumno
-          </button>
-          <button onClick={logout} className="flex items-center gap-2 px-4 py-2 bg-red-50 text-red-600 hover:bg-red-100 hover:text-red-700 rounded-lg text-sm font-bold transition-colors shadow-sm border border-red-100">
-            <LogOut className="w-4 h-4" /> Cerrar Sesión
           </button>
         </div>
       </div>
