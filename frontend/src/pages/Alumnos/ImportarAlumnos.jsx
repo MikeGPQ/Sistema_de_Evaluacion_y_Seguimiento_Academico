@@ -221,8 +221,9 @@ const ImportarAlumnos = () => {
   };
 
   const handleActualizarIdBase = async () => {
-    if (!idBase || isNaN(idBase)) {
-      setNotificacion({ mostrar: true, mensaje: "Ingresa un número de matrícula válido.", tipo: "error" });
+    // Exigimos que sean exactamente 8 números para evitar problemas de formato en la matrícula
+    if (!idBase || !/^\d{8}$/.test(idBase)) {
+      setNotificacion({ mostrar: true, mensaje: "Ingresa una matrícula de exactamente 8 números.", tipo: "error" });
       return;
     }
 
@@ -389,14 +390,21 @@ const ImportarAlumnos = () => {
                                                   <td className={`p-3 font-semibold ${errorCampos.includes("Nombre") ? 'text-red-700 bg-red-100 rounded border border-red-200 cursor-help' : 'text-gray-900'}`} title={errorCampos.includes("Nombre") ? mensajeError : ""}>
                                                       {String(alumno["Nombre"] || alumno["Nombre:"] || '---')}
                                                   </td>
-                                                  <td className="p-3 text-gray-600">{String(alumno["Apellido Paterno"] || alumno["Apellido Paterno:"] || '---')}</td>
-                                                  <td className="p-3 text-gray-600">{String(alumno["Apellido Materno"] || alumno["Apellido Materno:"] || '---')}</td>
-                                                  
-                                                  <td className={`p-3 font-medium ${errorCampos.includes("Procedencia") ? 'text-red-700 bg-red-100 rounded border border-red-200 cursor-help' : 'text-gray-600'}`} title={errorCampos.includes("Procedencia") ? mensajeError : ""}>
-                                                      {String(alumno["Procedencia"] || alumno["Procedencia:"] || '---')}
-                                                  </td>
-                                                  
-                                                  <td className="p-3 text-blue-600 font-bold">{String(alumno["Promedio General"] || alumno["Promedio General:"] || '0.00')}</td>
+                                                  <td className={`p-3 ${errorCampos.includes("Apellido Paterno") ? 'text-red-700 bg-red-100 rounded border border-red-200 cursor-help font-semibold' : 'text-gray-600'}`} title={errorCampos.includes("Apellido Paterno") ? mensajeError : ""}>
+    {String(alumno["Apellido Paterno"] || alumno["Apellido Paterno:"] || '---')}
+</td>
+
+<td className={`p-3 ${errorCampos.includes("Apellido Materno") ? 'text-red-700 bg-red-100 rounded border border-red-200 cursor-help font-semibold' : 'text-gray-600'}`} title={errorCampos.includes("Apellido Materno") ? mensajeError : ""}>
+    {String(alumno["Apellido Materno"] || alumno["Apellido Materno:"] || '---')}
+</td>
+
+<td className={`p-3 font-medium ${errorCampos.includes("Procedencia") ? 'text-red-700 bg-red-100 rounded border border-red-200 cursor-help' : 'text-gray-600'}`} title={errorCampos.includes("Procedencia") ? mensajeError : ""}>
+    {String(alumno["Procedencia"] || alumno["Procedencia:"] || '---')}
+</td>
+
+<td className={`p-3 font-bold ${errorCampos.includes("Promedio General") ? 'text-red-700 bg-red-100 rounded border border-red-200 cursor-help' : 'text-blue-600'}`} title={errorCampos.includes("Promedio General") ? mensajeError : ""}>
+    {String(alumno["Promedio General"] || alumno["Promedio General:"] || '0.00')}
+</td>
                                                   
                                                   <td className={`p-3 font-mono ${errorCampos.includes("Curp") ? 'text-red-700 bg-red-100 rounded border border-red-200 cursor-help' : 'text-gray-500'}`} title={errorCampos.includes("Curp") ? mensajeError : ""}>
                                                       {String(alumno["Curp"] || alumno["Curp:"] || '---')}
