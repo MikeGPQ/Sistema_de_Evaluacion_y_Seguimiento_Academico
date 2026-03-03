@@ -334,8 +334,9 @@ export default function ManualRegister({ isOpen, onClose, alumnoAEditar }) {
       finalEmailInstitucional = `${rawEmail}@red.unid.mx`;
     }
 
+    const { status, foto_path, ...restFormData } = formData;
     const dataPayload = {
-      ...formData,
+      ...restFormData,
       career_id: parseInt(formData.career_id),
       origin_school_id: parseInt(formData.origin_school_id),
       promedio_procedencia: parseInt(formData.promedio_procedencia, 10),

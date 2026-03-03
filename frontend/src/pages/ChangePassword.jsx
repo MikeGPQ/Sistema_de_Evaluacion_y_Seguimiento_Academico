@@ -38,8 +38,8 @@ const ChangePassword = () => {
   const identifier = user?.identifier;
 
   const goHomeByRole = (role) => {
-    if (role === "admin") return navigate("/alumnos/listado");
-    if (role === "docente") return navigate("/docente/pase-lista");
+    if (role?.name === "admin") return navigate("/alumnos/listado");
+    if (role?.name === "docente") return navigate("/docente/pase-lista");
     return navigate("/alumno/horario");
   };
 

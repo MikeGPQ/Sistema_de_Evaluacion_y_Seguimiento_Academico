@@ -50,8 +50,8 @@ const LoginPage = () => {
         return;
       }
 
-      if (response.data?.role === 'admin') navigate('/alumnos/listado');
-      else if (response.data?.role === 'docente') navigate('/docente/pase-lista');
+      if (response.data?.role?.name === 'admin') navigate('/alumnos/listado');
+      else if (response.data?.role?.name === 'docente') navigate('/docente/pase-lista');
       else navigate('/alumno/horario');
 
     } catch (err) {

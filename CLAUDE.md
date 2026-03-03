@@ -1,0 +1,42 @@
+Actúa como un desarrollador Full-Stack experto (FastAPI, SQLAlchemy, Pydantic, React). Recientemente hemos hecho una refactorización importante en nuestra base de datos (SESA), normalizando campos que antes eran ENUMs para convertirlos en catálogos relacionales.
+
+Tu tarea es inspeccionar el código de los archivos que te indique (o el archivo actual) y realizar las modificaciones necesarias para adaptarlos a la nueva estructura.
+
+### RESUMEN DE LOS CAMBIOS REALIZADOS:
+
+1. CATÁLOGO DE ESTATUS (Estudiantes):
+- ANTES: `students.status` era un ENUM ('activo', 'baja', 'baja_temporal', 'egresado').
+- AHORA: Se creó la tabla `student_statuses` (id, name, description). La tabla `students` eliminó la columna `status` y ahora tiene `status_id` (INT, FK a student_statuses.id).
+- BITÁCORA AHORA: `student_status_logs` eliminó las columnas de texto y usa `previous_status_id` y `new_status_id` (FK a student_statuses.id).
+
+2. CATÁLOGO DE ROLES (Usuarios):
+- ANTES: `users.role` era un ENUM ('admin', 'docente', 'alumno').
+- AHORA: Se creó la tabla `roles` (id, name, description). La tabla `users` eliminó la columna `role` y ahora tiene `role_id` (INT, FK a roles.id).
+
+3. VÍNCULO LÓGICO DE USUARIOS:
+- La tabla `users` utiliza el campo `identifier` (VARCHAR) para vincularse lógicamente con `students.matricula`, `teachers.external_id` o `administrators.numero_empleado`, dependiendo del rol del usuario. No hay Foreign Key directa, la relación se maneja por código.
+
+### QUÉ DEBES BUSCAR Y MODIFICAR EN EL CÓDIGO:
+
+- **Modelos SQLAlchemy:** Asegúrate de que no existan tipos `Enum`. Verifica que existan las columnas `status_id` y `role_id` con sus respectivos `ForeignKey`, y crea las relaciones (`relationship`) hacia `Role` y `StudentStatus` para facilitar las consultas.
+- **Esquemas Pydantic:** Actualiza los schemas de creación y respuesta. En lugar de recibir `role: str`, ahora podríamos recibir `role_id: int`. En las respuestas, anida los objetos si es necesario (ej. devolver `role: {"id": 1, "name": "admin"}`).
+- **Consultas (Queries):** Reemplaza cualquier filtro antiguo como `.filter(User.role == 'admin')` por `.filter(User.role_id == 1)` o haz un join con la tabla `roles`. Lo mismo para estatus de estudiantes.
+- **Frontend / UI:** Si el archivo es de frontend, busca validaciones estáticas como `if (user.role === 'admin')` y actualízalas a `if (user.role?.name === 'admin')` o validando el `role_id`. Convierte los selects hardcodeados de roles y estatus para que ahora consuman una API o utilicen los IDs correctos.
+
+### ESTRUCTURA ACTUAL EXACTA DE LA BASE DE DATOS:
+
+```sql
+CREATE TABLE `academic_groups` ( `id` int NOT NULL AUTO_INCREMENT, `subject_id` int NOT NULL, `teacher_id` int NOT NULL, `periodo` varchar(50) NOT NULL, `identificador_grupo` varchar(20) NOT NULL, `horario_json` json NOT NULL, `cupo_maximo` int NOT NULL, `acta_status` enum('abierta','cerrada') DEFAULT 'abierta', `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY (`id`), KEY `fk_group_subject` (`subject_id`), KEY `fk_group_teacher` (`teacher_id`), CONSTRAINT `fk_group_subject` FOREIGN KEY (`subject_id`) REFERENCES `subjects` (`id`), CONSTRAINT `fk_group_teacher` FOREIGN KEY (`teacher_id`) REFERENCES `teachers` (`id`) );
+CREATE TABLE `administrators` ( `numero_empleado` varchar(50) NOT NULL, `nombre` varchar(100) NOT NULL, `apellido_paterno` varchar(100) NOT NULL, `apellido_materno` varchar(100) NOT NULL, `email_institucional` varchar(150) NOT NULL, `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY (`numero_empleado`) );
+CREATE TABLE `careers` ( `id` int NOT NULL AUTO_INCREMENT, `external_id` varchar(50) NOT NULL, `name` varchar(150) NOT NULL, `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY (`id`), UNIQUE KEY `external_id` (`external_id`) );
+CREATE TABLE `origin_schools` ( `id` int NOT NULL AUTO_INCREMENT, `name` varchar(150) NOT NULL, `is_active` tinyint(1) DEFAULT '1', PRIMARY KEY (`id`), UNIQUE KEY `name` (`name`) );
+CREATE TABLE `roles` ( `id` int NOT NULL AUTO_INCREMENT, `name` varchar(50) NOT NULL, `description` varchar(255) DEFAULT NULL, PRIMARY KEY (`id`), UNIQUE KEY `name` (`name`) );
+CREATE TABLE `student_addresses` ( `id` bigint NOT NULL AUTO_INCREMENT, `student_matricula` varchar(20) NOT NULL, `calle` varchar(150) NOT NULL, `numero_domicilio` varchar(50) NOT NULL, `colonia` varchar(100) NOT NULL, `codigo_postal` char(5) NOT NULL, `municipio` varchar(100) NOT NULL, `estado` varchar(50) DEFAULT 'Campeche', PRIMARY KEY (`id`), UNIQUE KEY `student_matricula` (`student_matricula`), CONSTRAINT `fk_address_student` FOREIGN KEY (`student_matricula`) REFERENCES `students` (`matricula`) ON DELETE CASCADE );
+CREATE TABLE `students` ( `matricula` varchar(20) NOT NULL, `nombre` varchar(100) NOT NULL, `apellido_paterno` varchar(100) NOT NULL, `apellido_materno` varchar(100) NOT NULL, `curp` varchar(18) NOT NULL, `foto_path` varchar(255) DEFAULT NULL, `email_personal` varchar(150) NOT NULL, `email_institucional` varchar(150) DEFAULT NULL, `origin_school_id` int DEFAULT NULL, `promedio_procedencia` decimal(4,2) NOT NULL, `certificado_path` varchar(255) DEFAULT NULL, `career_id` int NOT NULL, `cuatrimestre_actual` int NOT NULL DEFAULT '1', `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP, `updated_at` timestamp NULL DEFAULT NULL ON UPDATE CURRENT_TIMESTAMP, `status_id` int NOT NULL DEFAULT '1', PRIMARY KEY (`matricula`), UNIQUE KEY `curp` (`curp`), KEY `fk_student_career` (`career_id`), KEY `fk_student_origin` (`origin_school_id`), KEY `fk_student_status` (`status_id`), CONSTRAINT `fk_student_career` FOREIGN KEY (`career_id`) REFERENCES `careers` (`id`), CONSTRAINT `fk_student_origin` FOREIGN KEY (`origin_school_id`) REFERENCES `origin_schools` (`id`), CONSTRAINT `fk_student_status` FOREIGN KEY (`status_id`) REFERENCES `student_statuses` (`id`) );
+CREATE TABLE `student_statuses` ( `id` int NOT NULL AUTO_INCREMENT, `name` varchar(50) NOT NULL, `description` varchar(255) DEFAULT NULL, PRIMARY KEY (`id`), UNIQUE KEY `name` (`name`) );
+CREATE TABLE `student_status_logs` ( `id` int NOT NULL AUTO_INCREMENT, `student_matricula` varchar(20) NOT NULL, `changed_by_user` varchar(150) NOT NULL, `previous_status_id` int NOT NULL, `new_status_id` int NOT NULL, `changed_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY (`id`), KEY `student_matricula` (`student_matricula`), KEY `fk_log_prev_status` (`previous_status_id`), KEY `fk_log_new_status` (`new_status_id`), CONSTRAINT `fk_log_new_status` FOREIGN KEY (`new_status_id`) REFERENCES `student_statuses` (`id`), CONSTRAINT `fk_log_prev_status` FOREIGN KEY (`previous_status_id`) REFERENCES `student_statuses` (`id`), CONSTRAINT `student_status_logs_ibfk_1` FOREIGN KEY (`student_matricula`) REFERENCES `students` (`matricula`) );
+CREATE TABLE `subjects` ( `id` int NOT NULL AUTO_INCREMENT, `external_id` varchar(50) NOT NULL, `nombre` varchar(150) NOT NULL, `cuatrimestre` int NOT NULL, `creditos` int NOT NULL DEFAULT '0', `career_id` int NOT NULL, PRIMARY KEY (`id`), UNIQUE KEY `external_id` (`external_id`), KEY `fk_subject_career` (`career_id`), CONSTRAINT `fk_subject_career` FOREIGN KEY (`career_id`) REFERENCES `careers` (`id`) );
+CREATE TABLE `teachers` ( `id` int NOT NULL AUTO_INCREMENT, `external_id` varchar(50) NOT NULL, `nombre` varchar(100) NOT NULL, `apellido_paterno` varchar(100) NOT NULL, `apellido_materno` varchar(100) NOT NULL, `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY (`id`), UNIQUE KEY `external_id` (`external_id`) );
+CREATE TABLE `users` ( `id` bigint NOT NULL AUTO_INCREMENT, `identifier` varchar(50) NOT NULL, `email` varchar(150) NOT NULL, `password_hash` varchar(255) NOT NULL, `role_id` int NOT NULL, `is_temp_password` tinyint(1) DEFAULT '1', `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP, `last_login` timestamp NULL DEFAULT NULL, PRIMARY KEY (`id`), UNIQUE KEY `identifier` (`identifier`), UNIQUE KEY `email` (`email`), KEY `fk_user_role` (`role_id`), CONSTRAINT `fk_user_role` FOREIGN KEY (`role_id`) REFERENCES `roles` (`id`) );
+
+Por favor, revisa el archivo actual considerando esta nueva arquitectura e indícame paso a paso qué líneas debes cambiar, o aplica las modificaciones directamente si el entorno lo permite.
