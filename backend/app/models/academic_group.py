@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, ForeignKey, JSON, Enum
+from sqlalchemy import Column, Integer, String, ForeignKey, JSON, Enum, DateTime, text
 from sqlalchemy.orm import relationship
 from app.db.database import Base
 import enum
@@ -21,6 +21,7 @@ class AcademicGroup(Base):
     cupo_maximo = Column(Integer, nullable=False)
     
     acta_status = Column(Enum(ActaStatus), default=ActaStatus.abierta)
+    created_at = Column(DateTime, nullable=True, server_default=text("CURRENT_TIMESTAMP"))
 
     subject = relationship("Subject", back_populates="academic_groups")
     teacher = relationship("Teacher", back_populates="academic_groups")
