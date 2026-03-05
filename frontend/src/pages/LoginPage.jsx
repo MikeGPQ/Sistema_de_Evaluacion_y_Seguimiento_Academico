@@ -1,10 +1,13 @@
 import React, { useState } from 'react';
 import { User, Lock, Eye, EyeOff, ArrowRight, HelpCircle, Globe, GraduationCap } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../hooks/AuthContext';
 import client from '../lib/axios';
 
 const LoginPage = () => {
   const { login: authLogin } = useAuth();
+  const navigate = useNavigate();
+
   const [showPassword, setShowPassword] = useState(false);
   const [credentials, setCredentials] = useState({ identifier: '', password: '' });
   const [error, setError] = useState('');
@@ -13,27 +16,75 @@ const LoginPage = () => {
   const handleLogin = async (e) => {
     e.preventDefault();
     setError('');
+
+    const cleanIdentifier = credentials.identifier;
+
+    if (!cleanIdentifier || !credentials.password) {
+      setError('Por favor, completa todos los campos.');
+      return;
+    }
+
+    const isExactLength = /^\d{8}$/.test(cleanIdentifier);
+    if (!isExactLength) {
+      setError('El ID institucional debe tener exactamente 8 números.');
+      return;
+    }
+
+    if (!cleanIdentifier || !credentials.password.trim()) {
+      setError('Por favor, completa todos los campos.');
+      return;
+    }
+
     setIsLoading(true);
 
     try {
       const response = await client.post('/auth/login', {
-        identifier: credentials.identifier,
-        password: credentials.password
+        identifier: cleanIdentifier,
+        password: credentials.password 
       });
 
       authLogin(response.data);
-      
+
+      if (response.data?.is_temp_password) {
+        navigate('/change-password?forced=1');
+        return;
+      }
+
+      if (response.data?.role?.name === 'admin') navigate('/alumnos/listado');
+      else if (response.data?.role?.name === 'docente') navigate('/docente/pase-lista');
+      else navigate('/alumno/horario');
+
     } catch (err) {
-      setError('Correo o contraseña incorrectos');
+      setError('ID o contraseña incorrectos');
       console.error("Detalle técnico del error:", err.response?.data || err.message);
     } finally {
       setIsLoading(false);
     }
   };
 
+  // HU-31: requiere contraseña actual, por eso debe existir sesión
+  const handleForgotPassword = (e) => {
+    e.preventDefault();
+    setError('');
+
+    const savedUser = localStorage.getItem('user');
+    if (!savedUser) {
+      setError('Para cambiar tu contraseña debes iniciar sesión primero.');
+      return;
+    }
+
+    const u = JSON.parse(savedUser);
+
+    if (u?.is_temp_password) {
+      navigate('/change-password?forced=1');
+    } else {
+      navigate('/change-password');
+    }
+  };
+
   return (
     <div className="min-h-screen bg-[#F8F9FA] flex flex-col relative font-sans">
-      
+
       <div className="absolute top-6 right-8 hidden md:block">
         <a href="#" className="flex items-center gap-1.5 text-xs text-gray-500 hover:text-gray-800 transition-colors font-medium">
           <Globe size={14} /> Sitio Web UNID
@@ -42,13 +93,15 @@ const LoginPage = () => {
 
       <div className="flex-1 flex items-center justify-center p-4">
         <div className="bg-white rounded-[20px] shadow-[0_8px_30px_rgb(0,0,0,0.04)] w-full max-w-[420px] overflow-hidden border border-gray-100 flex flex-col">
-          
+
           <div className="bg-[#0B172A] pt-8 pb-7 px-8 flex flex-col items-center justify-center text-white">
             <div className="flex items-center gap-3">
               <GraduationCap size={32} className="text-white" />
               <div className="flex flex-col">
                 <span className="text-2xl font-black tracking-wide leading-none">UNID</span>
-                <span className="text-[8px] uppercase tracking-[0.2em] mt-0.5 text-gray-300">Universidad Interamericana</span>
+                <span className="text-[8px] uppercase tracking-[0.2em] mt-0.5 text-gray-300">
+                  Universidad Interamericana
+                </span>
               </div>
             </div>
           </div>
@@ -58,19 +111,25 @@ const LoginPage = () => {
             <p className="text-sm text-gray-500 mb-8 font-medium">Ingresa tus credenciales para continuar</p>
 
             <form onSubmit={handleLogin} className="space-y-5 text-left flex flex-col">
-              
+
               <div className="space-y-1.5">
                 <label className="text-[10px] font-bold text-gray-700 uppercase tracking-wide ml-0.5">
-                  ID O CORREO INSTITUCIONAL
+                  ID
                 </label>
                 <div className="relative group">
                   <User className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 group-focus-within:text-[#0B172A] transition-colors" />
-                  <input 
+                  <input
                     type="text"
                     required
+                    maxLength={8}
                     placeholder="ej. 00123456"
                     className="w-full pl-10 pr-4 py-2.5 bg-white border border-gray-300 rounded-lg outline-none focus:ring-1 focus:ring-[#0B172A] focus:border-[#0B172A] transition-all text-sm text-gray-800 placeholder:text-gray-400"
-                    onChange={(e) => setCredentials({...credentials, identifier: e.target.value})}
+                    value={credentials.identifier}
+                    onChange={(e) => {
+                      const onlyNumbers = e.target.value.replace(/\D/g, '');
+                      setCredentials({ ...credentials, identifier: onlyNumbers });
+                      if (error) setError('');
+                    }}
                   />
                 </div>
               </div>
@@ -81,14 +140,17 @@ const LoginPage = () => {
                 </label>
                 <div className="relative group">
                   <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 group-focus-within:text-[#0B172A] transition-colors" />
-                  <input 
+                  <input
                     type={showPassword ? "text" : "password"}
                     required
                     placeholder="••••••••"
                     className="w-full pl-10 pr-10 py-2.5 bg-white border border-gray-300 rounded-lg outline-none focus:ring-1 focus:ring-[#0B172A] focus:border-[#0B172A] transition-all text-sm text-gray-800 placeholder:text-gray-400 tracking-widest"
-                    onChange={(e) => setCredentials({...credentials, password: e.target.value})}
+                    onChange={(e) => {
+                      setCredentials({ ...credentials, password: e.target.value });
+                      if (error) setError('');
+                    }}
                   />
-                  <button 
+                  <button
                     type="button"
                     onClick={() => setShowPassword(!showPassword)}
                     className="absolute right-3.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 focus:outline-none"
@@ -98,19 +160,27 @@ const LoginPage = () => {
                 </div>
               </div>
 
-              <div className="flex justify-end mt-1 mb-2">
-                <a href="#" className="text-xs text-gray-500 hover:text-[#0B172A] font-medium transition-colors">
+              <div className="flex items-center justify-between mt-1 mb-2 gap-3">
+                <span className="text-xs text-gray-400 font-medium">
+                  Si es tu primer acceso, al ingresar se te pedirá cambiar contraseña.
+                </span>
+
+                <a
+                  href="#"
+                  onClick={handleForgotPassword}
+                  className="text-xs text-gray-500 hover:text-[#0B172A] font-medium transition-colors whitespace-nowrap"
+                >
                   ¿Olvidaste tu contraseña?
                 </a>
               </div>
 
               {error && (
                 <div className="bg-red-50 border border-red-100 p-2.5 rounded-lg text-center animate-in fade-in">
-                   <p className="text-red-600 text-xs font-bold">{error}</p>
+                  <p className="text-red-600 text-xs font-bold">{error}</p>
                 </div>
               )}
 
-              <button 
+              <button
                 type="submit"
                 disabled={isLoading}
                 className={`w-full py-3 bg-[#F2A900] hover:bg-[#E59F00] text-[#1A1A1A] font-bold rounded-lg flex items-center justify-center gap-2 transition-transform shadow-sm text-sm ${isLoading ? 'opacity-70 cursor-not-allowed' : 'active:scale-[0.98]'}`}
@@ -118,13 +188,6 @@ const LoginPage = () => {
                 {isLoading ? 'Verificando...' : 'Ingresar al Portal'} <ArrowRight size={16} className="ml-1" />
               </button>
             </form>
-
-            <div className="mt-8 flex flex-col items-center">
-              <span className="text-[11px] text-gray-400 mb-1.5">¿Tienes problemas para ingresar?</span>
-              <a href="#" className="inline-flex items-center gap-1.5 text-[11px] font-bold text-gray-600 hover:text-[#0B172A] uppercase border-b border-gray-400 hover:border-[#0B172A] pb-0.5 transition-colors">
-                <HelpCircle size={13} /> CENTRO DE AYUDA
-              </a>
-            </div>
 
           </div>
         </div>

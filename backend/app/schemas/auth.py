@@ -1,14 +1,26 @@
-from pydantic import BaseModel, EmailStr
-from typing import Optional
+from pydantic import BaseModel, Field
 
 class LoginRequest(BaseModel):
-    identifier: str 
+    identifier: str
     password: str
+
+class RoleResponse(BaseModel):
+    id: int
+    name: str
+
+    class Config:
+        from_attributes = True
 
 class UserResponse(BaseModel):
     identifier: str
-    role: str
+    role: RoleResponse
     is_temp_password: bool
 
     class Config:
         from_attributes = True
+
+class PasswordChangeRequest(BaseModel):
+    identifier: str
+    current_password: str
+    new_password: str = Field(..., min_length=8, description="Mínimo 8 caracteres")
+    confirm_password: str

@@ -1,39 +1,40 @@
 import json
-import shutil
-import os
+import io
+import re
 import secrets
 import string
 import bcrypt
-import io
 import pandas as pd
 import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Form, Query
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
 from sqlalchemy.orm import Session
 from sqlalchemy import func, or_
-from passlib.context import CryptContext 
+from passlib.context import CryptContext
 from typing import Optional
 
 from app.db.database import get_db
+from app.models.file import File as FileModel
 from app.models.student import Student
 from app.models.student_addresses import StudentAddress
+from app.models.student_status import StudentStatus
 from app.models.career import Career
 from app.models.origin_school import OriginSchool
 from app.models.user import User
+from app.models.role import Role
 from app.schemas.student import StudentCreate, OptionsResponse
+from app.core.security import get_password_hash
 
 pwd_context = CryptContext(
-    schemes=["bcrypt"], 
-    deprecated="auto", 
-    bcrypt__ident="2b" 
+    schemes=["bcrypt"],
+    deprecated="auto",
+    bcrypt__ident="2b"
 )
 
 router = APIRouter(prefix="/alumnos", tags=["Alumnos"])
 
-UPLOAD_DIR = "uploads"
-os.makedirs(UPLOAD_DIR, exist_ok=True)
 
 @router.get("/options", response_model=OptionsResponse)
 def get_form_options(db: Session = Depends(get_db)):
@@ -41,23 +42,53 @@ def get_form_options(db: Session = Depends(get_db)):
     schools = db.query(OriginSchool).filter(OriginSchool.is_active == True).all()
     return {"careers": careers, "schools": schools}
 
-@router.get("/check-curp")
-def check_curp(curp: str, db: Session = Depends(get_db)):
-    existe = db.query(Student).filter(Student.curp == curp).first() is not None
-    return {"exists": existe}
 
-@router.get("/check-email")
-def check_email(email: str, db: Session = Depends(get_db)):
-    existe = db.query(Student).filter(Student.email_personal == email).first() is not None
-    return {"exists": existe}
+# ENDPOINT: CONFIGURAR MATRÍCULA BASE
+@router.post("/set-base-id")
+def set_base_id(nueva_matricula: str = Form(...), db: Session = Depends(get_db)):
+    # 1. Validación estricta: Exactamente 8 dígitos numéricos
+    if not nueva_matricula.isdigit() or len(nueva_matricula) != 8:
+        raise HTTPException(status_code=400, detail="La matrícula base debe tener exactamente 8 dígitos numéricos.")
+
+    existe = db.query(Student).filter(Student.matricula == nueva_matricula).first()
+    if existe:
+        raise HTTPException(status_code=400, detail="Esta matrícula ya existe en el sistema.")
+
+    try:
+        career = db.query(Career).first()
+        school = db.query(OriginSchool).first()
+
+        baja_status = db.query(StudentStatus).filter(StudentStatus.name == 'baja').first()
+        dummy_student = Student(
+            matricula=nueva_matricula,
+            nombre="REGISTRO",
+            apellido_paterno="BASE",
+            apellido_materno="SISTEMA",
+            curp=f"BASE{nueva_matricula}",
+            email_personal="base@sistema.com",
+            promedio_procedencia=0,
+            career_id=career.id if career else 1,
+            origin_school_id=school.id if school else 1,
+            cuatrimestre_actual=1,
+            status_id=baja_status.id if baja_status else 2
+        )
+        db.add(dummy_student)
+        db.commit()
+        return {"message": f"Matrícula base actualizada correctamente a: {nueva_matricula}"}
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Error al fijar ID: {str(e)}")
+
+
+# ENDPOINT: REGISTRO MANUAL
 
 # --- ENDPOINT DE LISTADO DE JORGE ---
 @router.get("/listado", response_model=dict)
 def listar_alumnos(
-    skip: int = 0, 
+    skip: int = 0,
     limit: int = 10,
     busqueda: Optional[str] = Query(
-        None, 
+        None,
         min_length=3,
         max_length=50,
         description="Búsqueda por matrícula o nombre",
@@ -71,11 +102,13 @@ def listar_alumnos(
         Student.matricula,
         (Student.nombre + " " + Student.apellido_paterno + " " + Student.apellido_materno).label('nombre_completo'),
         Career.name.label('carrera'),
-        Student.status.label('estatus')
+        StudentStatus.name.label('estatus')
     ).join(
         Career, Student.career_id == Career.id
+    ).join(
+        StudentStatus, Student.status_id == StudentStatus.id
     )
-     
+
     if busqueda:
         termino = f"%{busqueda}%"
         query = query.filter(
@@ -93,7 +126,7 @@ def listar_alumnos(
 
     total = query.count()
     alumnos = query.offset(skip).limit(limit).all()
-    
+
     # Formateamos para que el JSON sea un diccionario como espera React
     return {
         "total": total,
@@ -103,7 +136,7 @@ def listar_alumnos(
 @router.post("/register", status_code=status.HTTP_201_CREATED)
 def register_student(
     student_data: str = Form(...),
-    foto_perfil: UploadFile = File(...), 
+    foto_perfil: UploadFile = File(...),
     certificado: UploadFile = File(None),
     db: Session = Depends(get_db)
 ):
@@ -116,33 +149,44 @@ def register_student(
     max_m = db.query(func.max(Student.matricula)).scalar()
     final_matricula = str(int(max_m) + 1) if max_m and max_m.isdigit() else "20240001"
 
-    foto_ext = foto_perfil.filename.split('.')[-1]
-    foto_path = os.path.join(UPLOAD_DIR, f"foto_{final_matricula}.{foto_ext}")
-    with open(foto_path, "wb") as buffer:
-        shutil.copyfileobj(foto_perfil.file, buffer)
-
-    cert_path = None
-    if certificado:
-        cert_ext = certificado.filename.split('.')[-1]
-        cert_path = os.path.join(UPLOAD_DIR, f"cert_{final_matricula}.{cert_ext}")
-        with open(cert_path, "wb") as buffer:
-            shutil.copyfileobj(certificado.file, buffer)
-            
     alumno_existente = db.query(Student).filter(
-        (Student.curp == student_in.curp) | 
+        (Student.curp == student_in.curp) |
         (Student.email_personal == student_in.email_personal)
     ).first()
 
     if alumno_existente:
-        if os.path.exists(foto_path): os.remove(foto_path)
-        if cert_path and os.path.exists(cert_path): os.remove(cert_path)
-        
         if alumno_existente.curp == student_in.curp:
             raise HTTPException(status_code=400, detail="Esta CURP ya se encuentra registrada en el sistema.")
         if alumno_existente.email_personal == student_in.email_personal:
             raise HTTPException(status_code=400, detail="Este correo personal ya está en uso por otro alumno.")
-    
+
     try:
+        # Guardar foto en la tabla files
+        foto_content = foto_perfil.file.read()
+        foto_file = FileModel(
+            file_name=foto_perfil.filename,
+            mime_type=foto_perfil.content_type or "image/jpeg",
+            size_bytes=len(foto_content),
+            file_content=foto_content
+        )
+        db.add(foto_file)
+        db.flush()
+
+        # Guardar certificado en la tabla files (si se proporcionó)
+        cert_file_id = None
+        if certificado:
+            cert_content = certificado.file.read()
+            cert_file = FileModel(
+                file_name=certificado.filename,
+                mime_type=certificado.content_type or "application/pdf",
+                size_bytes=len(cert_content),
+                file_content=cert_content
+            )
+            db.add(cert_file)
+            db.flush()
+            cert_file_id = cert_file.id
+
+        activo_status = db.query(StudentStatus).filter(StudentStatus.name == 'activo').first()
         new_student = Student(
             matricula=final_matricula,
             nombre=student_in.nombre,
@@ -154,10 +198,10 @@ def register_student(
             career_id=student_in.career_id,
             origin_school_id=student_in.origin_school_id,
             promedio_procedencia=student_in.promedio_procedencia,
-            cuatrimestre_actual=1, 
-            status=data_dict.get('status', 'activo'), 
-            foto_path=foto_path,
-            certificado_path=cert_path
+            cuatrimestre_actual=1,
+            status_id=data_dict.get('status_id') or (activo_status.id if activo_status else 1),
+            foto_id=foto_file.id,
+            certificado_id=cert_file_id
         )
         db.add(new_student)
         db.flush()
@@ -175,22 +219,22 @@ def register_student(
 
         alphabet = string.ascii_letters + string.digits
         raw_pass = ''.join(secrets.choice(alphabet) for _ in range(10))
-        salt = bcrypt.gensalt()
-        hashed_pw = bcrypt.hashpw(raw_pass.encode('utf-8'), salt).decode('utf-8')
+        hashed_pw = get_password_hash(raw_pass)
 
+        alumno_role = db.query(Role).filter(Role.name == 'alumno').first()
         new_user = User(
             identifier=final_matricula,
             email=student_in.email_personal,
             password_hash=hashed_pw,
-            role='alumno',
+            role_id=alumno_role.id if alumno_role else 3,
             is_temp_password=True
         )
         db.add(new_user)
         db.commit()
 
         try:
-            remitente = "sesacorp10@gmail.com" 
-            password_aplicacion = "enecpjvwkoseedip" 
+            remitente = "sesacorp10@gmail.com"
+            password_aplicacion = "enecpjvwkoseedip"
 
             msg = MIMEMultipart()
             msg['From'] = remitente
@@ -217,7 +261,7 @@ def register_student(
             </body>
             </html>
             """
-            
+
             msg.attach(MIMEText(cuerpo_html, 'html'))
 
             server = smtplib.SMTP('smtp.gmail.com', 587)
@@ -232,9 +276,11 @@ def register_student(
 
     except Exception as e:
         db.rollback()
-        if os.path.exists(foto_path): os.remove(foto_path)
-        if cert_path and os.path.exists(cert_path): os.remove(cert_path)
         raise HTTPException(status_code=500, detail=f"Error en BD: {str(e)}")
+
+
+
+# ENDPOINT: IMPORTACIÓN MASIVA MEJORADA
 
 @router.post("/importar")
 async def importar_alumnos(file: UploadFile = File(...), db: Session = Depends(get_db)):
@@ -249,81 +295,236 @@ async def importar_alumnos(file: UploadFile = File(...), db: Session = Depends(g
     credenciales_generadas = []
     errores_validacion = []
 
-    for _, row in df.iterrows():
-        matricula_str = str(row.get('Matrícula', '')).strip()
-        if not matricula_str or matricula_str == 'nan': continue
+    alumno_role = db.query(Role).filter(Role.name == 'alumno').first()
+    todos_estatus = db.query(StudentStatus).all()
+    status_map = {s.name.lower(): s.id for s in todos_estatus}
 
+    regex_solo_letras = r'^[A-Za-záéíóúÁÉÍÓÚñÑüÜ\s]+$'
+    regex_curp = r'^[A-Z]{4}\d{6}[HM][A-Z]{5}[A-Z0-9]\d$'
+    regex_cp = r'^\d{5}$'
+    regex_email_pers = r'^[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+$'
+    regex_email_inst = r'^[a-zA-Z0-9_.+-]+@red\.unid\.mx$'
+
+    matriculas_vistas = set()
+    curps_vistos = set()
+    correos_inst_vistos = set()
+    correos_pers_vistos = set()
+    nombres_completos_vistos = set()
+
+    for index, row in df.iterrows():
+        fila_excel = index + 2
         errores_fila = []
         campos_error = []
 
-        if db.query(Student).filter(Student.matricula == matricula_str).first():
-            errores_fila.append("La matrícula ya existe")
-            campos_error.append("Matrícula")
 
-        curp_str = str(row.get('Curp', '')).strip()
-        if db.query(Student).filter(Student.curp == curp_str).first():
+        matricula_str = str(row.get('Matrícula', '')).strip()
+        if matricula_str.endswith('.0'): matricula_str = matricula_str[:-2]
+        if not matricula_str or matricula_str == 'nan': continue
+
+        if not re.match(r'^\d{8}$', matricula_str):
+            errores_fila.append("La matrícula debe tener exactamente 8 dígitos numéricos")
+            campos_error.append("Matrícula")
+        elif matricula_str in matriculas_vistas:
+            errores_fila.append("Matrícula duplicada en este mismo archivo Excel")
+            campos_error.append("Matrícula")
+        elif db.query(Student).filter(Student.matricula == matricula_str).first():
+            errores_fila.append("La matrícula ya existe en la base de datos")
+            campos_error.append("Matrícula")
+        else:
+            matriculas_vistas.add(matricula_str)
+
+
+        nombre = str(row.get('Nombre', '')).strip()
+        ap_paterno = str(row.get('Apellido Paterno', '')).strip()
+        ap_materno = str(row.get('Apellido Materno', '')).strip()
+
+        if not nombre or nombre == 'nan':
+            errores_fila.append("El nombre no puede estar vacío")
+            campos_error.append("Nombre")
+        elif not re.match(regex_solo_letras, nombre):
+            errores_fila.append("El nombre no debe contener números ni símbolos")
+            campos_error.append("Nombre")
+
+        if ap_paterno and ap_paterno != 'nan' and not re.match(regex_solo_letras, ap_paterno):
+            errores_fila.append("El apellido paterno no debe contener números")
+            campos_error.append("Apellido Paterno")
+
+        if ap_materno and ap_materno != 'nan' and not re.match(regex_solo_letras, ap_materno):
+            errores_fila.append("El apellido materno no debe contener números")
+            campos_error.append("Apellido Materno")
+
+
+        if nombre and nombre != 'nan':
+            ap_pat_limpio = ap_paterno if ap_paterno != 'nan' else ""
+            ap_mat_limpio = ap_materno if ap_materno != 'nan' else ""
+
+
+            nombre_completo_norm = f"{nombre} {ap_pat_limpio} {ap_mat_limpio}".lower()
+            nombre_completo_norm = " ".join(nombre_completo_norm.split())
+
+            if nombre_completo_norm in nombres_completos_vistos:
+                errores_fila.append("Este nombre completo (nombre y apellidos) está duplicado en el archivo Excel")
+                campos_error.extend(["Nombre", "Apellido Paterno", "Apellido Materno"])
+            else:
+
+                existe_homonimo = db.query(Student).filter(
+                    func.lower(func.trim(Student.nombre)) == nombre.lower(),
+                    func.lower(func.trim(Student.apellido_paterno)) == ap_pat_limpio.lower(),
+                    func.lower(func.trim(Student.apellido_materno)) == ap_mat_limpio.lower()
+                ).first()
+
+                if existe_homonimo:
+                    errores_fila.append("Ya existe un alumno registrado exactamente con este mismo nombre y apellidos")
+                    campos_error.extend(["Nombre", "Apellido Paterno", "Apellido Materno"])
+                else:
+                    nombres_completos_vistos.add(nombre_completo_norm)
+
+
+        curp_str = str(row.get('Curp', '')).strip().upper()
+        if not curp_str or curp_str == 'nan':
+            errores_fila.append("El CURP es obligatorio")
+            campos_error.append("Curp")
+        elif len(curp_str) != 18 or not re.match(regex_curp, curp_str):
+            errores_fila.append("Formato de CURP inválido (Deben ser 18 caracteres reales)")
+            campos_error.append("Curp")
+        elif curp_str in curps_vistos:
+            errores_fila.append("CURP duplicado en este mismo archivo Excel")
+            campos_error.append("Curp")
+        elif db.query(Student).filter(Student.curp == curp_str).first():
             errores_fila.append(f"El CURP {curp_str} ya está registrado")
             campos_error.append("Curp")
+        else:
+            curps_vistos.add(curp_str)
+
+
+        cp_str = str(row.get('Código Postal', '')).strip()
+        if cp_str.endswith('.0'): cp_str = cp_str[:-2]
+        if cp_str and cp_str != 'nan' and not re.match(regex_cp, cp_str):
+            errores_fila.append("El Código Postal debe tener exactamente 5 números")
+            campos_error.append("Código Postal")
+
+
+        municipio_str = str(row.get('Municipio', '')).strip()
+        if municipio_str and municipio_str != 'nan' and not re.match(regex_solo_letras, municipio_str):
+            errores_fila.append("El municipio solo debe contener letras")
+            campos_error.append("Municipio")
+
+
+        email_pers = str(row.get('Correo Personal', '')).strip()
+        if email_pers and email_pers != 'nan':
+            if not re.match(regex_email_pers, email_pers):
+                errores_fila.append("Formato de correo personal inválido")
+                campos_error.append("Correo Personal")
+            elif email_pers in correos_pers_vistos:
+                errores_fila.append("Correo personal duplicado en este mismo Excel")
+                campos_error.append("Correo Personal")
+            elif db.query(Student).filter(Student.email_personal == email_pers).first():
+                errores_fila.append("Este correo personal ya está en uso")
+                campos_error.append("Correo Personal")
+            else:
+                correos_pers_vistos.add(email_pers)
+
+        email_inst = str(row.get('Correo Institucional', '')).strip()
+        if email_inst and email_inst != 'nan':
+            if not re.match(regex_email_inst, email_inst):
+                errores_fila.append("El correo institucional debe pertenecer al dominio @red.unid.mx")
+                campos_error.append("Correo Institucional")
+            elif email_inst in correos_inst_vistos:
+                errores_fila.append("Correo institucional duplicado en este mismo Excel")
+                campos_error.append("Correo Institucional")
+            elif db.query(User).filter(User.email == email_inst).first() or \
+                 db.query(Student).filter(Student.email_institucional == email_inst).first():
+                errores_fila.append("Este correo institucional ya está registrado en el sistema")
+                campos_error.append("Correo Institucional")
+            else:
+                correos_inst_vistos.add(email_inst)
+
+
+        cuat_str = str(row.get('Cuatrimestre', '')).strip()
+        if cuat_str.endswith('.0'): cuat_str = cuat_str[:-2]
+        cuat_final = 1
+        if cuat_str and cuat_str != 'nan':
+            if not cuat_str.isdigit() or not (1 <= int(cuat_str) <= 10):
+                errores_fila.append("El cuatrimestre debe ser un número del 1 al 10")
+                campos_error.append("Cuatrimestre")
+            else:
+                cuat_final = int(cuat_str)
+
+
+        promedio_str = str(row.get('Promedio General', '')).strip()
+
+        # Quitamos el '.0' fantasma de pandas
+        if promedio_str.endswith('.0'):
+            promedio_str = promedio_str[:-2]
+
+        promedio_final = 0
+        if promedio_str and promedio_str != 'nan':
+            # Validamos que sea un número Y además que esté en el rango de 0 a 10
+            if not promedio_str.isdigit() or not (0 <= int(promedio_str) <= 10):
+                errores_fila.append("El promedio debe ser un número entero del 0 al 10 (No se aceptan decimales ni números mayores)")
+                campos_error.append("Promedio General")
+            else:
+                promedio_final = int(promedio_str)
 
         carrera_excel = str(row.get('Carrera', '')).strip()
         career = db.query(Career).filter(
             (Career.external_id == carrera_excel) | (Career.name == carrera_excel)
         ).first()
-        
         if not career:
             errores_fila.append(f"Carrera '{carrera_excel}' no encontrada")
             campos_error.append("Carrera")
 
         escuela_excel = str(row.get('Procedencia', '')).strip()
         school = db.query(OriginSchool).filter(OriginSchool.name == escuela_excel).first()
-        
         if not school:
             errores_fila.append(f"Procedencia '{escuela_excel}' no registrada")
             campos_error.append("Procedencia")
 
         if errores_fila:
+
+            campos_error = list(set(campos_error))
             errores_validacion.append({
+                "fila": fila_excel,
                 "matricula": matricula_str,
-                "nombre": row.get('Nombre', 'Desconocido'),
+                "nombre": nombre,
                 "campos": campos_error,
                 "mensajes": errores_fila
             })
             continue
 
         try:
-            email_inst = row.get('Correo Institucional') or row.get('Correo institucional')
-
+            estatus_excel = str(row.get('Estatus', 'activo')).strip().lower() if pd.notna(row.get('Estatus', 'activo')) else 'activo'
             nuevo_alumno = Student(
                 matricula=matricula_str,
-                nombre=row.get('Nombre'),
-                apellido_paterno=row.get('Apellido Paterno'), 
-                apellido_materno=row.get('Apellido Materno'),
-                curp=row.get('Curp'),
-                email_personal=row.get('Correo Personal') or row.get('Correo personal'),
-                email_institucional=email_inst,
-                cuatrimestre_actual=int(row.get('Cuatrimestre') or 1),
-                status=row.get('Estatus', 'activo').lower(), 
+                nombre=nombre,
+                apellido_paterno=ap_pat_limpio,
+                apellido_materno=ap_mat_limpio,
+                curp=curp_str,
+                email_personal=email_pers,
+                email_institucional=email_inst if email_inst and email_inst != 'nan' else None,
+                cuatrimestre_actual=cuat_final,
+                status_id=status_map.get(estatus_excel, 1),
                 career_id=career.id,
                 origin_school_id=school.id,
-                promedio_procedencia=float(row.get('Promedio General', 0))
+                promedio_procedencia=promedio_final
             )
             db.add(nuevo_alumno)
 
-            if email_inst:
+            if email_inst and email_inst != 'nan':
                 caracteres = string.ascii_letters + string.digits
                 password_aleatoria = ''.join(secrets.choice(caracteres) for _ in range(10))
-                
+
                 nuevo_usuario = User(
                     identifier=matricula_str,
                     email=email_inst,
                     password_hash=pwd_context.hash(password_aleatoria),
-                    role='alumno',
+                    role_id=alumno_role.id if alumno_role else 3,
                     is_temp_password=True
                 )
                 db.add(nuevo_usuario)
-                
+
                 credenciales_generadas.append({
-                    "nombre": f"{row.get('Nombre')} {row.get('Apellido Paterno')}",
+                    "nombre": f"{nombre} {ap_pat_limpio}",
                     "usuario": matricula_str,
                     "password": password_aleatoria,
                     "correo": email_inst
@@ -331,47 +532,58 @@ async def importar_alumnos(file: UploadFile = File(...), db: Session = Depends(g
 
             nueva_direccion = StudentAddress(
                 student_matricula=matricula_str,
-                calle=row.get('Calle'),
-                numero_domicilio=str(row.get('Número de domicilio') or 'S/N'), 
-                colonia=row.get('Colonia'),
-                codigo_postal=str(row.get('Código Postal') or row.get('Código postal')),
-                municipio=row.get('Municipio'),
-                estado=row.get('Estado', 'Campeche')
+                calle=str(row.get('Calle', '')).strip(),
+                numero_domicilio=str(row.get('Número de domicilio') or 'S/N'),
+                colonia=str(row.get('Colonia', '')).strip(),
+                codigo_postal=cp_str,
+                municipio=municipio_str,
+                estado=str(row.get('Estado', 'Campeche')).strip()
             )
             db.add(nueva_direccion)
-            
+
+            db.flush()
             registros_nuevos += 1
 
         except Exception as e:
             db.rollback()
-            raise HTTPException(status_code=500, detail=str(e))
+            errores_validacion.append({
+                "fila": fila_excel,
+                "matricula": matricula_str,
+                "nombre": nombre,
+                "campos": ["Base de Datos"],
+                "mensajes": [f"Error interno al guardar: El registro choca con datos existentes ({str(e).split('for key')[0]})"]
+            })
 
+    # si hubo un problema de validacion en cualquier fila, esto lo retorna al frontend
     if errores_validacion:
         db.rollback()
+        filas_con_error = [str(err['fila']) for err in errores_validacion]
+        filas_str = ", ".join(filas_con_error)
+
         return JSONResponse(
             status_code=400,
             content={
-                "detail": f"Se encontraron errores en {len(errores_validacion)} alumnos.",
+                "detail": f"Las filas {filas_str} no pasaron el sistema de validación. Por favor descargue el reporte, revise y vuelva a intentar.",
                 "errores_detalle": errores_validacion
             }
         )
 
     db.commit()
-    
+
     return {
         "message": f"{registros_nuevos} alumnos y usuarios creados correctamente.",
-        "data": credenciales_generadas 
+        "data": credenciales_generadas
     }
 
-# --- NUEVO ENDPOINT DE DETALLES PARA LA EDICIÓN (HU-04) ---
+# --- ENDPOINT DE DETALLES PARA LA EDICIÓN (HU-04) ---
 @router.get("/detalle/{matricula}")
 def get_student_detail(matricula: str, db: Session = Depends(get_db)):
     student = db.query(Student).filter(Student.matricula == matricula).first()
     if not student:
         raise HTTPException(status_code=404, detail="Alumno no encontrado")
-    
+
     address = db.query(StudentAddress).filter(StudentAddress.student_matricula == matricula).first()
-    
+
     return {
         "student": {
             "matricula": student.matricula,
@@ -383,9 +595,13 @@ def get_student_detail(matricula: str, db: Session = Depends(get_db)):
             "email_institucional": student.email_institucional,
             "career_id": student.career_id,
             "origin_school_id": student.origin_school_id,
-            "promedio_procedencia": float(student.promedio_procedencia) if student.promedio_procedencia else '',
-            "status": student.status,
-            "foto_path": student.foto_path
+            "promedio_procedencia": int(student.promedio_procedencia) if student.promedio_procedencia else '',
+            "status_id": student.status_id,
+            "status": student.status.name if student.status else None,
+            "foto_id": student.foto_id,
+            "foto_nombre": student.foto.file_name if student.foto else None,
+            "certificado_id": student.certificado_id,
+            "certificado_nombre": student.certificado.file_name if student.certificado else None
         },
         "address": {
             "calle": address.calle if address else '',
@@ -397,12 +613,12 @@ def get_student_detail(matricula: str, db: Session = Depends(get_db)):
         }
     }
 
-# --- NUEVO ENDPOINT PARA ACTUALIZAR ALUMNO (HU-04) ---
+# --- ENDPOINT PARA ACTUALIZAR ALUMNO (HU-04) ---
 @router.put("/actualizar/{matricula}")
 def update_student(
     matricula: str,
     student_data: str = Form(...),
-    foto_perfil: UploadFile = File(None), 
+    foto_perfil: UploadFile = File(None),
     certificado: UploadFile = File(None),
     db: Session = Depends(get_db)
 ):
@@ -415,22 +631,22 @@ def update_student(
     student = db.query(Student).filter(Student.matricula == matricula).first()
     if not student:
         raise HTTPException(status_code=404, detail="Alumno no encontrado")
-        
+
     address = db.query(StudentAddress).filter(StudentAddress.student_matricula == matricula).first()
 
     # 2. Validación de Unicidad: Que la CURP o el Correo no choquen con OTROS alumnos
     nueva_curp = data_dict.get('curp')
     nuevo_email = data_dict.get('email_personal')
-    
+
     curp_existente = db.query(Student).filter(Student.curp == nueva_curp, Student.matricula != matricula).first()
     if curp_existente:
         raise HTTPException(status_code=400, detail="Esta CURP ya está registrada en otro alumno.")
-        
+
     email_existente = db.query(Student).filter(Student.email_personal == nuevo_email, Student.matricula != matricula).first()
     if email_existente:
         raise HTTPException(status_code=400, detail="Este correo personal ya está en uso por otro alumno.")
 
-    # 3. Actualizamos la información principal 
+    # 3. Actualizamos la información principal
     # (NOTA: Matrícula y Promedio no se tocan, protegiendo el historial académico)
     student.nombre = data_dict.get('nombre', student.nombre)
     student.apellido_paterno = data_dict.get('apellido_paterno', student.apellido_paterno)
@@ -451,20 +667,30 @@ def update_student(
         address.municipio = addr_data.get('municipio', address.municipio)
         address.estado = addr_data.get('estado', address.estado)
 
-    # 5. Si el administrador subió nuevos archivos, reemplazamos los viejos
+    # 5. Si el administrador subió nuevos archivos, los guardamos en la BD
     if foto_perfil:
-        foto_ext = foto_perfil.filename.split('.')[-1]
-        foto_path = os.path.join(UPLOAD_DIR, f"foto_{matricula}.{foto_ext}")
-        with open(foto_path, "wb") as buffer:
-            shutil.copyfileobj(foto_perfil.file, buffer)
-        student.foto_path = foto_path
+        foto_content = foto_perfil.file.read()
+        foto_file = FileModel(
+            file_name=foto_perfil.filename,
+            mime_type=foto_perfil.content_type or "image/jpeg",
+            size_bytes=len(foto_content),
+            file_content=foto_content
+        )
+        db.add(foto_file)
+        db.flush()
+        student.foto_id = foto_file.id
 
     if certificado:
-        cert_ext = certificado.filename.split('.')[-1]
-        cert_path = os.path.join(UPLOAD_DIR, f"cert_{matricula}.{cert_ext}")
-        with open(cert_path, "wb") as buffer:
-            shutil.copyfileobj(certificado.file, buffer)
-        student.certificado_path = cert_path
+        cert_content = certificado.file.read()
+        cert_file = FileModel(
+            file_name=certificado.filename,
+            mime_type=certificado.content_type or "application/pdf",
+            size_bytes=len(cert_content),
+            file_content=cert_content
+        )
+        db.add(cert_file)
+        db.flush()
+        student.certificado_id = cert_file.id
 
     # Guardamos los cambios
     try:
@@ -473,3 +699,16 @@ def update_student(
     except Exception as e:
         db.rollback()
         raise HTTPException(status_code=500, detail=f"Error al guardar en base de datos: {str(e)}")
+
+
+# --- ENDPOINT PARA SERVIR ARCHIVOS ---
+@router.get("/archivos/{file_id}")
+def get_archivo(file_id: int, db: Session = Depends(get_db)):
+    archivo = db.query(FileModel).filter(FileModel.id == file_id).first()
+    if not archivo:
+        raise HTTPException(status_code=404, detail="Archivo no encontrado")
+    return Response(
+        content=bytes(archivo.file_content),
+        media_type=archivo.mime_type,
+        headers={"Content-Disposition": f'inline; filename="{archivo.file_name}"'}
+    )

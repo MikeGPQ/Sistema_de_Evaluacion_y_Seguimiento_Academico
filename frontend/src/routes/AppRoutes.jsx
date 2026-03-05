@@ -1,23 +1,60 @@
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
-import LoginPage from '../pages/LoginPage';
-import ImportarAlumnos from '../pages/Alumnos/ImportarAlumnos';
-import ListadoAlumnos from '../pages/Alumnos/ListadoAlumnos';
-import CambiarEstatusAlumno from '../pages/Alumnos/CambiarEstatusAlumno';
-import PortalAlumno from '../pages/Alumnos/PortalAlumno'; 
-import { useAuth } from '../hooks/AuthContext';
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { useAuth } from "../hooks/AuthContext";
+import { Hammer } from "lucide-react";
 
-const ChangePasswordPage = () => {
-  const { logout } = useAuth();
+// Páginas
+import LoginPage from "../pages/LoginPage";
+import ChangePassword from "../pages/ChangePassword";
+
+// Admin
+import ImportarAlumnos from "../pages/Alumnos/ImportarAlumnos";
+import ListadoAlumnos from "../pages/Alumnos/ListadoAlumnos";
+import CambiarEstatusAlumno from "../pages/Alumnos/CambiarEstatusAlumno";
+
+// Layouts
+import AdminLayout from "../layouts/AdminLayout";
+import AlumnoLayout from "../layouts/AlumnoLayout";
+import DocenteLayout from "../layouts/DocenteLayout";
+
+// ==========================================
+// COMPONENTES REUTILIZABLES
+// ==========================================
+const EnConstruccion = ({ modulo }) => {
   return (
-    <div className="p-8 bg-amber-50 min-h-screen flex flex-col items-center justify-center text-center">
-      <h1 className="text-2xl font-bold text-amber-700 mb-2">Cambio de Contraseña Obligatorio</h1>
-      <button onClick={logout} className="px-6 py-3 bg-red-600 text-white rounded-lg font-bold">Cerrar Sesión</button>
+    <div className="flex flex-col items-center justify-center h-full min-h-[80vh] bg-[#F8F9FA] text-center px-4">
+      <div className="w-20 h-20 bg-blue-100 text-[#1A237E] rounded-full flex items-center justify-center mb-6 shadow-sm">
+        <Hammer className="w-10 h-10" />
+      </div>
+      <h2 className="text-2xl font-bold text-gray-800 mb-2">Módulo en Construcción</h2>
+      <p className="text-gray-500 max-w-md">
+        El módulo de <span className="font-semibold text-[#1A237E]">{modulo}</span> se encuentra actualmente en fase de desarrollo. Estará disponible próximamente.
+      </p>
     </div>
   );
 };
 
+// Guardián de rutas
+const ProtectedRoute = ({ children, allowedRole }) => {
+  const { isAuthenticated, user, loading } = useAuth();
+
+  if (loading) return null;
+  if (!isAuthenticated) return <Navigate to="/login" replace />;
+
+  // ✅ HU-31: forzar cambio si es temporal
+  if (user?.is_temp_password) return <Navigate to="/change-password?forced=1" replace />;
+
+  if (allowedRole && user?.role?.name !== allowedRole) {
+    if (user?.role?.name === "admin") return <Navigate to="/alumnos/listado" replace />;
+    if (user?.role?.name === "alumno") return <Navigate to="/alumno/horario" replace />;
+    if (user?.role?.name === "docente") return <Navigate to="/docente/pase-lista" replace />;
+    return <Navigate to="/login" replace />;
+  }
+
+  return children;
+};
+
 const AppRoutes = () => {
-  const { isAuthenticated, loading, user } = useAuth();
+  const { isAuthenticated, user, loading } = useAuth();
 
   if (loading) {
     return (
@@ -27,68 +64,77 @@ const AppRoutes = () => {
     );
   }
 
-  const isAdmin = user?.role === 'admin';
-  const isAlumno = user?.role === 'alumno';
-
   return (
     <BrowserRouter>
       <Routes>
-        <Route 
-          path="/login" 
+        {/* LOGIN */}
+        <Route
+          path="/login"
           element={
-            !isAuthenticated ? <LoginPage /> : 
-            isAdmin ? <Navigate to="/alumnos/listado" /> : 
-            <Navigate to="/portal-alumno" />
-          } 
+            !isAuthenticated ? (
+              <LoginPage />
+            ) : user?.is_temp_password ? (
+              <Navigate to="/change-password?forced=1" replace />
+            ) : user?.role?.name === "admin" ? (
+              <Navigate to="/alumnos/listado" replace />
+            ) : user?.role?.name === "docente" ? (
+              <Navigate to="/docente/pase-lista" replace />
+            ) : (
+              <Navigate to="/alumno/horario" replace />
+            )
+          }
         />
 
-        <Route path="/" element={
-          !isAuthenticated ? <Navigate to="/login" /> : 
-          isAdmin ? <Navigate to="/alumnos/listado" /> : 
-          <Navigate to="/portal-alumno" />
-        } />
-
-
-        <Route 
-          path="/alumnos/listado" 
-          element={
-            !isAuthenticated ? <Navigate to="/login" /> :
-            isAdmin ? <ListadoAlumnos /> : 
-            <Navigate to="/portal-alumno" />
-          } 
-        />
-        
-        <Route 
-          path="/alumnos/importar" 
-          element={
-            !isAuthenticated ? <Navigate to="/login" /> :
-            isAdmin ? <ImportarAlumnos /> : 
-            <Navigate to="/portal-alumno" />
-          } 
+        {/* HU-31 */}
+        <Route
+          path="/change-password"
+          element={!isAuthenticated ? <Navigate to="/login" replace /> : <ChangePassword />}
         />
 
-        <Route 
-          path="/alumnos/cambiar-estatus" 
+        {/* ADMIN */}
+        <Route element={<ProtectedRoute allowedRole="admin"><AdminLayout /></ProtectedRoute>}>
+          <Route path="/alumnos/listado" element={<ListadoAlumnos />} />
+          <Route path="/alumnos/importar" element={<ImportarAlumnos />} />
+          <Route path="/alumnos/cambiar-estatus" element={<CambiarEstatusAlumno />} />
+
+          <Route path="/docentes" element={<EnConstruccion modulo="Sincronización Docente" />} />
+          <Route path="/horarios" element={<EnConstruccion modulo="Grupos y Horarios" />} />
+          <Route path="/reportes" element={<EnConstruccion modulo="Boletas y Listas" />} />
+        </Route>
+
+        {/* DOCENTE */}
+        <Route path="/docente" element={<ProtectedRoute allowedRole="docente"><DocenteLayout /></ProtectedRoute>}>
+          <Route path="pase-lista" element={<EnConstruccion modulo="Pase de Lista Digital" />} />
+          <Route path="calificaciones" element={<EnConstruccion modulo="Captura de Calificaciones" />} />
+          <Route path="actas" element={<EnConstruccion modulo="Generación de Actas Oficiales" />} />
+        </Route>
+
+        {/* ALUMNO */}
+        <Route path="/alumno" element={<ProtectedRoute allowedRole="alumno"><AlumnoLayout /></ProtectedRoute>}>
+          <Route path="horario" element={<EnConstruccion modulo="Mi Horario" />} />
+          <Route path="asistencias" element={<EnConstruccion modulo="Mis Asistencias" />} />
+          <Route path="calificaciones" element={<EnConstruccion modulo="Mis Calificaciones" />} />
+        </Route>
+
+        {/* ROOT */}
+        <Route
+          path="/"
           element={
-            !isAuthenticated ? <Navigate to="/login" /> :
-            isAdmin ? <CambiarEstatusAlumno /> : 
-            <Navigate to="/portal-alumno" />
-          } 
+            !isAuthenticated ? (
+              <Navigate to="/login" replace />
+            ) : user?.is_temp_password ? (
+              <Navigate to="/change-password?forced=1" replace />
+            ) : user?.role?.name === "admin" ? (
+              <Navigate to="/alumnos/listado" replace />
+            ) : user?.role?.name === "docente" ? (
+              <Navigate to="/docente/pase-lista" replace />
+            ) : (
+              <Navigate to="/alumno/horario" replace />
+            )
+          }
         />
 
-
-        <Route 
-          path="/portal-alumno" 
-          element={
-            !isAuthenticated ? <Navigate to="/login" /> :
-            isAlumno ? <PortalAlumno /> : 
-            <Navigate to="/alumnos/listado" />
-          } 
-        />
-        
-        <Route path="/change-password" element={<ChangePasswordPage />} />
-
-        <Route path="*" element={<Navigate to="/" />} />
+        <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </BrowserRouter>
   );
