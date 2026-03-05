@@ -84,7 +84,7 @@ export default function ManualRegister({ isOpen, onClose, alumnoAEditar }) {
                 email_inst_limpio = email_inst_limpio.split('@')[0];
             }
 
-           // 🌟 CAZAFANTASMAS NIVEL INDUSTRIAL: Limpiamos CUALQUIER basura del Excel
+           // Limpiamos cualquier basura del Excel
             const promRaw = String(student.promedio_procedencia || '').trim().toLowerCase();
             const esPromedioInvalido = ['', 'nan', 'null', 'none', 'undefined', '0'].includes(promRaw);
             const promedioValor = esPromedioInvalido ? '' : Math.round(student.promedio_procedencia).toString();
@@ -114,7 +114,7 @@ export default function ManualRegister({ isOpen, onClose, alumnoAEditar }) {
                 foto_path: fotoReal 
             });
             
-            // 🌟 NUEVO REGEX ESTRICTO PARA CORREOS EN MÉXICO
+            //  REGEX ESTRICTO PARA CORREOS EN MÉXICO
             const curpRegex = /^[A-Z]{4}\d{6}[HM][A-Z]{5}[A-Z0-9]\d$/i;
             const emailRegex = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.(com|mx|org|net|edu|gob)$/i;
 
