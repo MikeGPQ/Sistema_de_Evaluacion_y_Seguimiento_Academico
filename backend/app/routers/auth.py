@@ -14,6 +14,7 @@ from app.models.student import Student
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
+
 @router.post("/login", response_model=UserResponse)
 def login(data: LoginRequest, db: Session = Depends(get_db)):
     generic_error = "ID o contraseña incorrectos"
