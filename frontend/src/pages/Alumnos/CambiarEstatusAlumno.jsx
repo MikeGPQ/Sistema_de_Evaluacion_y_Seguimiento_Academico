@@ -1,21 +1,41 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { User, CheckCircle, XCircle, Upload, FileText, AlertTriangle, Loader2, GraduationCap } from 'lucide-react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import client from '../../lib/axios';
+import { useAuth } from '../../hooks/AuthContext';
+
+const STATUS_UI = {
+    'activo':        { label: 'Activo',       desc: 'Alumno con inscripción vigente',         color: 'text-green-600',  activeBg: 'bg-green-50 border-green-500',  Icon: CheckCircle },
+    'egresado':      { label: 'Egresado',      desc: 'Conclusión satisfactoria de créditos',   color: 'text-blue-900',   activeBg: 'bg-blue-50 border-blue-900',    Icon: GraduationCap },
+    'baja_temporal': { label: 'Baja Temporal', desc: 'Suspensión temporal de estudios',        color: 'text-orange-500', activeBg: 'bg-orange-50 border-orange-500', Icon: AlertTriangle },
+    'baja':          { label: 'Baja',          desc: 'Baja definitiva del sistema',            color: 'text-red-600',    activeBg: 'bg-red-50 border-red-500',       Icon: XCircle },
+};
 
 const CambiarEstatusAlumno = () => {
     const location = useLocation();
     const navigate = useNavigate();
-    
-    const alumnoSeleccionado = location.state?.alumno;
-    // estatus actual formateado para mostrar en el select (puede ser "Activo", "Baja", "Baja Temporal" o "Egresado")
-    const estatusActual = location.state?.estatusActual || 'Activo';
+    const { user } = useAuth();
 
-    // estado real del alumno
-    const [nuevoEstatus, setNuevoEstatus] = useState(estatusActual); 
-    
+    const alumnoSeleccionado = location.state?.alumno;
+    const estatusActual = location.state?.estatusActual || 'activo';
+
+    const [nuevoEstatus, setNuevoEstatus] = useState(estatusActual);
+    const [estatusCatalogo, setEstatusCatalogo] = useState([]);
     const [archivo, setArchivo] = useState(null);
     const [guardando, setGuardando] = useState(false);
+    const [logEvidencia, setLogEvidencia] = useState(null);
+
+    useEffect(() => {
+        client.get('/catalogos/estatus').then(res => setEstatusCatalogo(res.data)).catch(() => {});
+    }, []);
+
+    useEffect(() => {
+        if ((estatusActual === 'baja' || estatusActual === 'baja_temporal') && alumnoSeleccionado) {
+            client.get(`/alumnos/${alumnoSeleccionado.matricula}/ultimo-log-estatus`)
+                .then(res => setLogEvidencia(res.data))
+                .catch(() => {});
+        }
+    }, [estatusActual, alumnoSeleccionado]);
 
     if (!alumnoSeleccionado) {
         return (
@@ -28,21 +48,25 @@ const CambiarEstatusAlumno = () => {
         );
     }
 
-    const requiereArchivo = nuevoEstatus === 'Baja' || nuevoEstatus === 'Baja Temporal';
+    const esBaja = nuevoEstatus === 'baja' || nuevoEstatus === 'baja_temporal';
+    const requiereArchivo = esBaja && !logEvidencia?.evidence_file_id;
 
     const handleConfirmarCambio = async () => {
         try {
             setGuardando(true);
-            const estatusFormateado = nuevoEstatus.toLowerCase().replace(' ', '_');
+            const statusSeleccionado = estatusCatalogo.find(s => s.name === nuevoEstatus);
 
-            await client.put(`/alumnos/${alumnoSeleccionado.matricula}/estatus`, {
-                estatus: estatusFormateado
-            });
+            const formData = new FormData();
+            formData.append('status_id', statusSeleccionado.id);
+            formData.append('usuario_id', user?.identifier || user?.email || "Admin Local");
+            if (archivo) formData.append('evidence_file', archivo);
+
+            await client.put(`/alumnos/${alumnoSeleccionado.matricula}/estatus`, formData);
 
             navigate('/alumnos/listado');
         } catch (error) {
             console.error("Error al cambiar estatus:", error);
-            alert("Hubo un error al actualizar el estatus.");
+            alert(error?.response?.data?.detail || "Hubo un error al actualizar el estatus.");
         } finally {
             setGuardando(false);
         }
@@ -50,7 +74,7 @@ const CambiarEstatusAlumno = () => {
 
     // Función dinámica para renderizar el mensaje de advertencia según el estatus seleccionado
     const renderAlertaDinamica = () => {
-        if (nuevoEstatus === 'Baja' || nuevoEstatus === 'Baja Temporal') {
+        if (nuevoEstatus === 'baja' || nuevoEstatus === 'baja_temporal') {
             return (
                 <div className="flex gap-3 p-4 bg-red-50 rounded-xl mb-6 border border-red-100 animate-in fade-in duration-300">
                     <AlertTriangle className="w-8 h-8 text-red-600 flex-shrink-0" />
@@ -61,7 +85,7 @@ const CambiarEstatusAlumno = () => {
                 </div>
             );
         }
-        if (nuevoEstatus === 'Egresado') {
+        if (nuevoEstatus === 'egresado') {
             return (
                 <div className="flex gap-3 p-4 bg-blue-50 rounded-xl mb-6 border border-blue-200 animate-in fade-in duration-300">
                     <GraduationCap className="w-8 h-8 text-blue-900 flex-shrink-0" />
@@ -101,30 +125,51 @@ const CambiarEstatusAlumno = () => {
                     <div className="space-y-3 mb-6">
                         <p className="text-sm font-bold text-gray-700 mb-3 border-b pb-2">Seleccione el nuevo estatus:</p>
 
-                        {[
-                            { id: 'Activo', desc: 'Alumno con inscripción vigente', color: 'text-green-600', activeBg: 'bg-green-50 border-green-500', Icon: CheckCircle },
-                            { id: 'Egresado', desc: 'Conclusión satisfactoria de créditos', color: 'text-blue-900', activeBg: 'bg-blue-50 border-blue-900', Icon: GraduationCap },
-                            { id: 'Baja Temporal', desc: 'Suspensión temporal de estudios', color: 'text-orange-500', activeBg: 'bg-orange-50 border-orange-500', Icon: AlertTriangle },
-                            { id: 'Baja', desc: 'Baja definitiva del sistema', color: 'text-red-600', activeBg: 'bg-red-50 border-red-500', Icon: XCircle }
-                        ].map((item) => (
-                            <label key={item.id} className={`flex items-center p-3 border rounded-xl cursor-pointer transition-all ${nuevoEstatus === item.id ? `${item.activeBg} shadow-sm` : 'border-gray-200 hover:bg-gray-50'}`}>
-                                <input type="radio" name="estatus" value={item.id} checked={nuevoEstatus === item.id} onChange={(e) => setNuevoEstatus(e.target.value)} className="mr-4 w-4 h-4 text-blue-900 focus:ring-blue-900" />
-                                <item.Icon className={`w-5 h-5 mr-3 ${item.color}`} />
-                                <div>
-                                    <p className="text-sm font-bold text-gray-800">{item.id}</p>
-                                    <p className="text-xs text-gray-500 leading-tight">{item.desc}</p>
-                                </div>
-                            </label>
-                        ))}
+                        {estatusCatalogo.map((estatus) => {
+                            const ui = STATUS_UI[estatus.name] || {};
+                            const Icon = ui.Icon;
+                            return (
+                                <label key={estatus.id} className={`flex items-center p-3 border rounded-xl cursor-pointer transition-all ${nuevoEstatus === estatus.name ? `${ui.activeBg} shadow-sm` : 'border-gray-200 hover:bg-gray-50'}`}>
+                                    <input type="radio" name="estatus" value={estatus.name} checked={nuevoEstatus === estatus.name} onChange={(e) => setNuevoEstatus(e.target.value)} className="mr-4 w-4 h-4 text-blue-900 focus:ring-blue-900" />
+                                    {Icon && <Icon className={`w-5 h-5 mr-3 ${ui.color}`} />}
+                                    <div>
+                                        <p className="text-sm font-bold text-gray-800">{ui.label || estatus.name}</p>
+                                        <p className="text-xs text-gray-500 leading-tight">{ui.desc || estatus.description}</p>
+                                    </div>
+                                </label>
+                            );
+                        })}
                     </div>
 
                     
                     {renderAlertaDinamica()}
 
                     
-                    {requiereArchivo && (
+                    {logEvidencia?.evidence_file_name && (
+                        <div className="mb-4 p-3 bg-blue-50 rounded-xl border border-blue-200 flex items-center gap-2">
+                            <FileText className="w-4 h-4 text-blue-700 flex-shrink-0" />
+                            <div className="flex-1 overflow-hidden">
+                                <p className="text-[10px] font-bold text-blue-600 uppercase tracking-wider">Documento registrado</p>
+                                <a
+                                    href={`/api/alumnos/archivos/${logEvidencia.evidence_file_id}`}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="text-xs font-semibold text-blue-900 hover:underline truncate block"
+                                    title={logEvidencia.evidence_file_name}
+                                >
+                                    {logEvidencia.evidence_file_name}
+                                </a>
+                            </div>
+                        </div>
+                    )}
+
+                    {esBaja && (
                         <div className="mb-6 animate-in fade-in duration-300">
-                            <p className="text-xs font-bold text-gray-700 uppercase mb-2">Carta de No Adeudo <span className="text-red-500">*</span></p>
+                            <p className="text-xs font-bold text-gray-700 uppercase mb-2">
+                                {logEvidencia?.evidence_file_id ? 'Reemplazar Carta de No Adeudo' : 'Carta de No Adeudo'}
+                                {requiereArchivo && <span className="text-red-500 ml-1">*</span>}
+                                {logEvidencia?.evidence_file_id && <span className="text-gray-400 font-normal normal-case ml-1">(opcional)</span>}
+                            </p>
                             <label className="flex flex-col items-center justify-center w-full h-24 border-2 border-dashed border-gray-300 rounded-xl cursor-pointer bg-gray-50 hover:bg-gray-100 transition">
                                 <Upload className="w-5 h-5 text-gray-400 mb-1" />
                                 <p className="text-xs text-gray-500 font-medium">Haga clic para adjuntar documento</p>

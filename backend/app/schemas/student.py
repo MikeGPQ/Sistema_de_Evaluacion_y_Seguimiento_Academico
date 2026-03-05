@@ -32,5 +32,5 @@ class StudentCreate(BaseModel):
     email_institucional: Optional[EmailStr] = None 
     career_id: int
     origin_school_id: int
-    promedio_procedencia: float
+    promedio_procedencia: int
     address: AddressCreate

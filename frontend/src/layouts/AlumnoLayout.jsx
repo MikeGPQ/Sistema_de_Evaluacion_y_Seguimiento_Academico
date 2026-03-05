@@ -1,70 +1,148 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Outlet, useLocation, Link } from 'react-router-dom';
 import { 
   CalendarDays, 
   CheckSquare, 
   Award, 
-  LogOut 
+  LogOut,
+  Menu,
+  X,
+  ChevronLeft,
+  ChevronRight
 } from 'lucide-react';
 import { useAuth } from '../hooks/AuthContext';
 
+const formatName = (name) => {
+  if (!name) return "";
+  return name.toLowerCase().replace(/\b\w/g, char => char.toUpperCase());
+};
+
 const AlumnoLayout = () => {
   const location = useLocation();
-  const { logout } = useAuth(); 
+  const { logout, user } = useAuth(); 
+  
+  const [isCollapsed, setIsCollapsed] = useState(false);
+  const [isMobileOpen, setIsMobileOpen] = useState(false);
 
   const isActive = (path) => location.pathname.includes(path);
+
+  const nombreCrudo = user?.nombre_completo || "Usuario Estudiante"; 
+  const nombreUsuario = formatName(nombreCrudo);
+  const inicialUsuario = nombreUsuario.charAt(0).toUpperCase();
 
   return (
     <div className="flex h-screen bg-[#F8F9FA] font-sans overflow-hidden">
       
-      {/* SIDEBAR LATERAL (Estilo SESA) */}
-      <aside className="w-[260px] bg-[#0B172A] text-white flex flex-col flex-shrink-0 shadow-xl z-20">
-        
-        {/* Logo Institucional */}
-        <div className="h-16 flex items-center px-6 border-b border-slate-800 bg-[#070e1a]">
-          <div className="w-7 h-7 bg-[#F2A900] rounded text-[#0B172A] flex items-center justify-center font-black text-sm mr-3 shadow-sm">
-            U
+      {isMobileOpen && (
+        <div 
+          className="fixed inset-0 bg-black/50 z-20 md:hidden"
+          onClick={() => setIsMobileOpen(false)}
+        />
+      )}
+
+      <aside 
+        className={`fixed md:relative inset-y-0 left-0 z-30 bg-[#0B172A] text-white flex flex-col flex-shrink-0 shadow-xl transition-all duration-300 ease-in-out
+          ${isMobileOpen ? 'translate-x-0 w-[260px]' : '-translate-x-full md:translate-x-0'}
+          ${isCollapsed ? 'md:w-20' : 'md:w-[260px]'}
+        `}
+      >
+        <button 
+          onClick={() => setIsCollapsed(!isCollapsed)} 
+          className="hidden md:flex absolute top-1/2 -right-3.5 -translate-y-1/2 bg-[#F2A900] text-[#0B172A] p-1.5 rounded-full shadow-lg z-50 hover:scale-110 transition-transform"
+          title={isCollapsed ? "Expandir menú" : "Contraer menú"}
+        >
+          {isCollapsed ? <ChevronRight className="w-4 h-4 font-bold" /> : <ChevronLeft className="w-4 h-4 font-bold" />}
+        </button>
+
+        <div className="h-16 flex items-center justify-between px-4 border-b border-slate-800 bg-[#070e1a]">
+          <div className="flex items-center overflow-hidden w-full">
+            <div className={`w-8 h-8 bg-[#F2A900] rounded text-[#0B172A] flex items-center justify-center font-black text-sm shrink-0 shadow-sm transition-all ${isCollapsed ? 'mx-auto' : ''}`}>
+              U
+            </div>
+            {!isCollapsed && (
+              <div className="flex flex-col ml-3 transition-opacity duration-300">
+                <span className="font-bold text-base tracking-wide leading-tight">SESA Alumno</span>
+                <span className="text-[9px] text-slate-400 uppercase tracking-widest">Campus Campeche</span>
+              </div>
+            )}
           </div>
-          <div className="flex flex-col">
-            <span className="font-bold text-base tracking-wide leading-tight">SESA Alumno</span>
-            <span className="text-[9px] text-slate-400 uppercase tracking-widest">Campus Campeche</span>
-          </div>
+          
+          <button 
+            onClick={() => setIsMobileOpen(false)} 
+            className="md:hidden p-1.5 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition-colors absolute right-4"
+          >
+            <X className="w-5 h-5" />
+          </button>
         </div>
 
-        {/* Menú de Navegación del Estudiante */}
-        <div className="flex-1 overflow-y-auto py-6 px-4 custom-scrollbar">
-          <nav className="space-y-1.5">
-            <Link to="/alumno/horario" className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-colors ${isActive('/horario') ? 'bg-[#1A237E] text-white font-semibold shadow-md' : 'text-slate-300 hover:bg-slate-800 hover:text-white'}`}>
-              <CalendarDays className="w-[18px] h-[18px]" /> Mi Horario
+        <div className={`p-4 border-b border-slate-800 bg-[#0b172a] flex items-center ${isCollapsed ? 'justify-center' : 'justify-between'}`}>
+          <div className="flex items-center gap-3 overflow-hidden">
+            <div className="w-9 h-9 rounded-full bg-[#00AEEF] flex items-center justify-center text-white font-bold text-xs shrink-0 border border-cyan-400">
+              {inicialUsuario}
+            </div>
+            {!isCollapsed && (
+              <div className="flex flex-col">
+                <span 
+                  className="text-sm font-semibold text-white whitespace-normal break-words leading-tight line-clamp-2" 
+                  title={nombreUsuario}
+                >
+                  {nombreUsuario}
+                </span>
+                <span className="text-[10px] text-slate-400 truncate mt-0.5">
+                  Estudiante
+                </span>
+              </div>
+            )}
+          </div>
+          {!isCollapsed && (
+            <button onClick={logout} className="p-2 text-slate-400 hover:text-red-400 hover:bg-slate-800 rounded-lg transition-colors shrink-0" title="Cerrar Sesión">
+              <LogOut className="w-5 h-5" />
+            </button>
+          )}
+        </div>
+
+        <div className="flex-1 overflow-y-auto py-6 px-3 custom-scrollbar">
+          <nav className="space-y-2">
+            <Link to="/alumno/horario" title="Mi Horario" className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-colors ${isCollapsed ? 'justify-center' : ''} ${isActive('/horario') ? 'bg-[#1A237E] text-white font-semibold shadow-md' : 'text-slate-300 hover:bg-slate-800 hover:text-white'}`}>
+              <CalendarDays className="w-[18px] h-[18px] shrink-0" /> 
+              {!isCollapsed && <span>Mi Horario</span>}
             </Link>
-            <Link to="/alumno/asistencias" className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-colors ${isActive('/asistencias') ? 'bg-[#1A237E] text-white font-semibold shadow-md' : 'text-slate-300 hover:bg-slate-800 hover:text-white'}`}>
-              <CheckSquare className="w-[18px] h-[18px]" /> Mis Asistencias
+            <Link to="/alumno/asistencias" title="Mis Asistencias" className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-colors ${isCollapsed ? 'justify-center' : ''} ${isActive('/asistencias') ? 'bg-[#1A237E] text-white font-semibold shadow-md' : 'text-slate-300 hover:bg-slate-800 hover:text-white'}`}>
+              <CheckSquare className="w-[18px] h-[18px] shrink-0" /> 
+              {!isCollapsed && <span>Mis Asistencias</span>}
             </Link>
-            <Link to="/alumno/calificaciones" className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-colors ${isActive('/calificaciones') ? 'bg-[#1A237E] text-white font-semibold shadow-md' : 'text-slate-300 hover:bg-slate-800 hover:text-white'}`}>
-              <Award className="w-[18px] h-[18px]" /> Mis Calificaciones
+            <Link to="/alumno/calificaciones" title="Mis Calificaciones" className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-colors ${isCollapsed ? 'justify-center' : ''} ${isActive('/calificaciones') ? 'bg-[#1A237E] text-white font-semibold shadow-md' : 'text-slate-300 hover:bg-slate-800 hover:text-white'}`}>
+              <Award className="w-[18px] h-[18px] shrink-0" /> 
+              {!isCollapsed && <span>Mis Calificaciones</span>}
             </Link>
           </nav>
         </div>
 
-        {/* User Profile / Logout */}
-        <div className="p-4 border-t border-slate-800 bg-[#070e1a] flex items-center justify-between">
-          <div className="flex items-center gap-3 overflow-hidden">
-            <div className="w-9 h-9 rounded-full bg-[#00AEEF] flex items-center justify-center text-white font-bold text-xs shrink-0 border border-cyan-400">
-              AL
-            </div>
-            <div className="flex flex-col truncate">
-              <span className="text-sm font-semibold truncate text-white">Estudiante</span>
-              <span className="text-[10px] text-slate-400 truncate">Portal Académico</span>
-            </div>
+        {isCollapsed && (
+          <div className="p-4 flex justify-center border-t border-slate-800">
+             <button onClick={logout} className="p-2 text-slate-400 hover:text-red-400 hover:bg-slate-800 rounded-lg transition-colors" title="Cerrar Sesión">
+              <LogOut className="w-5 h-5" />
+            </button>
           </div>
-          <button onClick={logout} className="p-2 text-slate-400 hover:text-red-400 hover:bg-slate-800 rounded-lg transition-colors" title="Cerrar Sesión">
-            <LogOut className="w-5 h-5" />
-          </button>
-        </div>
+        )}
       </aside>
 
-      {/* ÁREA DE CONTENIDO DINÁMICO */}
       <main className="flex-1 flex flex-col min-w-0 overflow-hidden relative">
+        <header className="md:hidden flex items-center justify-between bg-[#070e1a] text-white p-4 shadow-md z-10">
+          <div className="flex items-center gap-2">
+            <div className="w-7 h-7 bg-[#F2A900] rounded text-[#0B172A] flex items-center justify-center font-black text-sm shadow-sm">
+              U
+            </div>
+            <span className="font-bold text-sm tracking-wide">SESA Alumno</span>
+          </div>
+          <button 
+            onClick={() => setIsMobileOpen(true)}
+            className="p-1.5 text-slate-300 hover:text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-slate-500"
+          >
+            <Menu className="w-6 h-6" />
+          </button>
+        </header>
+
         <div className="flex-1 overflow-y-auto">
           <Outlet /> 
         </div>

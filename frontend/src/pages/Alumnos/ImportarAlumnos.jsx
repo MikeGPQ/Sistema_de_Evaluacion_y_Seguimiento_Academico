@@ -1,6 +1,9 @@
 import React, { useState, useRef, useEffect } from 'react';
 import ExcelJS from 'exceljs';
-import { Upload, Search, CheckCircle, Database, Download, X, AlertCircle, FileSpreadsheet, ArrowLeft } from 'lucide-react';
+import { 
+  Upload, CheckCircle, Database, X, AlertCircle, 
+  FileSpreadsheet, ArrowLeft, Settings, Download
+} from 'lucide-react';
 import client from '../../lib/axios'; 
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
@@ -17,6 +20,9 @@ const ImportarAlumnos = () => {
   const [mensajeErrorBD, setMensajeErrorBD] = useState(""); 
   const [erroresDetalle, setErroresDetalle] = useState([]); 
   
+  const [idBase, setIdBase] = useState("");
+  const [guardandoId, setGuardandoId] = useState(false);
+
   const fileInputRef = useRef(null);
 
   useEffect(() => {
@@ -160,9 +166,83 @@ const ImportarAlumnos = () => {
       } else {
           setMensajeErrorBD(responseData?.detail || "Error al conectar con el servidor");
       }
-      setNotificacion({ mostrar: true, mensaje: "Importación detenida. Revise las celdas en rojo.", tipo: "error" });
+      setNotificacion({ mostrar: true, mensaje: "Importación detenida. Revise los errores generados.", tipo: "error" });
     } finally {
       setCargando(false);
+    }
+  };
+
+  
+  const generarReporteErroresPDF = () => {
+    if (erroresDetalle.length === 0) return;
+
+    
+    const doc = new jsPDF('landscape'); 
+    
+    
+    doc.setFontSize(18);
+    doc.setTextColor(220, 38, 38); 
+    doc.text("Reporte de Errores de Validación de Importación", 14, 20);
+
+    
+    doc.setFontSize(11);
+    doc.setTextColor(100);
+    doc.text("Sistema de Evaluación y Seguimiento Académico (SESA)", 14, 28);
+    doc.text(`Fecha del escaneo: ${new Date().toLocaleDateString()} a las ${new Date().toLocaleTimeString()}`, 14, 34);
+
+    
+    const tableColumn = ["Fila Excel", "Matrícula", "Nombre Alumno", "Campos Afectados", "Detalle del Error"];
+    const tableRows = erroresDetalle.map(err => [
+      `Fila ${err.fila}`,
+      err.matricula,
+      err.nombre,
+      err.campos.join(', '),
+      err.mensajes.join(' | ')
+    ]);
+
+    
+    autoTable(doc, {
+      head: [tableColumn],
+      body: tableRows,
+      startY: 40,
+      theme: 'grid',
+      headStyles: { fillColor: [229, 57, 53] }, 
+      styles: { fontSize: 9, cellPadding: 3 },
+      columnStyles: {
+        0: { cellWidth: 20 },
+        1: { cellWidth: 25 },
+        2: { cellWidth: 50 },
+        3: { cellWidth: 45 },
+        4: { cellWidth: 'auto' } 
+      }
+    });
+
+    doc.save(`Reporte_Errores_Importacion_${new Date().getTime()}.pdf`);
+  };
+
+  const handleActualizarIdBase = async () => {
+    // Exigimos que sean exactamente 8 números para evitar problemas de formato en la matrícula
+    if (!idBase || !/^\d{8}$/.test(idBase)) {
+      setNotificacion({ mostrar: true, mensaje: "Ingresa una matrícula de exactamente 8 números.", tipo: "error" });
+      return;
+    }
+
+    setGuardandoId(true);
+    const formData = new FormData();
+    formData.append('nueva_matricula', idBase);
+
+    try {
+      const response = await client.post('/alumnos/set-base-id', formData);
+      setNotificacion({ mostrar: true, mensaje: response.data.message, tipo: "exito" });
+      setIdBase("");
+    } catch (error) {
+      setNotificacion({ 
+        mostrar: true, 
+        mensaje: error.response?.data?.detail || "Error al actualizar la ID", 
+        tipo: "error" 
+      });
+    } finally {
+      setGuardandoId(false);
     }
   };
 
@@ -206,7 +286,7 @@ const ImportarAlumnos = () => {
         </div>
       )}
 
-      <header className="bg-white border-b border-gray-200 h-16 flex items-center justify-between px-8 shrink-0">
+      <header className="bg-white border-b border-gray-200 h-16 flex items-center justify-between px-8 shrink-0 shadow-sm">
         <div className="flex items-center text-sm text-gray-500">
            Inicio &gt; 
            <button 
@@ -215,12 +295,15 @@ const ImportarAlumnos = () => {
            >
              Alumnos
            </button> 
-           &gt; <span className="text-gray-900 ml-1 font-medium">Carga Masiva</span>
+           &gt; <span className="text-[#1A237E] ml-1 font-bold">Importación Masiva</span>
         </div>
         <div className="flex items-center gap-3">
-           <div className="flex items-center gap-2">
-               <span className="text-sm font-semibold text-gray-700">Administrador</span>
-               <div className="w-8 h-8 rounded-full bg-blue-900 flex items-center justify-center text-white text-xs font-bold">
+           <div className="flex items-center gap-3 border-l pl-4 border-gray-200">
+               <div className="text-right">
+                 <p className="text-sm font-bold text-gray-800 leading-tight">Administrador SESA</p>
+                 <p className="text-[10px] text-green-600 font-medium tracking-wide uppercase">En línea</p>
+               </div>
+               <div className="w-9 h-9 rounded-full bg-gradient-to-tr from-[#1A237E] to-blue-500 flex items-center justify-center text-white text-xs font-bold shadow-sm border-2 border-white">
                    AD
                </div>
            </div>
@@ -238,31 +321,43 @@ const ImportarAlumnos = () => {
                 Volver al listado
               </button>
 
-              <h1 className="text-2xl font-bold text-gray-900 mb-2">Carga Masiva de Alumnos</h1>
-              <p className="text-gray-500 text-sm mb-8">Importa registros desde un archivo Excel (.xlsx) para actualizar la base de datos de manera automática.</p>
+              <div className="flex justify-between items-end mb-8">
+                <div>
+                  <h1 className="text-2xl font-bold text-gray-900 mb-2">Importación Masiva</h1>
+                  <p className="text-gray-500 text-sm">Carga alumnos vía Excel o configura la matrícula base para el registro manual.</p>
+                </div>
+              </div>
 
               {mensajeErrorBD && (
-                  <div className="bg-red-50 border border-red-200 text-red-800 p-4 rounded-md flex items-start mb-6 animate-in fade-in duration-300">
-                      <AlertCircle className="w-5 h-5 mr-3 mt-0.5 shrink-0" />
-                      <div>
-                          <h4 className="font-bold text-sm">Atención: Errores encontrados en la importación</h4>
-                          <p className="text-xs mt-1">{mensajeErrorBD} Revise las filas marcadas en rojo en la tabla (desplácese a la derecha para ver todos los campos).</p>
+                  <div className="bg-red-50 border border-red-300 text-red-900 p-5 rounded-lg flex flex-col md:flex-row items-start md:items-center justify-between mb-6 shadow-sm">
+                      <div className="flex items-start">
+                        <AlertCircle className="w-6 h-6 mr-3 mt-0.5 shrink-0 text-red-600" />
+                        <div>
+                            <h4 className="font-bold text-base">La importación se ha detenido por errores de validación</h4>
+                            <p className="text-sm mt-1">{mensajeErrorBD}</p>
+                        </div>
                       </div>
+                      <button 
+                        onClick={generarReporteErroresPDF}
+                        className="mt-4 md:mt-0 flex items-center gap-2 bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-md text-sm font-bold transition-colors shadow-sm whitespace-nowrap"
+                      >
+                        <Download className="w-4 h-4" /> Descargar Reporte PDF
+                      </button>
                   </div>
               )}
 
               <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
                   
-                  <div className="lg:col-span-8 bg-white border border-gray-200 rounded-md shadow-sm flex flex-col h-[600px] overflow-hidden">
+                  <div className="lg:col-span-8 bg-white border border-gray-200 rounded-lg shadow-sm flex flex-col h-[650px] overflow-hidden">
                       <div className="p-4 border-b border-gray-200 bg-gray-50 flex justify-between items-center">
                           <h2 className="text-sm font-bold text-gray-800">Vista Previa de Datos</h2>
-                          
                       </div>
 
                       <div className="flex-1 overflow-auto">
                           <table className="w-full text-left text-xs whitespace-nowrap">
                               <thead className="bg-[#F8F9FA] sticky top-0 z-10 shadow-sm border-b border-gray-200">
                                   <tr className="text-gray-500 font-semibold uppercase tracking-wider">
+                                      <th className="p-3">Fila Excel</th>
                                       <th className="p-3">Matrícula</th>
                                       <th className="p-3">Nombre</th>
                                       <th className="p-3">Apellido Paterno</th>
@@ -270,70 +365,70 @@ const ImportarAlumnos = () => {
                                       <th className="p-3">Procedencia</th>
                                       <th className="p-3">Promedio</th>
                                       <th className="p-3">CURP</th>
-                                      <th className="p-3">Calle</th>
-                                      <th className="p-3">Colonia</th>
-                                      <th className="p-3">C.P.</th>
-                                      <th className="p-3">Estado</th>
-                                      <th className="p-3">Núm. Dom.</th>
-                                      <th className="p-3">Municipio</th>
                                       <th className="p-3">Carrera</th>
                                       <th className="p-3">Correo Personal</th>
                                       <th className="p-3">Correo Inst.</th>
-                                      <th className="p-3">Cuat.</th>
                                   </tr>
                               </thead>
                               <tbody className="divide-y divide-gray-100">
                                   {datos.length > 0 ? (
                                       datos.map((alumno, index) => {
-                                          
                                           const matActual = String(alumno["Matrícula"] || alumno["Matrícula:"] || '');
-                                          const errorFila = erroresDetalle.find(err => err.matricula === matActual);
+                                          const filaActual = index + 2; 
+                                          const errorFila = erroresDetalle.find(err => err.fila === filaActual);
                                           const errorCampos = errorFila ? errorFila.campos : [];
                                           const mensajeError = errorFila ? errorFila.mensajes.join(" | ") : "";
 
                                           return (
-                                              <tr key={index} className={`transition-colors ${errorFila ? 'bg-red-50/60 border-l-4 border-l-red-500' : 'hover:bg-blue-50/30'}`}>
+                                              <tr key={index} className={`transition-colors ${errorFila ? 'bg-red-50/80 border-l-4 border-l-red-500' : 'hover:bg-blue-50/30'}`}>
                                                   
-                                                  <td className={`p-3 font-mono font-medium ${errorCampos.includes("Matrícula") ? 'text-red-700 bg-red-100 rounded shadow-sm border border-red-200' : 'text-gray-700'}`} title={errorCampos.includes("Matrícula") ? mensajeError : ""}>
-                                                    {matActual}
+                                                  <td className="p-3 font-bold text-gray-400">#{filaActual}</td>
+
+                                                  <td className={`p-3 font-mono font-medium ${errorCampos.includes("Matrícula") ? 'text-red-700 bg-red-100 rounded shadow-sm border border-red-200 cursor-help' : 'text-gray-700'}`} title={errorCampos.includes("Matrícula") ? mensajeError : ""}>
+                                                      {matActual}
                                                   </td>
-                                                  <td className="p-3 text-gray-900 font-semibold">{String(alumno["Nombre"] || alumno["Nombre:"] || '---')}</td>
-                                                  <td className="p-3 text-gray-600">{String(alumno["Apellido Paterno"] || alumno["Apellido Paterno:"] || '---')}</td>
-                                                  <td className="p-3 text-gray-600">{String(alumno["Apellido Materno"] || alumno["Apellido Materno:"] || '---')}</td>
-                                                  
-                                                  <td className={`p-3 font-medium ${errorCampos.includes("Procedencia") ? 'text-red-700 bg-red-100 rounded shadow-sm border border-red-200' : 'text-gray-600'}`} title={errorCampos.includes("Procedencia") ? mensajeError : ""}>
-                                                    {String(alumno["Procedencia"] || alumno["Procedencia:"] || '---')}
+                                                  <td className={`p-3 font-semibold ${errorCampos.includes("Nombre") ? 'text-red-700 bg-red-100 rounded border border-red-200 cursor-help' : 'text-gray-900'}`} title={errorCampos.includes("Nombre") ? mensajeError : ""}>
+                                                      {String(alumno["Nombre"] || alumno["Nombre:"] || '---')}
                                                   </td>
-                                                  
-                                                  <td className="p-3 text-blue-600 font-bold">{String(alumno["Promedio General"] || alumno["Promedio General:"] || '0.00')}</td>
-                                                  <td 
-    className={`p-3 font-mono ${errorCampos.includes("Curp") ? 'text-red-700 bg-red-100 rounded shadow-sm border border-red-200' : 'text-gray-500'}`} 
-    title={errorCampos.includes("Curp") ? mensajeError : ""}
->
-    {String(alumno["Curp"] || alumno["Curp:"] || '---')}
+                                                  <td className={`p-3 ${errorCampos.includes("Apellido Paterno") ? 'text-red-700 bg-red-100 rounded border border-red-200 cursor-help font-semibold' : 'text-gray-600'}`} title={errorCampos.includes("Apellido Paterno") ? mensajeError : ""}>
+    {String(alumno["Apellido Paterno"] || alumno["Apellido Paterno:"] || '---')}
 </td>
-                                                  <td className="p-3 text-gray-600">{String(alumno["Calle"] || alumno["Calle:"] || '---')}</td>
-                                                  <td className="p-3 text-gray-600">{String(alumno["Colonia"] || alumno["Colonia:"] || '---')}</td>
-                                                  <td className="p-3 text-blue-800 font-bold">{String(alumno["Código Postal"] || alumno["Código Postal:"] || '---')}</td>
-                                                  <td className="p-3 text-gray-600">{String(alumno["Estado"] || alumno["Estado:"] || '---')}</td>
-                                                  <td className="p-3 text-gray-600">{String(alumno["Número de domicilio"] || alumno["Número de domicilio:"] || '---')}</td>
-                                                  <td className="p-3 text-gray-600">{String(alumno["Municipio"] || alumno["Municipio:"] || '---')}</td>
+
+<td className={`p-3 ${errorCampos.includes("Apellido Materno") ? 'text-red-700 bg-red-100 rounded border border-red-200 cursor-help font-semibold' : 'text-gray-600'}`} title={errorCampos.includes("Apellido Materno") ? mensajeError : ""}>
+    {String(alumno["Apellido Materno"] || alumno["Apellido Materno:"] || '---')}
+</td>
+
+<td className={`p-3 font-medium ${errorCampos.includes("Procedencia") ? 'text-red-700 bg-red-100 rounded border border-red-200 cursor-help' : 'text-gray-600'}`} title={errorCampos.includes("Procedencia") ? mensajeError : ""}>
+    {String(alumno["Procedencia"] || alumno["Procedencia:"] || '---')}
+</td>
+
+<td className={`p-3 font-bold ${errorCampos.includes("Promedio General") ? 'text-red-700 bg-red-100 rounded border border-red-200 cursor-help' : 'text-blue-600'}`} title={errorCampos.includes("Promedio General") ? mensajeError : ""}>
+    {String(alumno["Promedio General"] || alumno["Promedio General:"] || '0.00')}
+</td>
                                                   
-                                                  <td className={`p-3 font-bold ${errorCampos.includes("Carrera") ? 'text-red-700 bg-red-100 rounded shadow-sm border border-red-200' : 'text-gray-600'}`} title={errorCampos.includes("Carrera") ? mensajeError : ""}>
-                                                    {String(alumno["Carrera"] || alumno["Carrera:"] || '---')}
+                                                  <td className={`p-3 font-mono ${errorCampos.includes("Curp") ? 'text-red-700 bg-red-100 rounded border border-red-200 cursor-help' : 'text-gray-500'}`} title={errorCampos.includes("Curp") ? mensajeError : ""}>
+                                                      {String(alumno["Curp"] || alumno["Curp:"] || '---')}
                                                   </td>
                                                   
-                                                  <td className="p-3 text-gray-500 italic">{String(alumno["Correo Personal"] || alumno["Correo Personal:"] || '---')}</td>
-                                                  <td className="p-3 text-gray-500 italic">{String(alumno["Correo Institucional"] || alumno["Correo Institucional:"] || '---')}</td>
-                                                  <td className="p-3 font-bold text-purple-600">{String(alumno["Cuatrimestre"] || alumno["Cuatrimestre:"] || '1')}</td>
+                                                  <td className={`p-3 font-bold ${errorCampos.includes("Carrera") ? 'text-red-700 bg-red-100 rounded border border-red-200 cursor-help' : 'text-gray-600'}`} title={errorCampos.includes("Carrera") ? mensajeError : ""}>
+                                                      {String(alumno["Carrera"] || alumno["Carrera:"] || '---')}
+                                                  </td>
+                                                  
+                                                  <td className={`p-3 italic ${errorCampos.includes("Correo Personal") ? 'text-red-700 bg-red-100 rounded border border-red-200 cursor-help' : 'text-gray-500'}`} title={errorCampos.includes("Correo Personal") ? mensajeError : ""}>
+                                                      {String(alumno["Correo Personal"] || alumno["Correo Personal:"] || '---')}
+                                                  </td>
+                                                  <td className={`p-3 italic ${errorCampos.includes("Correo Institucional") ? 'text-red-700 bg-red-100 rounded border border-red-200 cursor-help' : 'text-gray-500'}`} title={errorCampos.includes("Correo Institucional") ? mensajeError : ""}>
+                                                      {String(alumno["Correo Institucional"] || alumno["Correo Institucional:"] || '---')}
+                                                  </td>
                                               </tr>
                                           );
                                       })
                                   ) : (
                                       <tr>
-                                          <td colSpan="17" className="p-20 text-center text-gray-400">
-                                              <Database className="w-10 h-10 mx-auto mb-3 opacity-20" />
-                                              <p>La tabla está vacía. Selecciona un archivo Excel para previsualizar los registros.</p>
+                                          <td colSpan="11" className="p-20 text-center text-gray-400">
+                                              <Database className="w-12 h-12 mx-auto mb-3 opacity-20" />
+                                              <p className="font-medium text-gray-500">Sin datos para mostrar</p>
+                                              <p className="text-xs mt-1">Sube un archivo Excel para iniciar la validación.</p>
                                           </td>
                                       </tr>
                                   )}
@@ -342,70 +437,79 @@ const ImportarAlumnos = () => {
                       </div>
                       
                       <div className="p-3 border-t border-gray-200 bg-white text-xs text-gray-500 flex justify-between items-center">
-                          <span>Mostrando {datos.length > 0 ? `1-${datos.length}` : '0'} de {datos.length} registros listos para importar.</span>
+                          <span>Mostrando {datos.length > 0 ? `1-${datos.length}` : '0'} de {datos.length} registros analizados.</span>
                       </div>
                   </div>
 
-                  <div className="lg:col-span-4 flex flex-col gap-5">
-                      <div className="bg-white border border-gray-200 rounded-md p-6 text-center shadow-sm">
-                          <div className="border-2 border-dashed border-[#B0BEC5] bg-[#F8F9FA] rounded-md p-8 flex flex-col items-center justify-center hover:bg-gray-100 transition-colors">
-                              <Upload className="w-10 h-10 text-[#546E7A] mb-3" />
-                              <p className="text-sm text-gray-700 font-medium mb-1">Haz clic para buscar tu archivo Excel</p>
-                              <p className="text-xs text-gray-400 mb-4">Soporta archivos .xlsx</p>
+                  <div className="lg:col-span-4 flex flex-col gap-6">
+                      
+                      <div className="bg-white border border-gray-200 rounded-lg p-6 text-center shadow-sm">
+                          <h3 className="text-sm font-bold text-gray-800 mb-4 text-left border-b pb-2">1. Cargar Archivo</h3>
+                          <div className="border-2 border-dashed border-[#B0BEC5] bg-[#F8F9FA] rounded-lg p-8 flex flex-col items-center justify-center hover:bg-blue-50 hover:border-blue-300 transition-colors">
+                              <Upload className="w-10 h-10 text-blue-500 mb-3" />
+                              <p className="text-sm text-gray-700 font-medium mb-1">Arrastra tu Excel aquí o</p>
                               
                               <input type="file" accept=".xlsx" onChange={handleFileUpload} className="hidden" id="excel-upload" ref={fileInputRef} />
-                              <label htmlFor="excel-upload" className="bg-white border border-gray-300 text-gray-700 px-5 py-2 rounded text-xs font-bold cursor-pointer hover:bg-gray-50 shadow-sm transition-colors">
-                                  Seleccionar Archivo
+                              <label htmlFor="excel-upload" className="mt-3 bg-white border border-gray-300 text-gray-700 px-5 py-2 rounded-md text-xs font-bold cursor-pointer hover:bg-gray-50 shadow-sm transition-colors">
+                                  Examinar Archivos
                               </label>
                           </div>
                           
                           {archivoNombre && (
-                              <div className="mt-4 p-3 bg-blue-50 border border-blue-100 rounded text-left flex items-center justify-between animate-in fade-in">
+                              <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-md text-left flex items-center justify-between">
                                   <div className="truncate pr-2">
                                       <p className="text-xs font-bold text-blue-900 truncate">{archivoNombre}</p>
-                                      <p className="text-[10px] text-blue-600 mt-0.5">Listo para ser procesado</p>
+                                      <p className="text-[10px] text-blue-600 mt-0.5 font-medium">Análisis de validación completado</p>
                                   </div>
-                                  <CheckCircle className="w-4 h-4 text-green-500 shrink-0" />
-                              </div>
-                          )}
-                          <p className="text-[10px] text-gray-400 mt-4 text-left font-medium">Límite máximo de 5MB por archivo de carga.</p>
-                      </div>
-
-                      <div className="bg-white border border-gray-200 rounded-md p-6 shadow-sm flex flex-col gap-4">
-                          <button onClick={descargarPlantilla} className="w-full flex items-center justify-center gap-2 border border-[#00AEEF] text-[#00AEEF] py-2.5 rounded text-sm font-bold hover:bg-[#E1F5FE] transition-colors">
-                              <FileSpreadsheet className="w-4 h-4" />
-                              Descargar Plantilla Oficial (.xlsx)
-                          </button>
-
-                          <div className="border-t border-gray-100 my-1"></div>
-
-                          <div className="flex justify-between items-center text-xs text-gray-600">
-                              <span>Total a importar:</span>
-                              <strong className="text-lg">{datos.length}</strong>
-                          </div>
-                          
-                          {erroresDetalle.length > 0 && (
-                              <div className="flex justify-between items-center text-xs text-red-600 font-bold bg-red-50 p-2 rounded">
-                                  <span>Registros con errores:</span>
-                                  <span>{erroresDetalle.length}</span>
+                                  <CheckCircle className="w-5 h-5 text-green-500 shrink-0" />
                               </div>
                           )}
 
-                          <div className="flex gap-2 mt-2">
+                          <div className="flex gap-2 mt-4">
                               <button 
                                   onClick={handleCancelar}
                                   disabled={datos.length === 0}
-                                  className="flex-1 bg-white border border-gray-300 text-gray-700 py-2.5 rounded text-sm font-bold hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                                  className="flex-1 bg-white border border-gray-300 text-gray-700 py-2.5 rounded-md text-sm font-bold hover:bg-gray-50 disabled:opacity-50 transition-colors"
                               >
                                   Limpiar
                               </button>
                               <button 
                                   onClick={handleGuardarEnBaseDeDatos}
-                                  disabled={cargando || datos.length === 0}
-                                  className="flex-1 bg-[#1A237E] text-white py-2.5 rounded text-sm font-bold hover:bg-[#283593] flex justify-center items-center disabled:opacity-50 disabled:cursor-not-allowed shadow-sm transition-colors"
+                                  disabled={cargando || datos.length === 0 || erroresDetalle.length > 0}
+                                  className="flex-1 bg-[#1A237E] text-white py-2.5 rounded-md text-sm font-bold hover:bg-[#283593] flex justify-center items-center disabled:opacity-50 disabled:bg-gray-400 shadow-sm transition-colors"
                               >
-                                  {cargando ? <Database className="w-4 h-4 animate-bounce" /> : 'Procesar Importación'}
+                                  {cargando ? <Database className="w-4 h-4 animate-bounce" /> : 'Importar a BD'}
                               </button>
+                          </div>
+                          <button onClick={descargarPlantilla} className="w-full mt-3 flex items-center justify-center gap-2 text-[#00AEEF] hover:text-blue-700 py-2 rounded text-xs font-bold transition-colors">
+                              <FileSpreadsheet className="w-4 h-4" /> Descargar Plantilla Oficial
+                          </button>
+                      </div>
+
+                      <div className="bg-white border border-gray-200 rounded-lg p-6 shadow-sm">
+                          <h3 className="text-sm font-bold text-gray-800 mb-2 flex items-center gap-2">
+                            <Settings className="w-4 h-4 text-gray-500" />
+                            2. Configurar Matrícula Base
+                          </h3>
+                          <p className="text-xs text-gray-500 mb-4 leading-relaxed">
+                            Ingresa el último número de matrícula oficial. El sistema lo usará como punto de partida para sumar +1 en las altas manuales.
+                          </p>
+                          
+                          <div className="flex gap-2">
+                            <input 
+                              type="text" 
+                              placeholder="Ej. 20240001" 
+                              value={idBase}
+                              onChange={(e) => setIdBase(e.target.value.replace(/\D/g, ''))}
+                              className="flex-1 border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#1A237E] focus:border-transparent font-mono"
+                            />
+                            <button 
+                              onClick={handleActualizarIdBase}
+                              disabled={guardandoId || !idBase}
+                              className="bg-gray-800 text-white px-4 py-2 rounded-md text-sm font-bold hover:bg-black disabled:opacity-50 transition-colors shadow-sm whitespace-nowrap"
+                            >
+                              {guardandoId ? 'Guardando...' : 'Fijar ID'}
+                            </button>
                           </div>
                       </div>
 
