@@ -3,7 +3,45 @@ import client from '../../lib/axios';
 import Modal from '../ui/Modal';
 import Swal from 'sweetalert2';
 import Select from 'react-select'; 
+// =========================================================================
+// 🌟 ALGORITMO: VALIDADOR DE PREFIJO CURP (REGLAS OFICIALES DE MÉXICO)
+// =========================================================================
+const calcularPrefijoCURP = (nombre, paterno, materno) => {
+  const limpia = (str) => String(str || '').trim().toUpperCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+  const nom = limpia(nombre); const pat = limpia(paterno); const mat = limpia(materno);
+  if (!nom || !pat) return null;
 
+  const ignorar = ['DE', 'LA', 'LAS', 'LOS', 'MAC', 'MC', 'VAN', 'VON', 'Y'];
+  const palabrasPaterno = pat.split(' ').filter(p => !ignorar.includes(p));
+  const apellidoPat = palabrasPaterno[0] || pat;
+
+  const letra1 = apellidoPat.charAt(0) || 'X';
+  let letra2 = 'X';
+  for (let i = 1; i < apellidoPat.length; i++) {
+    if (['A', 'E', 'I', 'O', 'U'].includes(apellidoPat.charAt(i))) {
+      letra2 = apellidoPat.charAt(i); break;
+    }
+  }
+
+  const palabrasMaterno = mat.split(' ').filter(p => !ignorar.includes(p));
+  const apellidoMat = palabrasMaterno[0] || '';
+  const letra3 = apellidoMat ? apellidoMat.charAt(0) : 'X';
+
+  let nombres = nom.split(' ').filter(p => !ignorar.includes(p));
+  let primerNombre = nombres[0] || 'X';
+  if (nombres.length > 1 && (primerNombre === 'JOSE' || primerNombre === 'MARIA')) {
+    primerNombre = nombres[1];
+  }
+  const letra4 = primerNombre.charAt(0) || 'X';
+
+  let prefijo = `${letra1}${letra2}${letra3}${letra4}`;
+  
+  // Filtro oficial contra palabras altisonantes
+  const malas = ['BACA','BAKA','BUEI','BUEY','CACA','CACO','CAGA','CAGO','CAKA','CAKO','COGE','COGI','COJA','COJE','COJI','COJO','COLA','CULO','FALO','FETO','GETA','GUEI','GUEY','JETA','JOTO','KACA','KACO','KAGA','KAGO','KAKA','KAKO','KOGE','KOGI','KOJA','KOJE','KOJI','KOJO','KOLA','KULO','LILO','LOCA','LOCO','LOKA','LOKO','MAME','MAMO','MEAR','MEAS','MEON','MIAR','MION','MOCO','MOKO','MUTE','NACA','NACO','PEDA','PEDO','PENE','PIPI','PITO','POPO','PUTA','PUTO','QULO','RATA','ROBA','ROBE','ROBO','RUIN','SENO','TETA','VACA','VAGA','VAGO','VAKA','VUEI','VUEY','WUEI','WUEY'];
+  if (malas.includes(prefijo)) prefijo = prefijo.charAt(0) + 'X' + prefijo.substring(2);
+
+  return prefijo;
+};
 export default function ManualRegister({ isOpen, onClose, alumnoAEditar }) {
   const [careers, setCareers] = useState([]);
   const [schools, setSchools] = useState([]);
@@ -119,21 +157,36 @@ export default function ManualRegister({ isOpen, onClose, alumnoAEditar }) {
             setDatosOriginales(dataCargada);
             
             //  REGEX ESTRICTO PARA CORREOS EN MÉXICO
+// 🌟 REGEX ESTRICTO PARA CORREOS EN MÉXICO
             const curpRegex = /^[A-Z]{4}\d{6}[HM][A-Z]{5}[A-Z0-9]\d$/i;
             const emailRegex = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.(com|mx|org|net|edu|gob)$/i;
 
-            const curpValida = curpRegex.test(student.curp);
+            // 🌟 NUEVO: EVALUACIÓN INSTANTÁNEA AL ABRIR EL MODAL DE EDICIÓN
+            let mensajeErrorCurp = '';
+            let exitoCurp = false;
+
+            if (!curpRegex.test(student.curp)) {
+              mensajeErrorCurp = '❌ La CURP importada es inválida. Debe corregirse.';
+            } else {
+              const prefijoEsperado = calcularPrefijoCURP(student.nombre, student.apellido_paterno, student.apellido_materno);
+              if (prefijoEsperado && student.curp.substring(0, 4) !== prefijoEsperado) {
+                mensajeErrorCurp = `❌ La CURP no coincide con el nombre (Debería iniciar con ${prefijoEsperado}).`;
+              } else {
+                exitoCurp = true;
+              }
+            }
+
             const emailValido = emailRegex.test(student.email_personal);
             const promedioValido = promedioValor !== '';
 
             setValidacionExitosa({
-              curp: false,
-              email: false,
+              curp: exitoCurp,
+              email: emailValido,
               promedio: promedioValido
             });
 
             setErroresEnVivo({
-              curp: curpValida ? '' : '❌ La CURP importada es inválida. Debe corregirse.',
+              curp: mensajeErrorCurp,
               email: emailValido ? '' : '❌ El correo importado tiene un formato dudoso.',
               promedio: promedioValido ? '' : '❌ Falta el promedio.'
             });
@@ -229,18 +282,28 @@ export default function ManualRegister({ isOpen, onClose, alumnoAEditar }) {
 
     setFormData(prev => ({ ...prev, [name]: finalValue }));
 
-    if (name === 'curp') {
+   if (name === 'curp') {
       const curpRegex = /^[A-Z]{4}\d{6}[HM][A-Z]{5}[A-Z0-9]\d$/i;
       if (finalValue.length === 18) {
         if (!curpRegex.test(finalValue)) {
           setErroresEnVivo(prev => ({ ...prev, curp: '❌ El formato de la CURP es incorrecto.' }));
           setValidacionExitosa(prev => ({ ...prev, curp: false }));
-        } else if (alumnoAEditar && finalValue === alumnoAEditar.curp) {
-          setErroresEnVivo(prev => ({ ...prev, curp: '' }));
-          setValidacionExitosa(prev => ({ ...prev, curp: true }));
         } else {
-          setErroresEnVivo(prev => ({ ...prev, curp: '' }));
-          setValidacionExitosa(prev => ({ ...prev, curp: false }));
+          // 🌟 AHORA LO EVALÚA EN VIVO MIENTRAS TECLEA EL ÚLTIMO CARÁCTER
+          const prefijoEsperado = formData.nombre && formData.apellido_paterno 
+            ? calcularPrefijoCURP(formData.nombre, formData.apellido_paterno, formData.apellido_materno) 
+            : null;
+            
+          if (prefijoEsperado && finalValue.substring(0, 4) !== prefijoEsperado) {
+            setErroresEnVivo(prev => ({ ...prev, curp: `❌ La CURP no coincide con el nombre (Debería iniciar con ${prefijoEsperado}).` }));
+            setValidacionExitosa(prev => ({ ...prev, curp: false }));
+          } else if (alumnoAEditar && finalValue === alumnoAEditar.curp) {
+            setErroresEnVivo(prev => ({ ...prev, curp: '' }));
+            setValidacionExitosa(prev => ({ ...prev, curp: true }));
+          } else {
+            setErroresEnVivo(prev => ({ ...prev, curp: '' }));
+            setValidacionExitosa(prev => ({ ...prev, curp: false }));
+          }
         }
       } else {
         setErroresEnVivo(prev => ({ ...prev, curp: '' }));
@@ -344,7 +407,7 @@ export default function ManualRegister({ isOpen, onClose, alumnoAEditar }) {
     }
   };
 
-  const handleSubmit = async (e) => {
+ const handleSubmit = async (e) => {
     e.preventDefault();
 
     const curpRegex = /^[A-Z]{4}\d{6}[HM][A-Z]{5}[A-Z0-9]\d$/i;
@@ -354,8 +417,12 @@ export default function ManualRegister({ isOpen, onClose, alumnoAEditar }) {
     const emailRegex = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.(com|mx|org|net|edu|gob)$/i;
     if (!emailRegex.test(formData.email_personal)) return Swal.fire('Correo Inválido', 'El Correo Personal contiene un error de escritura (.comd, etc). Por favor corrígelo.', 'error');
 
-    if (formData.nombre.trim() === '' || formData.apellido_paterno.trim() === '' || formData.calle.trim() === '' || formData.numero_domicilio.trim() === '') {
-      return Swal.fire('Campos Vacíos', 'Existen campos vacíos. Por favor complétalos correctamente.', 'error');
+    // 🌟 NUEVO: BLINDAJE FINAL DE CONCORDANCIA CURP VS NOMBRE
+    if (formData.nombre && formData.apellido_paterno && formData.curp.length === 18) {
+      const prefijoEsperado = calcularPrefijoCURP(formData.nombre, formData.apellido_paterno, formData.apellido_materno);
+      if (prefijoEsperado && formData.curp.substring(0, 4) !== prefijoEsperado) {
+        return Swal.fire('Inconsistencia en Datos', `Las primeras 4 letras de la CURP no coinciden con el nombre del alumno. Deberían ser ${prefijoEsperado}.`, 'error');
+      }
     }
 
     if (erroresEnVivo.curp || erroresEnVivo.email || erroresEnVivo.promedio) {
