@@ -9,7 +9,10 @@ import {
   ChevronRight,
   Loader2,
   ShieldCheck,
-  ShieldAlert
+  ShieldAlert,
+  Eye,
+  Mail,
+  User
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import client from '../../lib/axios'; 
@@ -31,6 +34,9 @@ const ListadoAdministradores = () => {
 
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [adminAEditar, setAdminAEditar] = useState(null);
+
+  const [isModalDetalleOpen, setIsModalDetalleOpen] = useState(false);
+  const [adminDetalle, setAdminDetalle] = useState(null);
 
   const fetchAdministradores = async () => {
     try {
@@ -97,6 +103,11 @@ const ListadoAdministradores = () => {
   const handleEditarAdmin = (admin) => {
     setAdminAEditar(admin);
     setIsModalOpen(true);
+  };
+
+  const handleVerDetalles = (admin) => {
+    setAdminDetalle(admin);
+    setIsModalDetalleOpen(true);
   };
 
   const handleCerrarModal = () => {
@@ -191,7 +202,6 @@ const ListadoAdministradores = () => {
                 <tr className="bg-white border-b border-gray-200 text-xs uppercase text-gray-500 font-bold tracking-wider">
                   <th className="p-4 pl-6">ID Empleado</th>
                   <th className="p-4">Nombre Completo</th>
-                  <th className="p-4">Correo Institucional</th>
                   <th className="p-4 text-center">Estatus</th>
                   <th className="p-4 text-center">Acciones</th>
                 </tr>
@@ -208,14 +218,18 @@ const ListadoAdministradores = () => {
                           {admin.nombre_completo}
                         </span>
                       </td>
-                      <td className="p-4 text-sm text-gray-600 font-medium">
-                        {admin.email_institucional}
-                      </td>
                       <td className="p-4 text-center">
                         {renderEstatus(admin.estatus)}
                       </td>
                       <td className="p-4">
-                        <div className="flex items-center justify-center">
+                        <div className="flex items-center justify-center gap-2">
+                          <button 
+                            onClick={() => handleVerDetalles(admin)} 
+                            className="p-1.5 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors border border-transparent hover:border-indigo-100" 
+                            title="Ver Detalles"
+                          >
+                            <Eye className="w-4 h-4" />
+                          </button>
                           <button 
                             onClick={() => handleEditarAdmin(admin)} 
                             className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors border border-transparent hover:border-blue-100" 
@@ -229,7 +243,7 @@ const ListadoAdministradores = () => {
                   ))
                 ) : (
                   <tr>
-                    <td colSpan="5" className="p-16 text-center text-gray-500">
+                    <td colSpan="4" className="p-16 text-center text-gray-500">
                       <div className="flex flex-col items-center">
                         <ShieldAlert className="w-12 h-12 text-gray-300 mb-3" />
                         <p className="font-semibold text-gray-700">No se encontraron administradores</p>
@@ -261,6 +275,58 @@ const ListadoAdministradores = () => {
           </div>
         )}
       </div>
+
+      {/* --- MODAL DE DETALLES --- */}
+      {isModalDetalleOpen && adminDetalle && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full overflow-hidden relative">
+            <button 
+              onClick={() => setIsModalDetalleOpen(false)} 
+              className="absolute top-4 right-4 text-white hover:text-gray-200 focus:outline-none"
+            >
+              <X className="w-5 h-5" />
+            </button>
+            <div className="bg-[#1A237E] p-6 text-white text-center">
+              <div className="bg-indigo-500/30 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-3 border-2 border-indigo-300/50">
+                <User className="w-8 h-8 text-white" />
+              </div>
+              <h2 className="text-lg font-bold tracking-wide">{adminDetalle.nombre_completo}</h2>
+              <p className="text-indigo-200 text-sm mt-1 font-mono">{adminDetalle.numero_empleado}</p>
+            </div>
+            <div className="p-6 space-y-4">
+              <div className="flex items-start gap-3 p-3 bg-gray-50 rounded-lg border border-gray-100">
+                <Mail className="w-5 h-5 text-gray-400 mt-0.5" />
+                <div>
+                  <p className="text-xs font-bold text-gray-500 uppercase tracking-wider">Correo Institucional</p>
+                  <p className="text-sm font-medium text-gray-800 break-all">
+                    {adminDetalle.email_institucional ? adminDetalle.email_institucional : <span className="text-gray-400 italic">No registrado</span>}
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-start gap-3 p-3 bg-gray-50 rounded-lg border border-gray-100">
+                <Mail className="w-5 h-5 text-gray-400 mt-0.5" />
+                <div>
+                  <p className="text-xs font-bold text-gray-500 uppercase tracking-wider">Correo Personal</p>
+                  <p className="text-sm font-medium text-gray-800 break-all">
+                    {adminDetalle.email_personal ? adminDetalle.email_personal : <span className="text-gray-400 italic">No registrado</span>}
+                  </p>
+                </div>
+              </div>
+              <div className="flex justify-center pt-2">
+                {renderEstatus(adminDetalle.estatus)}
+              </div>
+            </div>
+            <div className="p-4 border-t border-gray-100 bg-gray-50 flex justify-end">
+              <button 
+                onClick={() => setIsModalDetalleOpen(false)}
+                className="px-5 py-2 bg-gray-200 hover:bg-gray-300 text-gray-700 text-sm font-bold rounded-lg transition-colors"
+              >
+                Cerrar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* --- MODAL DE ALTA/EDICIÓN --- */}
       <AdminRegister 

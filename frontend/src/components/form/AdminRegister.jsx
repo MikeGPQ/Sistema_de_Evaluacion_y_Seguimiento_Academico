@@ -5,29 +5,36 @@ import Swal from 'sweetalert2';
 
 export default function AdminRegister({ isOpen, onClose, adminAEditar }) {
   const [isLoading, setIsLoading] = useState(false);
-  const [erroresEnVivo, setErroresEnVivo] = useState({ email: '' });
-  const [validacionExitosa, setValidacionExitosa] = useState({ email: false });
+  const [erroresEnVivo, setErroresEnVivo] = useState({ email_personal: '' });
+  const [validacionExitosa, setValidacionExitosa] = useState({ email_personal: false });
 
   const [formData, setFormData] = useState({
-    numero_empleado: '', 
+    numero_empleado: '',
     nombre: '',
     apellido_paterno: '',
     apellido_materno: '',
+    email_personal: '',
     email_institucional: ''
   });
 
   useEffect(() => {
     if (isOpen) {
-      setErroresEnVivo({ email: '' });
-      setValidacionExitosa({ email: false });
+      setErroresEnVivo({ email_personal: '' });
+      setValidacionExitosa({ email_personal: false });
       
       if (adminAEditar) {
+        let email_inst_limpio = adminAEditar.email_institucional || '';
+        if (email_inst_limpio.includes('@')) {
+            email_inst_limpio = email_inst_limpio.split('@')[0];
+        }
+
         setFormData({
           numero_empleado: adminAEditar.numero_empleado,
           nombre: adminAEditar.nombre || '',
           apellido_paterno: adminAEditar.apellido_paterno || '',
           apellido_materno: adminAEditar.apellido_materno || '',
-          email_institucional: adminAEditar.email_institucional || ''
+          email_personal: adminAEditar.email_personal || '',
+          email_institucional: email_inst_limpio
         });
       } else {
         setFormData({
@@ -35,6 +42,7 @@ export default function AdminRegister({ isOpen, onClose, adminAEditar }) {
           nombre: '',
           apellido_paterno: '',
           apellido_materno: '',
+          email_personal: '',
           email_institucional: ''
         });
       }
@@ -54,23 +62,27 @@ export default function AdminRegister({ isOpen, onClose, adminAEditar }) {
       finalValue = finalValue.replace(/[^a-zA-ZáéíóúÁÉÍÓÚñÑ\s]/g, '');
     }
 
-    if (name === 'email_institucional') {
+    if (name === 'email_personal') {
       finalValue = finalValue.replace(/\s/g, '').toLowerCase();
+    }
+
+    if (name === 'email_institucional') {
+      finalValue = finalValue.replace(/[\s@]/g, '').toLowerCase();
     }
 
     setFormData(prev => ({ ...prev, [name]: finalValue }));
 
-    if (name === 'email_institucional') {
+    if (name === 'email_personal') {
       const emailRegex = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/i;
       if (finalValue.length === 0) {
-        setErroresEnVivo(prev => ({ ...prev, email: '' }));
-        setValidacionExitosa(prev => ({ ...prev, email: false }));
+        setErroresEnVivo(prev => ({ ...prev, email_personal: '' }));
+        setValidacionExitosa(prev => ({ ...prev, email_personal: false }));
       } else if (emailRegex.test(finalValue)) {
-        setErroresEnVivo(prev => ({ ...prev, email: '' }));
-        setValidacionExitosa(prev => ({ ...prev, email: true }));
+        setErroresEnVivo(prev => ({ ...prev, email_personal: '' }));
+        setValidacionExitosa(prev => ({ ...prev, email_personal: true }));
       } else {
-        setErroresEnVivo(prev => ({ ...prev, email: '❌ Formato de correo inválido' }));
-        setValidacionExitosa(prev => ({ ...prev, email: false }));
+        setErroresEnVivo(prev => ({ ...prev, email_personal: '❌ Formato de correo inválido' }));
+        setValidacionExitosa(prev => ({ ...prev, email_personal: false }));
       }
     }
   };
@@ -78,26 +90,36 @@ export default function AdminRegister({ isOpen, onClose, adminAEditar }) {
   const handleSubmit = async (e) => {
     e.preventDefault();
 
-    if (!formData.nombre || !formData.apellido_paterno || !formData.email_institucional) {
+    if (!formData.nombre || !formData.apellido_paterno || !formData.email_personal) {
       return Swal.fire('Campos Incompletos', 'Por favor complete todos los campos obligatorios (*).', 'warning');
     }
 
-    if (erroresEnVivo.email) {
+    if (erroresEnVivo.email_personal) {
       return Swal.fire('Formulario Inválido', 'Por favor corrija los errores marcados en rojo.', 'error');
     }
 
     setIsLoading(true);
 
+    let finalEmailInstitucional = null;
+    if (formData.email_institucional.trim() !== "") {
+      finalEmailInstitucional = `${formData.email_institucional.trim()}@red.unid.mx`;
+    }
+
     try {
       if (adminAEditar) {
         Swal.fire({ title: 'Actualizado', text: 'Función de actualización en desarrollo', icon: 'info' });
       } else {
-        const { numero_empleado, ...datosAEnviar } = formData;
+        const { numero_empleado, email_institucional, ...restoDatos } = formData;
         
-        const res = await client.post('/administradores/register', datosAEnviar);
+        const payload = {
+            ...restoDatos,
+            email_institucional: finalEmailInstitucional
+        };
+
+        const res = await client.post('/administradores/register', payload);
         Swal.fire({ 
           title: 'Administrador Registrado', 
-          text: `Se ha registrado el empleado con el ID: ${res.data.numero_empleado}. Las credenciales han sido enviadas a su correo.`, 
+          text: `Se ha registrado el empleado con el ID: ${res.data.numero_empleado}. Las credenciales han sido enviadas.`, 
           icon: 'success', 
           confirmButtonColor: '#1A237E' 
         }).then(() => onClose());
@@ -118,9 +140,6 @@ export default function AdminRegister({ isOpen, onClose, adminAEditar }) {
         <h2 className="text-2xl font-bold text-white">
             {adminAEditar ? 'Edición de Administrador' : 'Alta de Administrador'}
         </h2>
-        <p className="text-blue-200 text-sm mt-1">
-            {adminAEditar ? 'Modifique la información del perfil administrativo.' : 'Registre un nuevo administrador en el sistema con acceso privilegiado.'}
-        </p>
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-6 bg-slate-50 p-2 md:p-6 rounded-lg">
@@ -154,19 +173,33 @@ export default function AdminRegister({ isOpen, onClose, adminAEditar }) {
               <input name="apellido_materno" value={formData.apellido_materno} maxLength={100} onChange={handleChange} className="w-full border border-gray-300 rounded-md p-2.5 text-sm focus:border-[#1A237E] focus:ring-1 focus:ring-[#1A237E] outline-none" />
             </div>
 
-            <div className="md:col-span-2 mt-2">
-              <label className="block text-xs font-bold text-gray-600 mb-1">Correo Institucional <span className="text-red-500">*</span></label>
+            <div className="mt-2">
+              <label className="block text-xs font-bold text-gray-600 mb-1">Correo Personal <span className="text-red-500">*</span></label>
               <input 
                 type="email" 
-                name="email_institucional" 
-                value={formData.email_institucional} 
+                name="email_personal" 
+                value={formData.email_personal} 
                 onChange={handleChange} 
-                onKeyDown={(e) => e.key === ' ' && e.preventDefault()}
                 maxLength={150}
-                className={`w-full border rounded-md p-2.5 text-sm lowercase outline-none transition-all ${erroresEnVivo.email ? 'border-red-500 bg-red-50 focus:ring-red-500 text-red-700' : validacionExitosa.email ? 'border-green-500 bg-green-50 focus:ring-green-500 text-green-700' : 'border-gray-300 focus:border-[#1A237E]'}`} 
+                className={`w-full border rounded-md p-2.5 text-sm lowercase outline-none transition-all ${erroresEnVivo.email_personal ? 'border-red-500 bg-red-50 focus:ring-red-500 text-red-700' : validacionExitosa.email_personal ? 'border-green-500 bg-green-50 focus:ring-green-500 text-green-700' : 'border-gray-300 focus:border-[#1A237E]'}`} 
                 required 
               />
-              {erroresEnVivo.email && <p className="text-xs text-red-600 mt-1.5 font-bold">{erroresEnVivo.email}</p>}
+              {erroresEnVivo.email_personal && <p className="text-xs text-red-600 mt-1.5 font-bold">{erroresEnVivo.email_personal}</p>}
+            </div>
+
+            <div className="mt-2">
+              <label className="block text-xs font-bold text-gray-600 mb-1">Correo Institucional (Opcional)</label>
+              <div className="flex">
+                <input 
+                  type="text" 
+                  name="email_institucional" 
+                  value={formData.email_institucional} 
+                  onChange={handleChange} 
+                  maxLength={50}
+                  className="w-full border border-gray-300 rounded-l-md p-2.5 text-sm lowercase focus:border-[#1A237E] outline-none" 
+                />
+                <span className="inline-flex items-center px-3 rounded-r-md border border-l-0 border-gray-300 bg-gray-50 text-gray-500 text-sm">@red.unid.mx</span>
+              </div>
             </div>
           </div>
         </div>
@@ -179,8 +212,8 @@ export default function AdminRegister({ isOpen, onClose, adminAEditar }) {
             </button>
             <button 
               type="submit" 
-              disabled={isLoading || !!erroresEnVivo.email} 
-              className={`flex items-center px-6 py-2 rounded-md text-sm font-bold text-white shadow-sm transition-all ${(isLoading || !!erroresEnVivo.email) ? 'bg-indigo-300 cursor-not-allowed' : 'bg-[#1A237E] hover:bg-indigo-900'}`}
+              disabled={isLoading || !!erroresEnVivo.email_personal} 
+              className={`flex items-center px-6 py-2 rounded-md text-sm font-bold text-white shadow-sm transition-all ${(isLoading || !!erroresEnVivo.email_personal) ? 'bg-indigo-300 cursor-not-allowed' : 'bg-[#1A237E] hover:bg-indigo-900'}`}
             >
               {isLoading ? 'Procesando...' : (adminAEditar ? 'Actualizar' : 'Guardar Administrador')}
             </button>
