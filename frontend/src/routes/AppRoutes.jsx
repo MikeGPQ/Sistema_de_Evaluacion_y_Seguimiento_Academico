@@ -10,6 +10,7 @@ import ChangePassword from "../pages/ChangePassword";
 import ImportarAlumnos from "../pages/Alumnos/ImportarAlumnos";
 import ListadoAlumnos from "../pages/Alumnos/ListadoAlumnos";
 import CambiarEstatusAlumno from "../pages/Alumnos/CambiarEstatusAlumno";
+import GruposYHorarios from "../pages/Grupos y Horarios/GrupoyHorarios";
 
 // Layouts
 import AdminLayout from "../layouts/AdminLayout";
@@ -40,7 +41,7 @@ const ProtectedRoute = ({ children, allowedRole }) => {
   if (loading) return null;
   if (!isAuthenticated) return <Navigate to="/login" replace />;
 
-  // ✅ HU-31: forzar cambio si es temporal
+  //  HU-31: forzar cambio si es temporal
   if (user?.is_temp_password) return <Navigate to="/change-password?forced=1" replace />;
 
   if (allowedRole && user?.role?.name !== allowedRole) {
@@ -96,9 +97,9 @@ const AppRoutes = () => {
           <Route path="/alumnos/listado" element={<ListadoAlumnos />} />
           <Route path="/alumnos/importar" element={<ImportarAlumnos />} />
           <Route path="/alumnos/cambiar-estatus" element={<CambiarEstatusAlumno />} />
+          <Route path="/horarios" element={<GruposYHorarios />} />
 
           <Route path="/docentes" element={<EnConstruccion modulo="Sincronización Docente" />} />
-          <Route path="/horarios" element={<EnConstruccion modulo="Grupos y Horarios" />} />
           <Route path="/reportes" element={<EnConstruccion modulo="Boletas y Listas" />} />
         </Route>
 
