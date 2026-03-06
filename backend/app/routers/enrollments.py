@@ -11,7 +11,7 @@ router = APIRouter(prefix="/asignacion", tags=["Asignación de Horarios"])
 
 @router.get("/{matricula}/disponibles")
 def obtener_grupos_disponibles(matricula: str, db: Session = Depends(get_db)):
-    # 1. BUSCAMOS AL ALUMNO REAL
+    #  BUSCAMOS AL ALUMNO REAL
     alumno = db.query(Student).filter(Student.matricula == matricula).first()
     if not alumno:
         raise HTTPException(status_code=404, detail="No existe un alumno con esta matrícula en el sistema.")
@@ -21,9 +21,9 @@ def obtener_grupos_disponibles(matricula: str, db: Session = Depends(get_db)):
     nombre_completo = f"{alumno.nombre} {alumno.apellido_paterno} {alumno.apellido_materno}"
     bloquear_grupo_base = alumno.cuatrimestre_actual > 1
 
-    # =========================================================
-    # ¡NUEVO!: LEEMOS LAS INSCRIPCIONES REALES DE LA BASE DE DATOS
-    # =========================================================
+    
+    # LEEMOS LAS INSCRIPCIONES REALES DE LA BASE DE DATOS
+    
     inscripciones_db = db.query(StudentEnrollment).filter(
         StudentEnrollment.student_matricula == matricula,
         StudentEnrollment.period_name == "2026-1"
@@ -42,7 +42,7 @@ def obtener_grupos_disponibles(matricula: str, db: Session = Depends(get_db)):
         # Mandamos los IDs que encontramos en la BD al Frontend
         "grupos_inscritos": grupos_inscritos, 
         
-        # 2. MOCK DEL CATÁLOGO (Se mantiene igual)
+        # MOCK DEL CATÁLOGO 
         "materias_regulares": [
             {
                 "subject_id": 201,
@@ -80,13 +80,13 @@ def guardar_carga_academica(matricula: str, request: GuardarCargaRequest, db: Se
     grupos_seleccionados = [m.group_id for m in request.materias]
 
     # Validaciones mockeadas usando los nuevos IDs numéricos
-    if 2 in grupos_seleccionados: # 2 es el ID falso del grupo 2B
+    if 2 in grupos_seleccionados: #  2 es el ID falso del grupo 2B
         raise HTTPException(status_code=400, detail="El grupo '2B' para Programación ya no tiene cupo disponible.")
             
     if 1 in grupos_seleccionados and 4 in grupos_seleccionados: # 1 y 4 chocan en Lunes a las 08:00
         raise HTTPException(status_code=400, detail="Choque de horario detectado: 'POO' (Lunes 08:00) choca con 'Álgebra Lineal' (Lunes 08:00).")
 
-    # 3. GUARDADO REAL EN LA BASE DE DATOS
+    #  GUARDADO REAL EN LA BASE DE DATOS
     try:
         # Borramos carga anterior si existe (evitar duplicados)
         db.query(StudentEnrollment).filter(
@@ -107,11 +107,25 @@ def guardar_carga_academica(matricula: str, request: GuardarCargaRequest, db: Se
         db.commit()
     except Exception as e:
         db.rollback()
-        # Si la tabla academic_groups está vacía, dará error de ForeignKey. 
-        # Si es así, coméntame y hacemos un truco extra.
         raise HTTPException(status_code=500, detail=f"Error en BD: {str(e)}")
         
     return {
         "message": "¡Carga académica guardada exitosamente en la Base de Datos!",
         "materias_inscritas": len(request.materias)
     }
+ #Enpoint para buscar predictivamente al alumno al escribir su matricula
+@router.get("/buscar-alumno")
+def buscar_alumno_autocomplete(q: str, db: Session = Depends(get_db)):
+    if not q or len(q) < 3: 
+        return []
+    
+    
+    alumnos = db.query(Student).filter(Student.matricula.like(f"{q}%")).limit(5).all()
+    
+    resultados = []
+    for a in alumnos:
+        resultados.append({
+            "matricula": a.matricula,
+            "nombre": f"{a.nombre} {a.apellido_paterno} {a.apellido_materno}".strip()
+        })
+    return resultados

@@ -21,16 +21,20 @@ const GruposYHorarios = () => {
   // Estado de la selección del usuario
   const [seleccion, setSeleccion] = useState({});
   const [inscripcionesOriginales, setInscripcionesOriginales] = useState([]);
+  const [sugerencias, setSugerencias] = useState([]);
+  const [mostrarSugerencias, setMostrarSugerencias] = useState(false);
 
-  const buscarAlumno = async () => {
-    if (!matriculaBuscada) return;
+  const buscarAlumno = async (matriculaAUsar = matriculaBuscada) => {
+    if (!matriculaAUsar) return;
     setCargando(true);
     setAlumnoInfo(null);
     setSeleccion({});
-    setInscripcionesOriginales([]); // reseteamos la inscripciones originales para evitar conflictos por si llegamos a buscar a otro alumno
+    setInscripcionesOriginales([]); 
+    setMostrarSugerencias(false); 
 
     try {
-      const response = await client.get(`/asignacion/${matriculaBuscada}/disponibles`);
+      
+      const response = await client.get(`/asignacion/${matriculaAUsar}/disponibles`);
       const data = response.data;
       
       setAlumnoInfo({
@@ -72,6 +76,30 @@ const GruposYHorarios = () => {
     } finally {
       setCargando(false);
     }
+  };
+
+  const handleCambioInput = async (e) => {
+    const valor = e.target.value.replace(/\D/g, ''); // Solo permite números
+    setMatriculaBuscada(valor);
+
+    // Solo empezamos a sugerir a partir del tercer número y nos detenemos al llegar a 8
+    if (valor.length >= 3 && valor.length < 8) {
+      try {
+        const res = await client.get(`/asignacion/buscar-alumno?q=${valor}`);
+        setSugerencias(res.data);
+        setMostrarSugerencias(true);
+      } catch (error) {
+        setSugerencias([]);
+      }
+    } else {
+      setMostrarSugerencias(false);
+    }
+  };
+
+  const handleSeleccionarSugerencia = (matriculaElegida) => {
+    setMatriculaBuscada(matriculaElegida);
+    setMostrarSugerencias(false); 
+    buscarAlumno(matriculaElegida); 
   };
 
   const handleSeleccionGrupo = async (subjectId, groupId, isRetake) => {
@@ -176,7 +204,7 @@ const GruposYHorarios = () => {
               className={`flex items-center justify-between p-2.5 rounded-md border cursor-pointer transition-all ${isLleno ? 'bg-gray-50 border-gray-200 opacity-60 cursor-not-allowed' : isSelected ? 'bg-blue-50 border-[#1A237E] ring-1 ring-[#1A237E]' : 'bg-white border-gray-300 hover:bg-gray-50'}`}
             >
               <div className="flex items-center gap-3">
-                {/* Hacemos el input "readOnly" y bloqueamos sus eventos para que el div controle los clics */}
+                
                 <input 
                   type="radio" 
                   checked={isSelected}
@@ -241,14 +269,32 @@ const GruposYHorarios = () => {
                   type="text" 
                   value={matriculaBuscada}
                   maxLength={8} /* bloque cuando excedes 8 caracteres */
-                  onChange={(e) => setMatriculaBuscada(e.target.value.replace(/\D/g, ''))} /* El borra autamaticamente letras, simbolos y espacios */
-                  placeholder="Ej. 20240001" 
+                  onChange={handleCambioInput} /* Llamamos a la función que hace la búsqueda mientras escribes */
+                  onBlur={() => setTimeout(() => setMostrarSugerencias(false), 200)} /*  Oculta la lista si das clic fuera de la caja */
+                  placeholder="Ej. 20240001 (Escribe al menos 3 números...)" 
                   className="block w-full pl-10 pr-3 py-2.5 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-[#1A237E] font-mono"
                 />
+                
+                {/* ¡NUEVO!: LISTA DESPLEGABLE DE SUGERENCIAS */}
+                {mostrarSugerencias && sugerencias.length > 0 && (
+                  <ul className="absolute z-50 w-full bg-white border border-gray-200 mt-1 rounded-md shadow-xl max-h-60 overflow-auto divide-y divide-gray-100">
+                    {sugerencias.map(s => (
+                      <li 
+                        key={s.matricula}
+                        onMouseDown={() => handleSeleccionarSugerencia(s.matricula)} // usamos onmousedown para que se ejecute antes del onblur
+                        className="px-4 py-3 hover:bg-blue-50 cursor-pointer flex justify-between items-center transition-colors"
+                      >
+                        <span className="font-bold text-[#1A237E] font-mono">{s.matricula}</span>
+                        <span className="text-xs text-gray-600 truncate ml-3 uppercase font-medium">{s.nombre}</span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+                
               </div>
             </div>
             <button 
-              onClick={buscarAlumno}
+              onClick={() => buscarAlumno()}
               disabled={cargando || matriculaBuscada.length !== 8} /* este boton se habilita cuando solo son 8 digitos */
               className="bg-[#1A237E] text-white px-6 py-2.5 rounded-md text-sm font-bold hover:bg-[#283593] disabled:opacity-50 transition-colors shadow-sm whitespace-nowrap"
             >
@@ -256,11 +302,11 @@ const GruposYHorarios = () => {
             </button>
           </div>
 
-          {/* ÁREA DE TRABAJO */}
+         
           {alumnoInfo && (
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 animate-in fade-in duration-300">
               
-              {/* COLUMNA IZQUIERDA: MATERIAS DISPONIBLES */}
+              
               <div className="lg:col-span-8 space-y-6">
                 
                 {/* INFO DEL ALUMNO */}
