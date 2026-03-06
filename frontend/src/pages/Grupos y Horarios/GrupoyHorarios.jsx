@@ -33,7 +33,6 @@ const GruposYHorarios = () => {
     setMostrarSugerencias(false); 
 
     try {
-      
       const response = await client.get(`/asignacion/${matriculaAUsar}/disponibles`);
       const data = response.data;
       
@@ -72,12 +71,25 @@ const GruposYHorarios = () => {
       setInscripcionesOriginales(gruposQueYaTenia);
 
     } catch (error) {
-      Swal.fire({ icon: 'error', title: 'No encontrado', text: 'No se encontraron materias disponibles para esta matrícula.' });
+      
+      // Extraemos el mensaje de FastAPI. Si no hay, ponemos el genérico por defecto.
+      const mensajeBackend = error.response?.data?.detail || 'No se encontraron materias disponibles para esta matrícula.';
+      const esBloqueo = error.response?.status === 403; 
+
+      Swal.fire({ 
+        icon: esBloqueo ? 'warning' : 'error', 
+        title: esBloqueo ? 'Acción Bloqueada' : 'No encontrado', 
+        text: mensajeBackend,
+        confirmButtonColor: '#1A237E'
+      });
+      
+      // Limpiamos el input para que pueda buscar a otro alumno fácilmente
+      if (esBloqueo) setMatriculaBuscada(''); 
+
     } finally {
       setCargando(false);
     }
   };
-
   const handleCambioInput = async (e) => {
     const valor = e.target.value.replace(/\D/g, ''); // Solo permite números
     setMatriculaBuscada(valor);
@@ -275,7 +287,7 @@ const GruposYHorarios = () => {
                   className="block w-full pl-10 pr-3 py-2.5 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-[#1A237E] font-mono"
                 />
                 
-                {/* ¡NUEVO!: LISTA DESPLEGABLE DE SUGERENCIAS */}
+                {/*LISTA DESPLEGABLE DE SUGERENCIAS */}
                 {mostrarSugerencias && sugerencias.length > 0 && (
                   <ul className="absolute z-50 w-full bg-white border border-gray-200 mt-1 rounded-md shadow-xl max-h-60 overflow-auto divide-y divide-gray-100">
                     {sugerencias.map(s => (

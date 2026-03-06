@@ -13,3 +13,4 @@ class StudentEnrollment(Base):
     
     is_retake = Column(Boolean, default=False)
     enrolled_at = Column(TIMESTAMP, server_default=text("CURRENT_TIMESTAMP"))
+    
