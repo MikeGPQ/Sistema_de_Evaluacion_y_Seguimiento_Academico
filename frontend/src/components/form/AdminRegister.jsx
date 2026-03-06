@@ -1,0 +1,192 @@
+import { useState, useEffect } from 'react';
+import client from '../../lib/axios';
+import Modal from '../ui/Modal';
+import Swal from 'sweetalert2';
+
+export default function AdminRegister({ isOpen, onClose, adminAEditar }) {
+  const [isLoading, setIsLoading] = useState(false);
+  const [erroresEnVivo, setErroresEnVivo] = useState({ email: '' });
+  const [validacionExitosa, setValidacionExitosa] = useState({ email: false });
+
+  const [formData, setFormData] = useState({
+    numero_empleado: '', 
+    nombre: '',
+    apellido_paterno: '',
+    apellido_materno: '',
+    email_institucional: ''
+  });
+
+  useEffect(() => {
+    if (isOpen) {
+      setErroresEnVivo({ email: '' });
+      setValidacionExitosa({ email: false });
+      
+      if (adminAEditar) {
+        setFormData({
+          numero_empleado: adminAEditar.numero_empleado,
+          nombre: adminAEditar.nombre || '',
+          apellido_paterno: adminAEditar.apellido_paterno || '',
+          apellido_materno: adminAEditar.apellido_materno || '',
+          email_institucional: adminAEditar.email_institucional || ''
+        });
+      } else {
+        setFormData({
+          numero_empleado: '',
+          nombre: '',
+          apellido_paterno: '',
+          apellido_materno: '',
+          email_institucional: ''
+        });
+      }
+    }
+  }, [isOpen, adminAEditar]);
+
+  const handleChange = (e) => {
+    const { name, value } = e.target;
+    let finalValue = value;
+
+    if (typeof finalValue === 'string') {
+      finalValue = finalValue.replace(/^\s+/, '');
+      finalValue = finalValue.replace(/\s{2,}/g, ' ');
+    }
+
+    if (name === 'nombre' || name === 'apellido_paterno' || name === 'apellido_materno') {
+      finalValue = finalValue.replace(/[^a-zA-ZáéíóúÁÉÍÓÚñÑ\s]/g, '');
+    }
+
+    if (name === 'email_institucional') {
+      finalValue = finalValue.replace(/\s/g, '').toLowerCase();
+    }
+
+    setFormData(prev => ({ ...prev, [name]: finalValue }));
+
+    if (name === 'email_institucional') {
+      const emailRegex = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/i;
+      if (finalValue.length === 0) {
+        setErroresEnVivo(prev => ({ ...prev, email: '' }));
+        setValidacionExitosa(prev => ({ ...prev, email: false }));
+      } else if (emailRegex.test(finalValue)) {
+        setErroresEnVivo(prev => ({ ...prev, email: '' }));
+        setValidacionExitosa(prev => ({ ...prev, email: true }));
+      } else {
+        setErroresEnVivo(prev => ({ ...prev, email: '❌ Formato de correo inválido' }));
+        setValidacionExitosa(prev => ({ ...prev, email: false }));
+      }
+    }
+  };
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+
+    if (!formData.nombre || !formData.apellido_paterno || !formData.email_institucional) {
+      return Swal.fire('Campos Incompletos', 'Por favor complete todos los campos obligatorios (*).', 'warning');
+    }
+
+    if (erroresEnVivo.email) {
+      return Swal.fire('Formulario Inválido', 'Por favor corrija los errores marcados en rojo.', 'error');
+    }
+
+    setIsLoading(true);
+
+    try {
+      if (adminAEditar) {
+        Swal.fire({ title: 'Actualizado', text: 'Función de actualización en desarrollo', icon: 'info' });
+      } else {
+        const { numero_empleado, ...datosAEnviar } = formData;
+        
+        const res = await client.post('/administradores/register', datosAEnviar);
+        Swal.fire({ 
+          title: 'Administrador Registrado', 
+          text: `Se ha registrado el empleado con el ID: ${res.data.numero_empleado}. Las credenciales han sido enviadas a su correo.`, 
+          icon: 'success', 
+          confirmButtonColor: '#1A237E' 
+        }).then(() => onClose());
+      }
+    } catch (error) {
+      Swal.fire('Error', error.response?.data?.detail || "Fallo en la comunicación con el servidor.", 'error');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  return (
+    <Modal isOpen={isOpen} onClose={onClose}>
+      <div className="bg-[#1A237E] p-6 rounded-t-lg -mx-6 -mt-6 mb-6">
+        <button onClick={onClose} className="flex items-center text-blue-200 hover:text-white text-sm mb-3 transition-colors font-medium">
+            Cerrar panel
+        </button>
+        <h2 className="text-2xl font-bold text-white">
+            {adminAEditar ? 'Edición de Administrador' : 'Alta de Administrador'}
+        </h2>
+        <p className="text-blue-200 text-sm mt-1">
+            {adminAEditar ? 'Modifique la información del perfil administrativo.' : 'Registre un nuevo administrador en el sistema con acceso privilegiado.'}
+        </p>
+      </div>
+
+      <form onSubmit={handleSubmit} className="space-y-6 bg-slate-50 p-2 md:p-6 rounded-lg">
+        <div className="bg-white rounded-lg p-6 shadow-sm border border-gray-100">
+          <h4 className="flex items-center text-[#1A237E] font-bold mb-6 text-base">
+            Datos del Empleado
+          </h4>
+          
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+            <div className="md:col-span-2">
+              <label className="block text-xs font-bold text-gray-600 mb-1">ID de Empleado</label>
+              <input 
+                value={adminAEditar ? formData.numero_empleado : "Se genera automáticamente al guardar"} 
+                className="w-full border border-gray-200 rounded-md p-2.5 text-sm text-gray-500 bg-gray-100 outline-none font-bold tracking-wider cursor-not-allowed" 
+                disabled 
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-gray-600 mb-1">Nombre(s) <span className="text-red-500">*</span></label>
+              <input name="nombre" value={formData.nombre} maxLength={100} onChange={handleChange} className="w-full border border-gray-300 rounded-md p-2.5 text-sm focus:border-[#1A237E] focus:ring-1 focus:ring-[#1A237E] outline-none" required />
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-gray-600 mb-1">Apellido Paterno <span className="text-red-500">*</span></label>
+              <input name="apellido_paterno" value={formData.apellido_paterno} maxLength={100} onChange={handleChange} className="w-full border border-gray-300 rounded-md p-2.5 text-sm focus:border-[#1A237E] focus:ring-1 focus:ring-[#1A237E] outline-none" required />
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-gray-600 mb-1">Apellido Materno</label>
+              <input name="apellido_materno" value={formData.apellido_materno} maxLength={100} onChange={handleChange} className="w-full border border-gray-300 rounded-md p-2.5 text-sm focus:border-[#1A237E] focus:ring-1 focus:ring-[#1A237E] outline-none" />
+            </div>
+
+            <div className="md:col-span-2 mt-2">
+              <label className="block text-xs font-bold text-gray-600 mb-1">Correo Institucional <span className="text-red-500">*</span></label>
+              <input 
+                type="email" 
+                name="email_institucional" 
+                value={formData.email_institucional} 
+                onChange={handleChange} 
+                onKeyDown={(e) => e.key === ' ' && e.preventDefault()}
+                maxLength={150}
+                className={`w-full border rounded-md p-2.5 text-sm lowercase outline-none transition-all ${erroresEnVivo.email ? 'border-red-500 bg-red-50 focus:ring-red-500 text-red-700' : validacionExitosa.email ? 'border-green-500 bg-green-50 focus:ring-green-500 text-green-700' : 'border-gray-300 focus:border-[#1A237E]'}`} 
+                required 
+              />
+              {erroresEnVivo.email && <p className="text-xs text-red-600 mt-1.5 font-bold">{erroresEnVivo.email}</p>}
+            </div>
+          </div>
+        </div>
+
+        <div className="flex justify-between items-center pt-4">
+          <span className="text-xs text-red-500">* Campos obligatorios</span>
+          <div className="flex space-x-3">
+            <button type="button" onClick={onClose} disabled={isLoading} className="px-5 py-2 border border-gray-300 rounded-md text-sm font-semibold text-gray-700 bg-white hover:bg-gray-50 transition-colors disabled:opacity-50">
+              Cancelar
+            </button>
+            <button 
+              type="submit" 
+              disabled={isLoading || !!erroresEnVivo.email} 
+              className={`flex items-center px-6 py-2 rounded-md text-sm font-bold text-white shadow-sm transition-all ${(isLoading || !!erroresEnVivo.email) ? 'bg-indigo-300 cursor-not-allowed' : 'bg-[#1A237E] hover:bg-indigo-900'}`}
+            >
+              {isLoading ? 'Procesando...' : (adminAEditar ? 'Actualizar' : 'Guardar Administrador')}
+            </button>
+          </div>
+        </div>
+      </form>
+    </Modal>
+  );
+}

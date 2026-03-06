@@ -12,8 +12,9 @@ import {
   ShieldAlert
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import client from '../../lib/axios'; // Ajusta la ruta según tu estructura
+import client from '../../lib/axios'; 
 import { useAuth } from '../../hooks/AuthContext';
+import AdminRegister from '../../components/form/AdminRegister'; 
 
 const ListadoAdministradores = () => {
   const navigate = useNavigate();
@@ -28,7 +29,6 @@ const ListadoAdministradores = () => {
   const [busquedaAdmin, setBusquedaAdmin] = useState('');
   const [filtroEstatus, setFiltroEstatus] = useState('');
 
- 
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [adminAEditar, setAdminAEditar] = useState(null);
 
@@ -97,6 +97,12 @@ const ListadoAdministradores = () => {
   const handleEditarAdmin = (admin) => {
     setAdminAEditar(admin);
     setIsModalOpen(true);
+  };
+
+  const handleCerrarModal = () => {
+    setIsModalOpen(false);
+    setAdminAEditar(null);
+    fetchAdministradores(); 
   };
 
   const inicio = (pagina - 1) * limite + 1;
@@ -256,6 +262,12 @@ const ListadoAdministradores = () => {
         )}
       </div>
 
+      {/* --- MODAL DE ALTA/EDICIÓN --- */}
+      <AdminRegister 
+        isOpen={isModalOpen} 
+        onClose={handleCerrarModal} 
+        adminAEditar={adminAEditar} 
+      />
     </div>
   );
 };
