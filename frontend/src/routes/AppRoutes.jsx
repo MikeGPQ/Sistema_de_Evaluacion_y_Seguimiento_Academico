@@ -5,6 +5,7 @@ import { Hammer } from "lucide-react";
 // Páginas
 import LoginPage from "../pages/LoginPage";
 import ChangePassword from "../pages/ChangePassword";
+import RecoverPassword from "../pages/RecoverPassword"; // <-- NUEVO COMPONENTE IMPORTADO
 
 // Admin
 import ImportarAlumnos from "../pages/Alumnos/ImportarAlumnos";
@@ -85,10 +86,19 @@ const AppRoutes = () => {
           }
         />
 
-        {/* HU-31 */}
+        {/* --- HU-32: RECUPERACIÓN DE CONTRASEÑA --- */}
+        {/* Ruta pública para solicitar y validar el código por correo */}
+        <Route
+          path="/recover-password"
+          element={!isAuthenticated ? <RecoverPassword /> : <Navigate to="/" replace />}
+        />
+
+        {/* --- HU-31 & HU-32: CAMBIO DE CONTRASEÑA --- */}
+        {/* Liberamos el candado de isAuthenticated para que los usuarios sin sesión 
+            puedan entrar si vienen del flujo de recuperación con su código validado */}
         <Route
           path="/change-password"
-          element={!isAuthenticated ? <Navigate to="/login" replace /> : <ChangePassword />}
+          element={<ChangePassword />}
         />
 
         {/* ADMIN */}
