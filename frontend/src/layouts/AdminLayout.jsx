@@ -9,7 +9,8 @@ import {
   Menu,
   X,
   ChevronLeft,
-  ChevronRight
+  ChevronRight,
+  Shield 
 } from 'lucide-react';
 import { useAuth } from '../hooks/AuthContext';
 
@@ -30,6 +31,9 @@ const AdminLayout = () => {
   const nombreCrudo = user?.nombre_completo || "Usuario Administrador";
   const nombreUsuario = formatName(nombreCrudo);
   const inicialUsuario = nombreUsuario.charAt(0).toUpperCase();
+  
+  const roleName = user?.role?.name?.toLowerCase();
+  const isSuperAdmin = roleName === 'super_admin';
 
   return (
     <div className="flex h-screen bg-[#F8F9FA] font-sans overflow-hidden">
@@ -89,8 +93,8 @@ const AdminLayout = () => {
                 >
                   {nombreUsuario}
                 </span>
-                <span className="text-[10px] text-slate-400 truncate mt-0.5">
-                  Administrador
+                <span className="text-[10px] text-slate-400 truncate mt-0.5 capitalize">
+                  {isSuperAdmin ? 'Súper Administrador' : 'Administrador'}
                 </span>
               </div>
             )}
@@ -104,6 +108,14 @@ const AdminLayout = () => {
 
         <div className="flex-1 overflow-y-auto py-6 px-3 custom-scrollbar">
           <nav className="space-y-2">
+            
+            {isSuperAdmin && (
+              <Link to="/administradores/listado" title="Gestión de Administradores" className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-colors ${isCollapsed ? 'justify-center' : ''} ${isActive('/administradores') ? 'bg-[#1A237E] text-white font-semibold shadow-md' : 'text-slate-300 hover:bg-slate-800 hover:text-white'}`}>
+                <Shield className="w-[18px] h-[18px] shrink-0" /> 
+                {!isCollapsed && <span>Administradores</span>}
+              </Link>
+            )}
+
             <Link to="/alumnos/listado" title="Alumnos" className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-colors ${isCollapsed ? 'justify-center' : ''} ${isActive('/alumnos') ? 'bg-[#1A237E] text-white font-semibold shadow-md' : 'text-slate-300 hover:bg-slate-800 hover:text-white'}`}>
               <Users className="w-[18px] h-[18px] shrink-0" /> 
               {!isCollapsed && <span>Alumnos</span>}

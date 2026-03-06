@@ -13,6 +13,7 @@ from app.routers import auth
 from app.routers import mock_api
 from app.routers import sync
 from app.routers import catalogos
+from app.routers import administradores
 from app.routers.sync import tarea_automatica_sincronizacion
 
 load_dotenv()
@@ -69,6 +70,7 @@ app.include_router(auth.router)
 app.include_router(mock_api.router)
 app.include_router(sync.router)
 app.include_router(catalogos.router)
+app.include_router(administradores.router)
 
 @app.get("/")
 def read_root():

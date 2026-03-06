@@ -50,9 +50,15 @@ const LoginPage = () => {
         return;
       }
 
-      if (response.data?.role?.name === 'admin') navigate('/alumnos/listado');
-      else if (response.data?.role?.name === 'docente') navigate('/docente/pase-lista');
-      else navigate('/alumno/horario');
+      const roleName = response.data?.role?.name?.toLowerCase();
+
+      if (roleName === 'admin' || roleName === 'super_admin') {
+        navigate('/alumnos/listado');
+      } else if (roleName === 'docente') {
+        navigate('/docente/pase-lista');
+      } else {
+        navigate('/alumno/horario');
+      }
 
     } catch (err) {
       setError('ID o contraseña incorrectos');
@@ -62,7 +68,6 @@ const LoginPage = () => {
     }
   };
 
-  // HU-31: requiere contraseña actual, por eso debe existir sesión
   const handleForgotPassword = (e) => {
     e.preventDefault();
     setError('');
@@ -107,7 +112,7 @@ const LoginPage = () => {
           </div>
 
           <div className="p-8 pb-10 flex flex-col text-center">
-            <h1 className="text-[22px] font-bold text-[#1A1A1A] mb-1">Portal de Alumnos</h1>
+            <h1 className="text-[22px] font-bold text-[#1A1A1A] mb-1">Portal Académico</h1>
             <p className="text-sm text-gray-500 mb-8 font-medium">Ingresa tus credenciales para continuar</p>
 
             <form onSubmit={handleLogin} className="space-y-5 text-left flex flex-col">

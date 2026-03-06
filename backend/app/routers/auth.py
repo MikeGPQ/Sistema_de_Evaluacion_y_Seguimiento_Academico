@@ -41,7 +41,7 @@ def login(data: LoginRequest, db: Session = Depends(get_db)):
         role_name = user.role.name.lower()
         perfil = None
         
-        if role_name == "admin":
+        if role_name in ["admin", "super_admin"]:
             perfil = db.query(Administrator).filter(Administrator.numero_empleado == user.identifier).first()
         elif role_name == "docente":
             perfil = db.query(Teacher).filter(Teacher.external_id == user.identifier).first()
