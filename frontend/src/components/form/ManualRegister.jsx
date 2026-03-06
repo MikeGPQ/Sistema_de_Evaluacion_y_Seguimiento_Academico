@@ -3,18 +3,35 @@ import client from '../../lib/axios';
 import Modal from '../ui/Modal';
 import Swal from 'sweetalert2';
 import Select from 'react-select'; 
+
 // =========================================================================
-// 🌟 ALGORITMO: VALIDADOR DE PREFIJO CURP (REGLAS OFICIALES DE MÉXICO)
+// 🌟 ALGORITMO: VALIDADOR DE PREFIJO Y CONSONANTES CURP (REGLAS RENAPO)
 // =========================================================================
-const calcularPrefijoCURP = (nombre, paterno, materno) => {
+const calcularLetrasCURP = (nombre, paterno, materno) => {
   const limpia = (str) => String(str || '').trim().toUpperCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
   const nom = limpia(nombre); const pat = limpia(paterno); const mat = limpia(materno);
   if (!nom || !pat) return null;
 
   const ignorar = ['DE', 'LA', 'LAS', 'LOS', 'MAC', 'MC', 'VAN', 'VON', 'Y'];
-  const palabrasPaterno = pat.split(' ').filter(p => !ignorar.includes(p));
-  const apellidoPat = palabrasPaterno[0] || pat;
+  
+  const getPalabraFiltro = (texto) => {
+    const palabras = texto.split(' ').filter(p => !ignorar.includes(p));
+    return palabras[0] || 'X';
+  };
 
+  const getNombreFiltro = (texto) => {
+    const palabras = texto.split(' ').filter(p => !ignorar.includes(p));
+    if (palabras.length > 1 && (palabras[0] === 'JOSE' || palabras[0] === 'MARIA')) {
+      return palabras[1];
+    }
+    return palabras[0] || 'X';
+  };
+
+  const apellidoPat = getPalabraFiltro(pat);
+  const apellidoMat = getPalabraFiltro(mat) !== 'X' ? getPalabraFiltro(mat) : '';
+  const primerNom = getNombreFiltro(nom);
+
+  // --- BLOQUE 1: PRIMERAS 4 LETRAS ---
   const letra1 = apellidoPat.charAt(0) || 'X';
   let letra2 = 'X';
   for (let i = 1; i < apellidoPat.length; i++) {
@@ -22,26 +39,31 @@ const calcularPrefijoCURP = (nombre, paterno, materno) => {
       letra2 = apellidoPat.charAt(i); break;
     }
   }
-
-  const palabrasMaterno = mat.split(' ').filter(p => !ignorar.includes(p));
-  const apellidoMat = palabrasMaterno[0] || '';
   const letra3 = apellidoMat ? apellidoMat.charAt(0) : 'X';
-
-  let nombres = nom.split(' ').filter(p => !ignorar.includes(p));
-  let primerNombre = nombres[0] || 'X';
-  if (nombres.length > 1 && (primerNombre === 'JOSE' || primerNombre === 'MARIA')) {
-    primerNombre = nombres[1];
-  }
-  const letra4 = primerNombre.charAt(0) || 'X';
-
+  const letra4 = primerNom.charAt(0) || 'X';
   let prefijo = `${letra1}${letra2}${letra3}${letra4}`;
   
-  // Filtro oficial contra palabras altisonantes
   const malas = ['BACA','BAKA','BUEI','BUEY','CACA','CACO','CAGA','CAGO','CAKA','CAKO','COGE','COGI','COJA','COJE','COJI','COJO','COLA','CULO','FALO','FETO','GETA','GUEI','GUEY','JETA','JOTO','KACA','KACO','KAGA','KAGO','KAKA','KAKO','KOGE','KOGI','KOJA','KOJE','KOJI','KOJO','KOLA','KULO','LILO','LOCA','LOCO','LOKA','LOKO','MAME','MAMO','MEAR','MEAS','MEON','MIAR','MION','MOCO','MOKO','MUTE','NACA','NACO','PEDA','PEDO','PENE','PIPI','PITO','POPO','PUTA','PUTO','QULO','RATA','ROBA','ROBE','ROBO','RUIN','SENO','TETA','VACA','VAGA','VAGO','VAKA','VUEI','VUEY','WUEI','WUEY'];
   if (malas.includes(prefijo)) prefijo = prefijo.charAt(0) + 'X' + prefijo.substring(2);
 
-  return prefijo;
+  // --- BLOQUE 2: CONSONANTES INTERNAS (Posiciones 14, 15 y 16) ---
+  const getPrimeraConsonanteInterna = (palabra) => {
+    for (let i = 1; i < palabra.length; i++) {
+      const char = palabra.charAt(i);
+      if (/[B-DF-HJ-NP-TV-Z]/.test(char)) return char;
+      if (char === 'Ñ') return 'X'; // La norma cambia la Ñ por X en consonantes internas
+    }
+    return 'X';
+  };
+
+  const cons1 = getPrimeraConsonanteInterna(apellidoPat);
+  const cons2 = apellidoMat ? getPrimeraConsonanteInterna(apellidoMat) : 'X';
+  const cons3 = getPrimeraConsonanteInterna(primerNom);
+  const consonantes = `${cons1}${cons2}${cons3}`;
+
+  return { prefijo, consonantes };
 };
+
 export default function ManualRegister({ isOpen, onClose, alumnoAEditar }) {
   const [careers, setCareers] = useState([]);
   const [schools, setSchools] = useState([]);
@@ -125,7 +147,6 @@ export default function ManualRegister({ isOpen, onClose, alumnoAEditar }) {
                 email_inst_limpio = email_inst_limpio.split('@')[0];
             }
 
-           // Limpiamos cualquier basura del Excel
             const promRaw = String(student.promedio_procedencia || '').trim().toLowerCase();
             const esPromedioInvalido = ['', 'nan', 'null', 'none', 'undefined', '0'].includes(promRaw);
             const promedioValor = esPromedioInvalido ? '' : Math.round(student.promedio_procedencia).toString();
@@ -156,23 +177,28 @@ export default function ManualRegister({ isOpen, onClose, alumnoAEditar }) {
             setFormData(dataCargada);
             setDatosOriginales(dataCargada);
             
-            //  REGEX ESTRICTO PARA CORREOS EN MÉXICO
-// 🌟 REGEX ESTRICTO PARA CORREOS EN MÉXICO
+            // 🌟 REGEX ESTRICTO Y VALIDACIÓN DUAL AL ABRIR
             const curpRegex = /^[A-Z]{4}\d{6}[HM][A-Z]{5}[A-Z0-9]\d$/i;
             const emailRegex = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.(com|mx|org|net|edu|gob)$/i;
 
-            // 🌟 NUEVO: EVALUACIÓN INSTANTÁNEA AL ABRIR EL MODAL DE EDICIÓN
             let mensajeErrorCurp = '';
             let exitoCurp = false;
 
             if (!curpRegex.test(student.curp)) {
               mensajeErrorCurp = '❌ La CURP importada es inválida. Debe corregirse.';
             } else {
-              const prefijoEsperado = calcularPrefijoCURP(student.nombre, student.apellido_paterno, student.apellido_materno);
-              if (prefijoEsperado && student.curp.substring(0, 4) !== prefijoEsperado) {
-                mensajeErrorCurp = `❌ La CURP no coincide con el nombre (Debería iniciar con ${prefijoEsperado}).`;
-              } else {
-                exitoCurp = true;
+              const letrasEsperadas = calcularLetrasCURP(student.nombre, student.apellido_paterno, student.apellido_materno);
+              if (letrasEsperadas) {
+                const prefijoIngresado = student.curp.substring(0, 4);
+                const consonantesIngresadas = student.curp.substring(13, 16);
+                
+                if (prefijoIngresado !== letrasEsperadas.prefijo) {
+                  mensajeErrorCurp = `❌ El inicio de la CURP no coincide. Debería ser ${letrasEsperadas.prefijo}.`;
+                } else if (consonantesIngresadas !== letrasEsperadas.consonantes) {
+                  mensajeErrorCurp = `❌ Las consonantes internas no coinciden. Deberían ser ${letrasEsperadas.consonantes}.`;
+                } else {
+                  exitoCurp = true;
+                }
               }
             }
 
@@ -269,40 +295,46 @@ export default function ManualRegister({ isOpen, onClose, alumnoAEditar }) {
     if (name === 'email_institucional') {
       finalValue = finalValue.replace(/[\s@]/g, '').toLowerCase();
     } else if (name === 'email_personal') {
-      // Sin espacios y solo un arroba
       finalValue = finalValue.replace(/\s/g, '').toLowerCase();
       const atIdx = finalValue.indexOf('@');
       if (atIdx !== -1) {
         finalValue = finalValue.slice(0, atIdx + 1) + finalValue.slice(atIdx + 1).replace(/@/g, '');
       }
     } else if (name === 'curp') {
-      // Solo caracteres alfanuméricos
       finalValue = finalValue.replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
     }
 
     setFormData(prev => ({ ...prev, [name]: finalValue }));
 
-   if (name === 'curp') {
+    if (name === 'curp') {
       const curpRegex = /^[A-Z]{4}\d{6}[HM][A-Z]{5}[A-Z0-9]\d$/i;
       if (finalValue.length === 18) {
         if (!curpRegex.test(finalValue)) {
           setErroresEnVivo(prev => ({ ...prev, curp: '❌ El formato de la CURP es incorrecto.' }));
           setValidacionExitosa(prev => ({ ...prev, curp: false }));
         } else {
-          // 🌟 AHORA LO EVALÚA EN VIVO MIENTRAS TECLEA EL ÚLTIMO CARÁCTER
-          const prefijoEsperado = formData.nombre && formData.apellido_paterno 
-            ? calcularPrefijoCURP(formData.nombre, formData.apellido_paterno, formData.apellido_materno) 
+          // 🌟 VALIDACIÓN EN VIVO COMPLETA
+          const letrasEsperadas = formData.nombre && formData.apellido_paterno 
+            ? calcularLetrasCURP(formData.nombre, formData.apellido_paterno, formData.apellido_materno) 
             : null;
             
-          if (prefijoEsperado && finalValue.substring(0, 4) !== prefijoEsperado) {
-            setErroresEnVivo(prev => ({ ...prev, curp: `❌ La CURP no coincide con el nombre (Debería iniciar con ${prefijoEsperado}).` }));
-            setValidacionExitosa(prev => ({ ...prev, curp: false }));
-          } else if (alumnoAEditar && finalValue === alumnoAEditar.curp) {
-            setErroresEnVivo(prev => ({ ...prev, curp: '' }));
-            setValidacionExitosa(prev => ({ ...prev, curp: true }));
-          } else {
-            setErroresEnVivo(prev => ({ ...prev, curp: '' }));
-            setValidacionExitosa(prev => ({ ...prev, curp: false }));
+          if (letrasEsperadas) {
+            const prefijoIngresado = finalValue.substring(0, 4);
+            const consonantesIngresadas = finalValue.substring(13, 16);
+
+            if (prefijoIngresado !== letrasEsperadas.prefijo) {
+              setErroresEnVivo(prev => ({ ...prev, curp: `❌ El inicio de la CURP no coincide. Debería ser ${letrasEsperadas.prefijo}.` }));
+              setValidacionExitosa(prev => ({ ...prev, curp: false }));
+            } else if (consonantesIngresadas !== letrasEsperadas.consonantes) {
+              setErroresEnVivo(prev => ({ ...prev, curp: `❌ Las consonantes internas no coinciden. Deberían ser ${letrasEsperadas.consonantes}.` }));
+              setValidacionExitosa(prev => ({ ...prev, curp: false }));
+            } else if (alumnoAEditar && finalValue === alumnoAEditar.curp) {
+              setErroresEnVivo(prev => ({ ...prev, curp: '' }));
+              setValidacionExitosa(prev => ({ ...prev, curp: true }));
+            } else {
+              setErroresEnVivo(prev => ({ ...prev, curp: '' }));
+              setValidacionExitosa(prev => ({ ...prev, curp: false }));
+            }
           }
         }
       } else {
@@ -387,7 +419,6 @@ export default function ManualRegister({ isOpen, onClose, alumnoAEditar }) {
 
   const handleCheckEmail = async () => {
     if (formData.email_personal.length > 5 && (!alumnoAEditar || formData.email_personal !== alumnoAEditar.email_personal)) {
-      // 🌟 REGEX ESTRICTO PARA ONBLUR
       const emailRegex = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.(com|mx|org|net|edu|gob)$/i;
       if (!emailRegex.test(formData.email_personal)) {
         setErroresEnVivo(prev => ({ ...prev, email: '❌ Formato de correo inválido o sospechoso.' }));
@@ -407,21 +438,28 @@ export default function ManualRegister({ isOpen, onClose, alumnoAEditar }) {
     }
   };
 
- const handleSubmit = async (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
 
     const curpRegex = /^[A-Z]{4}\d{6}[HM][A-Z]{5}[A-Z0-9]\d$/i;
     if (!curpRegex.test(formData.curp)) return Swal.fire('Formato Inválido', 'La CURP no tiene el formato oficial. Por favor corrígela.', 'error');
 
-    // 🌟 REGEX ESTRICTO AL GUARDAR
     const emailRegex = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.(com|mx|org|net|edu|gob)$/i;
     if (!emailRegex.test(formData.email_personal)) return Swal.fire('Correo Inválido', 'El Correo Personal contiene un error de escritura (.comd, etc). Por favor corrígelo.', 'error');
 
-    // 🌟 NUEVO: BLINDAJE FINAL DE CONCORDANCIA CURP VS NOMBRE
+    // 🌟 BLINDAJE FINAL DE CONCORDANCIA DUAL AL GUARDAR
     if (formData.nombre && formData.apellido_paterno && formData.curp.length === 18) {
-      const prefijoEsperado = calcularPrefijoCURP(formData.nombre, formData.apellido_paterno, formData.apellido_materno);
-      if (prefijoEsperado && formData.curp.substring(0, 4) !== prefijoEsperado) {
-        return Swal.fire('Inconsistencia en Datos', `Las primeras 4 letras de la CURP no coinciden con el nombre del alumno. Deberían ser ${prefijoEsperado}.`, 'error');
+      const letrasEsperadas = calcularLetrasCURP(formData.nombre, formData.apellido_paterno, formData.apellido_materno);
+      if (letrasEsperadas) {
+        const prefijoIngresado = formData.curp.substring(0, 4);
+        const consonantesIngresadas = formData.curp.substring(13, 16);
+        
+        if (prefijoIngresado !== letrasEsperadas.prefijo) {
+          return Swal.fire('Inconsistencia en Datos', `Las primeras 4 letras de la CURP no coinciden con el nombre. Deberían ser ${letrasEsperadas.prefijo}.`, 'error');
+        }
+        if (consonantesIngresadas !== letrasEsperadas.consonantes) {
+          return Swal.fire('Inconsistencia en Datos', `Las consonantes internas de la CURP (letras 14 a 16) no coinciden. Deberían ser ${letrasEsperadas.consonantes}.`, 'error');
+        }
       }
     }
 
@@ -434,11 +472,8 @@ export default function ManualRegister({ isOpen, onClose, alumnoAEditar }) {
     if (!formData.colonia) return Swal.fire('Falta Colonia', 'Debes seleccionar una colonia.', 'warning');
     if (formData.codigo_postal.length !== 3) return Swal.fire('C.P. Inválido', 'El código postal debe estar completo.', 'warning');
 
-    // 🌟 LÓGICA INFALIBLE PARA LA FOTOGRAFÍA
-   // 🌟 VALIDACIÓN DE FOTO INTELIGENTE (HU-04)
-// 🌟 VALIDACIÓN DE FOTO INTELIGENTE (HU-04)
     const tieneFotoPrevia = !!formData.foto_id;
-    const esEstatusExento = formData.status?.toLowerCase().includes('baja'); // Atrapa 'baja' y 'baja_temporal'
+    const esEstatusExento = formData.status?.toLowerCase().includes('baja'); 
     
     if (!files.foto && !tieneFotoPrevia && !esEstatusExento) {
         return Swal.fire('Falta la Fotografía', 'La fotografía es obligatoria para alumnos activos. Este alumno no tiene una foto registrada.', 'warning');
@@ -654,7 +689,6 @@ export default function ManualRegister({ isOpen, onClose, alumnoAEditar }) {
             <div className="relative group">
               <input type="file" name="foto" id="f-foto" accept="image/*" onChange={handleFileChange} className="hidden" />
               <label htmlFor="f-foto" className={`flex flex-col items-center justify-center h-24 border-2 border-dashed rounded-lg cursor-pointer transition-all ${files.foto ? 'border-green-500 bg-green-50 text-green-700' : 'border-gray-300 bg-gray-50 hover:border-blue-400 hover:bg-blue-50 text-gray-400'}`}>
-                {/* 🌟 LA ETIQUETA SE ADAPTA: Si el importado no tiene foto, avisa que es obligatoria */}
                 <span className="text-xs font-bold uppercase tracking-wider text-center px-2">
                     {files.foto
                       ? `✅ ${files.foto.name}`
