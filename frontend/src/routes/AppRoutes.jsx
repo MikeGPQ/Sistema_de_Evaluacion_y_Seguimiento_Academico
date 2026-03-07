@@ -10,7 +10,8 @@ import ChangePassword from "../pages/ChangePassword";
 import ImportarAlumnos from "../pages/Alumnos/ImportarAlumnos";
 import ListadoAlumnos from "../pages/Alumnos/ListadoAlumnos";
 import CambiarEstatusAlumno from "../pages/Alumnos/CambiarEstatusAlumno";
-
+import GruposYHorarios from "../pages/GruposyHorarios/GrupoyHorarios";
+import MiHorario from "../pages/Alumnos/MiHorario";
 // Layouts
 import AdminLayout from "../layouts/AdminLayout";
 import AlumnoLayout from "../layouts/AlumnoLayout";
@@ -98,7 +99,8 @@ const AppRoutes = () => {
           <Route path="/alumnos/cambiar-estatus" element={<CambiarEstatusAlumno />} />
 
           <Route path="/docentes" element={<EnConstruccion modulo="Sincronización Docente" />} />
-          <Route path="/horarios" element={<EnConstruccion modulo="Grupos y Horarios" />} />
+          {/* 🌟 AQUÍ CONECTAMOS TU MÓDULO: Reemplazamos EnConstruccion por GruposYHorarios */}
+          <Route path="/horarios" element={<GruposYHorarios />} /> 
           <Route path="/reportes" element={<EnConstruccion modulo="Boletas y Listas" />} />
         </Route>
 
@@ -111,7 +113,7 @@ const AppRoutes = () => {
 
         {/* ALUMNO */}
         <Route path="/alumno" element={<ProtectedRoute allowedRole="alumno"><AlumnoLayout /></ProtectedRoute>}>
-          <Route path="horario" element={<EnConstruccion modulo="Mi Horario" />} />
+          <Route path="horario" element={<MiHorario />} />
           <Route path="asistencias" element={<EnConstruccion modulo="Mis Asistencias" />} />
           <Route path="calificaciones" element={<EnConstruccion modulo="Mis Calificaciones" />} />
         </Route>
