@@ -67,14 +67,13 @@ def change_password(data: PasswordChangeRequest, db: Session = Depends(get_db)):
 
 @router.post("/forgot-password")
 def forgot_password(data: ForgotPasswordRequest, db: Session = Depends(get_db)):
-    user = db.query(User).filter(
-        or_(User.identifier == data.identifier, User.email == data.identifier)
-    ).first()
+    # MODIFICADO: Búsqueda estricta ÚNICAMENTE por correo electrónico
+    user = db.query(User).filter(User.email == data.identifier).first()
     
     if not user:
         raise HTTPException(
             status_code=404, 
-            detail="El correo o ID ingresado no se encuentra registrado en el sistema."
+            detail="El correo electrónico ingresado no se encuentra registrado en el sistema."
         )
 
     # Invalida códigos anteriores para que solo el nuevo sea válido
@@ -135,9 +134,8 @@ def forgot_password(data: ForgotPasswordRequest, db: Session = Depends(get_db)):
 
 @router.post("/validate-reset-code")
 def validate_reset_code(data: ValidateCodeRequest, db: Session = Depends(get_db)):
-    user = db.query(User).filter(
-        or_(User.identifier == data.identifier, User.email == data.identifier)
-    ).first()
+    # MODIFICADO: Validación estricta ÚNICAMENTE por correo electrónico
+    user = db.query(User).filter(User.email == data.identifier).first()
     
     if not user:
         raise HTTPException(status_code=404, detail="Usuario no encontrado")
@@ -165,6 +163,9 @@ def reset_password(data: ResetPasswordRequest, db: Session = Depends(get_db)):
     if data.new_password != data.confirm_password:
         raise HTTPException(status_code=400, detail="Las contraseñas no coinciden")
 
+    # En este último paso sí conservamos la búsqueda por identifier (Matrícula)
+    # porque 'validate-reset-code' devuelve el identifier original del usuario para 
+    # asegurar que la actualización de la contraseña se hace en el registro correcto.
     user = db.query(User).filter(User.identifier == data.identifier).first()
     if not user:
         raise HTTPException(status_code=404, detail="Usuario no encontrado")

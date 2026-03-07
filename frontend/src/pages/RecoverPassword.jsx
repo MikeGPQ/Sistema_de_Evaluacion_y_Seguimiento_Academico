@@ -6,7 +6,7 @@ import client from '../lib/axios';
 const RecoverPassword = () => {
   const navigate = useNavigate();
   const [step, setStep] = useState(1);
-  const [identifier, setIdentifier] = useState('');
+  const [email, setEmail] = useState('');
   const [code, setCode] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -14,11 +14,26 @@ const RecoverPassword = () => {
 
   const handleRequestCode = async (e) => {
     e.preventDefault();
-    if (!identifier) return setError('Ingresa tu correo o ID');
+    
+    if (!email) {
+      setError('Ingresa tu correo electrónico');
+      return;
+    }
+
+    // Validación estricta: Solo acepta formato de correo
+    const isCorreoValido = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+
+    if (!isCorreoValido) {
+      setError('Formato inválido. Ingresa un correo electrónico válido.');
+      return;
+    }
+
     setError('');
     setLoading(true);
+    
     try {
-      await client.post('/auth/forgot-password', { identifier });
+      // Mandamos el correo en el campo identifier que espera el backend
+      await client.post('/auth/forgot-password', { identifier: email });
       setMsg('Se ha enviado un código de 6 dígitos a tu correo.');
       setStep(2);
     } catch (err) {
@@ -34,7 +49,7 @@ const RecoverPassword = () => {
     setError('');
     setLoading(true);
     try {
-      const res = await client.post('/auth/validate-reset-code', { identifier, code });
+      const res = await client.post('/auth/validate-reset-code', { identifier: email, code });
       navigate('/change-password', { 
         state: { isRecovery: true, identifier: res.data.identifier, code: code } 
       });
@@ -58,19 +73,19 @@ const RecoverPassword = () => {
           <div className="p-8 pb-10 flex flex-col">
             {step === 1 ? (
               <form onSubmit={handleRequestCode} className="space-y-5">
-                <p className="text-sm text-gray-500 text-center mb-4">Ingresa tu correo institucional o ID y te enviaremos un código de validación.</p>
+                <p className="text-sm text-gray-500 text-center mb-4">Ingresa tu correo institucional o personal y te enviaremos un código de validación.</p>
                 <div className="space-y-1.5">
-                  <label className="text-[10px] font-bold text-gray-700 uppercase">Correo o ID</label>
+                  <label className="text-[10px] font-bold text-gray-700 uppercase">Correo electrónico</label>
                   <div className="relative group">
                     <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
                     <input
-                      type="text"
+                      type="email"
                       required
                       placeholder="ej. alumno@red.unid.mx"
-                      value={identifier}
+                      value={email}
                       onChange={(e) => {
                         const sinEspacios = e.target.value.replace(/\s/g, '');
-                        setIdentifier(sinEspacios);
+                        setEmail(sinEspacios);
                         if (error) setError('');
                       }}
                       className="w-full pl-10 pr-4 py-2.5 bg-white border border-gray-300 rounded-lg text-sm focus:ring-1 focus:ring-[#0B172A] focus:border-[#0B172A]"
@@ -89,11 +104,10 @@ const RecoverPassword = () => {
               <form onSubmit={handleValidateCode} className="space-y-5">
                 {msg && <p className="text-green-700 text-[11px] font-bold text-center bg-green-50 p-2 rounded mb-2 border border-green-100">{msg}</p>}
                 
-                {/* INDICADOR DE CORREO ACTUAL Y BOTÓN DE REGRESO */}
                 <div className="flex items-center justify-between bg-gray-50 p-3 rounded-lg border border-gray-100 mb-4">
                     <div className="flex flex-col">
                         <span className="text-[9px] uppercase font-bold text-gray-400">Enviado a:</span>
-                        <span className="text-xs font-semibold text-[#0B172A] truncate max-w-[180px]">{identifier}</span>
+                        <span className="text-xs font-semibold text-[#0B172A] truncate max-w-[180px]" title={email}>{email}</span>
                     </div>
                     <button 
                         type="button" 
