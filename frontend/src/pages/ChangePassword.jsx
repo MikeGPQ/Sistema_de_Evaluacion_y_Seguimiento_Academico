@@ -16,7 +16,6 @@ const ChangePassword = () => {
   const navigate = useNavigate();
   const location = useLocation();
 
-  // --- VARIABLES DE RECUPERACIÓN (HU-32) ---
   const isRecovery = location.state?.isRecovery || false;
   const recoveryCode = location.state?.code || "";
   const recoveryIdentifier = location.state?.identifier || "";
@@ -39,14 +38,23 @@ const ChangePassword = () => {
   const [error, setError] = useState("");
   const [ok, setOk] = useState("");
   const [loading, setLoading] = useState(false);
-
-  // Usamos el ID de la sesión o el que viene de la recuperación de contraseña
   const identifier = user?.identifier || recoveryIdentifier;
 
   const goHomeByRole = (role) => {
     if (role?.name === "admin") return navigate("/alumnos/listado");
     if (role?.name === "docente") return navigate("/docente/pase-lista");
     return navigate("/alumno/horario");
+  };
+
+  const validatePasswordStrength = (password) => {
+    const regex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z\d]).{8,}$/;
+    if (!password) {
+      return "La nueva contraseña es obligatoria.";
+    }
+    if (!regex.test(password)) {
+      return "La contraseña debe tener al menos 8 caracteres, una mayúscula, una minúscula, un número y un carácter especial.";
+    }
+    return "";
   };
 
   const onSubmit = async (e) => {
@@ -59,40 +67,38 @@ const ChangePassword = () => {
       return;
     }
 
-    if (form.new_password !== form.confirm_password) {
-      setError("La nueva contraseña y la confirmación no coinciden.");
+    const passwordError = validatePasswordStrength(form.new_password);
+    if (passwordError) {
+      setError(passwordError);
       return;
     }
 
-    // ==========================================
-    // VALIDACIÓN ESTRICTA DE SEGURIDAD (Frontend)
-    // ==========================================
-    const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[\W_])[A-Za-z\d\W_]{8,}$/;
-    if (!passwordRegex.test(form.new_password)) {
-      setError(
-        "La contraseña debe tener al menos 8 caracteres, incluir una mayúscula, una minúscula, un número y un símbolo especial (ej. @, #, $, !)."
-      );
+    if (!isRecovery && form.current_password === form.new_password) {
+      setError("La nueva contraseña no puede ser igual a la contraseña actual.");
+      return;
+    }
+
+    if (form.new_password !== form.confirm_password) {
+      setError("La nueva contraseña y la confirmación no coinciden.");
       return;
     }
 
     setLoading(true);
     try {
       if (isRecovery) {
-        // --- FLUJO HU-32: RESETEO CON CÓDIGO ---
         await client.post("/auth/reset-password", {
           identifier,
           code: recoveryCode,
           new_password: form.new_password,
           confirm_password: form.confirm_password,
         });
-        
+
         setOk("Contraseña recuperada exitosamente. Redirigiendo al login...");
         setTimeout(() => {
           navigate("/login");
         }, 2000);
-        
+
       } else {
-        // --- FLUJO ORIGINAL HU-31: CAMBIO CON SESIÓN ACTIVA ---
         await client.put("/auth/change-password", {
           identifier,
           current_password: form.current_password,
@@ -111,9 +117,9 @@ const ChangePassword = () => {
     } catch (err) {
       const msg =
         err?.response?.data?.detail ||
-        "No se pudo procesar la solicitud. Verifica los datos.";
+        "No se pudo actualizar la contraseña. Verifica los datos.";
       setError(msg);
-      console.error("Error password action:", err?.response?.data || err.message);
+      console.error("Error change-password:", err?.response?.data || err.message);
     } finally {
       setLoading(false);
     }
@@ -133,7 +139,6 @@ const ChangePassword = () => {
     <div className="min-h-screen bg-[#F8F9FA] flex flex-col relative font-sans">
       <div className="flex-1 flex items-center justify-center p-4">
         <div className="bg-white rounded-[20px] shadow-[0_8px_30px_rgb(0,0,0,0.04)] w-full max-w-[520px] overflow-hidden border border-gray-100 flex flex-col">
-          {/* Header UNID */}
           <div className="bg-[#0B172A] pt-8 pb-7 px-8 flex flex-col items-center justify-center text-white">
             <div className="flex items-center gap-3">
               <GraduationCap size={32} className="text-white" />
@@ -148,7 +153,6 @@ const ChangePassword = () => {
             </div>
           </div>
 
-          {/* Body */}
           <div className="p-8 pb-10 flex flex-col text-center">
             <h1 className="text-[22px] font-bold text-[#1A1A1A] mb-1">
               {isRecovery ? "Restablecer Contraseña" : "Cambio de Contraseña"}
@@ -160,13 +164,14 @@ const ChangePassword = () => {
                   Cambio obligatorio
                 </p>
                 <p className="text-[12px] text-[#8A6A00] mt-1">
-                  Por seguridad, debes cambiar tu contraseña temporal para continuar.
+                  Por seguridad, debes cambiar tu contraseña temporal para
+                  continuar.
                 </p>
               </div>
             ) : (
               <p className="text-sm text-gray-500 mb-6 font-medium">
-                {isRecovery 
-                  ? "Ingresa tu nueva contraseña para recuperar el acceso a tu cuenta." 
+                {isRecovery
+                  ? "Ingresa tu nueva contraseña para recuperar el acceso a tu cuenta."
                   : "Actualiza tu contraseña para mantener tu cuenta segura."}
               </p>
             )}
@@ -175,7 +180,6 @@ const ChangePassword = () => {
               onSubmit={onSubmit}
               className="space-y-5 text-left flex flex-col"
             >
-              {/* Current password (SE OCULTA EN MODO RECUPERACIÓN) */}
               {!isRecovery && (
                 <div className="space-y-1.5">
                   <label className="text-[10px] font-bold text-gray-700 uppercase tracking-wide ml-0.5">
@@ -205,7 +209,6 @@ const ChangePassword = () => {
                 </div>
               )}
 
-              {/* New password */}
               <div className="space-y-1.5">
                 <label className="text-[10px] font-bold text-gray-700 uppercase tracking-wide ml-0.5">
                   Nueva contraseña
@@ -231,13 +234,11 @@ const ChangePassword = () => {
                     {showNew ? <EyeOff size={16} /> : <Eye size={16} />}
                   </button>
                 </div>
-                {/* Toque Visual de Seguridad */}
                 <p className="text-[11px] text-[#0B172A] mt-1 font-semibold bg-blue-50 p-2 rounded border border-blue-100">
                   Obligatorio: Mínimo 8 caracteres, incluir al menos una mayúscula, una minúscula, un número y un símbolo.
                 </p>
               </div>
 
-              {/* Confirm password */}
               <div className="space-y-1.5">
                 <label className="text-[10px] font-bold text-gray-700 uppercase tracking-wide ml-0.5">
                   Confirmar nueva contraseña
@@ -265,7 +266,6 @@ const ChangePassword = () => {
                 </div>
               </div>
 
-              {/* Alerts */}
               {error && (
                 <div className="bg-red-50 border border-red-100 p-2.5 rounded-lg text-center animate-in fade-in">
                   <p className="text-red-600 text-xs font-bold">{error}</p>
@@ -278,7 +278,6 @@ const ChangePassword = () => {
                 </div>
               )}
 
-              {/* Submit */}
               <button
                 type="submit"
                 disabled={loading}
@@ -292,7 +291,6 @@ const ChangePassword = () => {
                 <ArrowRight size={16} className="ml-1" />
               </button>
 
-              {/* Actions */}
               <div className="flex items-center justify-between pt-1">
                 <button
                   type="button"
@@ -319,15 +317,13 @@ const ChangePassword = () => {
               </div>
 
               <div className="pt-2 text-[11px] text-gray-400 text-center">
-                Usuario:{" "}
-                <span className="font-bold">{identifier || "—"}</span>
+                Usuario: <span className="font-bold">{identifier || "—"}</span>
               </div>
             </form>
           </div>
         </div>
       </div>
 
-      {/* Footer */}
       <footer className="w-full p-6 flex flex-col md:flex-row justify-between items-center text-[10px] text-gray-400 gap-4">
         <p>
           © 2026 Universidad Interamericana para el Desarrollo. Todos los

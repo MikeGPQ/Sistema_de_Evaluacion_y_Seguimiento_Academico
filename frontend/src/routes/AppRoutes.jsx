@@ -5,13 +5,14 @@ import { Hammer } from "lucide-react";
 // Páginas
 import LoginPage from "../pages/LoginPage";
 import ChangePassword from "../pages/ChangePassword";
-import RecoverPassword from "../pages/RecoverPassword"; // <-- NUEVO COMPONENTE IMPORTADO
-
+import RecoverPassword from "../pages/RecoverPassword";
+import Profile from "../pages/Profile";
 // Admin
 import ImportarAlumnos from "../pages/Alumnos/ImportarAlumnos";
 import ListadoAlumnos from "../pages/Alumnos/ListadoAlumnos";
 import CambiarEstatusAlumno from "../pages/Alumnos/CambiarEstatusAlumno";
-
+import GruposYHorarios from "../pages/GruposyHorarios/GrupoyHorarios";
+import MiHorario from "../pages/Alumnos/MiHorario";
 // Layouts
 import AdminLayout from "../layouts/AdminLayout";
 import AlumnoLayout from "../layouts/AlumnoLayout";
@@ -34,14 +35,12 @@ const EnConstruccion = ({ modulo }) => {
   );
 };
 
-// Guardián de rutas
 const ProtectedRoute = ({ children, allowedRole }) => {
   const { isAuthenticated, user, loading } = useAuth();
 
   if (loading) return null;
   if (!isAuthenticated) return <Navigate to="/login" replace />;
 
-  // ✅ HU-31: forzar cambio si es temporal
   if (user?.is_temp_password) return <Navigate to="/change-password?forced=1" replace />;
 
   if (allowedRole && user?.role?.name !== allowedRole) {
@@ -86,19 +85,23 @@ const AppRoutes = () => {
           }
         />
 
-        {/* --- HU-32: RECUPERACIÓN DE CONTRASEÑA --- */}
-        {/* Ruta pública para solicitar y validar el código por correo */}
         <Route
           path="/recover-password"
           element={!isAuthenticated ? <RecoverPassword /> : <Navigate to="/" replace />}
         />
 
-        {/* --- HU-31 & HU-32: CAMBIO DE CONTRASEÑA --- */}
-        {/* Liberamos el candado de isAuthenticated para que los usuarios sin sesión 
-            puedan entrar si vienen del flujo de recuperación con su código validado */}
         <Route
           path="/change-password"
           element={<ChangePassword />}
+        />
+        
+       <Route
+          path="/profile"
+          element={
+            <ProtectedRoute>
+              <Profile />
+            </ProtectedRoute>
+          }
         />
 
         {/* ADMIN */}
@@ -106,9 +109,10 @@ const AppRoutes = () => {
           <Route path="/alumnos/listado" element={<ListadoAlumnos />} />
           <Route path="/alumnos/importar" element={<ImportarAlumnos />} />
           <Route path="/alumnos/cambiar-estatus" element={<CambiarEstatusAlumno />} />
+          <Route path="/horarios" element={<GruposYHorarios />} />
 
           <Route path="/docentes" element={<EnConstruccion modulo="Sincronización Docente" />} />
-          <Route path="/horarios" element={<EnConstruccion modulo="Grupos y Horarios" />} />
+          <Route path="/horarios" element={<GruposYHorarios />} /> 
           <Route path="/reportes" element={<EnConstruccion modulo="Boletas y Listas" />} />
         </Route>
 
@@ -121,7 +125,7 @@ const AppRoutes = () => {
 
         {/* ALUMNO */}
         <Route path="/alumno" element={<ProtectedRoute allowedRole="alumno"><AlumnoLayout /></ProtectedRoute>}>
-          <Route path="horario" element={<EnConstruccion modulo="Mi Horario" />} />
+          <Route path="horario" element={<MiHorario />} />
           <Route path="asistencias" element={<EnConstruccion modulo="Mis Asistencias" />} />
           <Route path="calificaciones" element={<EnConstruccion modulo="Mis Calificaciones" />} />
         </Route>
