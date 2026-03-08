@@ -1,5 +1,5 @@
 import React from 'react';
-import { Outlet, useLocation, Link } from 'react-router-dom';
+import { Outlet, useLocation, Link, useNavigate } from 'react-router-dom';
 import { 
   Users, 
   RefreshCcw, 
@@ -11,17 +11,27 @@ import { useAuth } from '../hooks/AuthContext';
 
 const AdminLayout = () => {
   const location = useLocation();
-  const { logout } = useAuth(); 
+  const navigate = useNavigate();
+  const { user, logout } = useAuth(); 
 
   const isActive = (path) => location.pathname.includes(path);
 
+  const displayName =
+    user?.full_name ||
+    user?.nombre_completo ||
+    user?.name ||
+    user?.nombre ||
+    "Administrador";
+
+  const displayArea =
+    user?.email ||
+    user?.correo ||
+    user?.identifier ||
+    "Control Escolar";
+
   return (
     <div className="flex h-screen bg-[#F8F9FA] font-sans overflow-hidden">
-      
-      {/* SIDEBAR LATERAL */}
       <aside className="w-[260px] bg-[#0B172A] text-white flex flex-col flex-shrink-0 shadow-xl z-20">
-        
-        {/* Logo Institucional */}
         <div className="h-16 flex items-center px-6 border-b border-slate-800 bg-[#070e1a]">
           <div className="w-7 h-7 bg-[#F2A900] rounded text-[#0B172A] flex items-center justify-center font-black text-sm mr-3 shadow-sm">
             U
@@ -32,7 +42,6 @@ const AdminLayout = () => {
           </div>
         </div>
 
-        {/* Menú de Navegación del Administrador */}
         <div className="flex-1 overflow-y-auto py-6 px-4 custom-scrollbar">
           <nav className="space-y-1.5">
             <Link to="/alumnos/listado" className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-colors ${isActive('/alumnos') ? 'bg-[#1A237E] text-white font-semibold shadow-md' : 'text-slate-300 hover:bg-slate-800 hover:text-white'}`}>
@@ -50,30 +59,33 @@ const AdminLayout = () => {
           </nav>
         </div>
 
-        {/* User Profile / Logout */}
-        <div className="p-4 border-t border-slate-800 bg-[#070e1a] flex items-center justify-between">
-          <div className="flex items-center gap-3 overflow-hidden">
+        <div className="p-4 border-t border-slate-800 bg-[#070e1a] flex items-center justify-between gap-2">
+          <button
+            type="button"
+            onClick={() => navigate("/profile")}
+            className="flex items-center gap-3 overflow-hidden text-left hover:bg-slate-800 rounded-lg p-1 transition-colors flex-1"
+            title="Ver perfil"
+          >
             <div className="w-9 h-9 rounded-full bg-[#1A237E] flex items-center justify-center text-white font-bold text-xs shrink-0 border border-indigo-500">
               AD
             </div>
             <div className="flex flex-col truncate">
-              <span className="text-sm font-semibold truncate text-white">Administrador</span>
-              <span className="text-[10px] text-slate-400 truncate">Control Escolar</span>
+              <span className="text-sm font-semibold truncate text-white">{displayName}</span>
+              <span className="text-[10px] text-slate-400 truncate">{displayArea}</span>
             </div>
-          </div>
+          </button>
+
           <button onClick={logout} className="p-2 text-slate-400 hover:text-red-400 hover:bg-slate-800 rounded-lg transition-colors" title="Cerrar Sesión">
             <LogOut className="w-5 h-5" />
           </button>
         </div>
       </aside>
 
-      {/* ÁREA DE CONTENIDO DINÁMICO */}
       <main className="flex-1 flex flex-col min-w-0 overflow-hidden relative">
         <div className="flex-1 overflow-y-auto">
           <Outlet /> 
         </div>
       </main>
-
     </div>
   );
 };

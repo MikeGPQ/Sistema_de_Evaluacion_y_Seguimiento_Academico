@@ -43,6 +43,20 @@ const ChangePassword = () => {
     return navigate("/alumno/horario");
   };
 
+  const validatePasswordStrength = (password) => {
+    const regex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z\d]).{8,}$/;
+
+    if (!password) {
+      return "La nueva contraseña es obligatoria.";
+    }
+
+    if (!regex.test(password)) {
+      return "La contraseña debe tener al menos 8 caracteres, una mayúscula, una minúscula, un número y un carácter especial.";
+    }
+
+    return "";
+  };
+
   const onSubmit = async (e) => {
     e.preventDefault();
     setError("");
@@ -53,8 +67,14 @@ const ChangePassword = () => {
       return;
     }
 
-    if (form.new_password.length < 8) {
-      setError("La nueva contraseña debe tener al menos 8 caracteres.");
+    const passwordError = validatePasswordStrength(form.new_password);
+    if (passwordError) {
+      setError(passwordError);
+      return;
+    }
+
+    if (form.current_password === form.new_password) {
+      setError("La nueva contraseña no puede ser igual a la contraseña actual.");
       return;
     }
 
@@ -105,7 +125,6 @@ const ChangePassword = () => {
     <div className="min-h-screen bg-[#F8F9FA] flex flex-col relative font-sans">
       <div className="flex-1 flex items-center justify-center p-4">
         <div className="bg-white rounded-[20px] shadow-[0_8px_30px_rgb(0,0,0,0.04)] w-full max-w-[520px] overflow-hidden border border-gray-100 flex flex-col">
-          {/* Header UNID */}
           <div className="bg-[#0B172A] pt-8 pb-7 px-8 flex flex-col items-center justify-center text-white">
             <div className="flex items-center gap-3">
               <GraduationCap size={32} className="text-white" />
@@ -120,7 +139,6 @@ const ChangePassword = () => {
             </div>
           </div>
 
-          {/* Body */}
           <div className="p-8 pb-10 flex flex-col text-center">
             <h1 className="text-[22px] font-bold text-[#1A1A1A] mb-1">
               Cambio de Contraseña
@@ -146,7 +164,6 @@ const ChangePassword = () => {
               onSubmit={onSubmit}
               className="space-y-5 text-left flex flex-col"
             >
-              {/* Current password */}
               <div className="space-y-1.5">
                 <label className="text-[10px] font-bold text-gray-700 uppercase tracking-wide ml-0.5">
                   Contraseña actual
@@ -174,7 +191,6 @@ const ChangePassword = () => {
                 </div>
               </div>
 
-              {/* New password */}
               <div className="space-y-1.5">
                 <label className="text-[10px] font-bold text-gray-700 uppercase tracking-wide ml-0.5">
                   Nueva contraseña
@@ -201,11 +217,10 @@ const ChangePassword = () => {
                   </button>
                 </div>
                 <p className="text-[11px] text-gray-400 mt-1">
-                  Recomendación: usa letras, números y un símbolo.
+                  Debe incluir mínimo 8 caracteres, una mayúscula, una minúscula, un número y un carácter especial.
                 </p>
               </div>
 
-              {/* Confirm password */}
               <div className="space-y-1.5">
                 <label className="text-[10px] font-bold text-gray-700 uppercase tracking-wide ml-0.5">
                   Confirmar nueva contraseña
@@ -233,7 +248,6 @@ const ChangePassword = () => {
                 </div>
               </div>
 
-              {/* Alerts */}
               {error && (
                 <div className="bg-red-50 border border-red-100 p-2.5 rounded-lg text-center animate-in fade-in">
                   <p className="text-red-600 text-xs font-bold">{error}</p>
@@ -246,7 +260,6 @@ const ChangePassword = () => {
                 </div>
               )}
 
-              {/* Submit */}
               <button
                 type="submit"
                 disabled={loading}
@@ -260,7 +273,6 @@ const ChangePassword = () => {
                 <ArrowRight size={16} className="ml-1" />
               </button>
 
-              {/* Actions */}
               <div className="flex items-center justify-between pt-1">
                 <button
                   type="button"
@@ -285,15 +297,13 @@ const ChangePassword = () => {
               </div>
 
               <div className="pt-2 text-[11px] text-gray-400 text-center">
-                Usuario:{" "}
-                <span className="font-bold">{identifier || "—"}</span>
+                Usuario: <span className="font-bold">{identifier || "—"}</span>
               </div>
             </form>
           </div>
         </div>
       </div>
 
-      {/* Footer */}
       <footer className="w-full p-6 flex flex-col md:flex-row justify-between items-center text-[10px] text-gray-400 gap-4">
         <p>
           © 2026 Universidad Interamericana para el Desarrollo. Todos los
