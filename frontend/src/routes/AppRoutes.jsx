@@ -5,7 +5,7 @@ import { Hammer } from "lucide-react";
 // Páginas
 import LoginPage from "../pages/LoginPage";
 import ChangePassword from "../pages/ChangePassword";
-
+import Profile from "../pages/Profile";
 // Admin
 import ImportarAlumnos from "../pages/Alumnos/ImportarAlumnos";
 import ListadoAlumnos from "../pages/Alumnos/ListadoAlumnos";
@@ -88,6 +88,15 @@ const AppRoutes = () => {
           path="/change-password"
           element={!isAuthenticated ? <Navigate to="/login" replace /> : <ChangePassword />}
         />
+         {/* HU-36 */}
+       <Route
+  path="/profile"
+  element={
+    <ProtectedRoute>
+      <Profile />
+    </ProtectedRoute>
+  }
+/>
 
         {/* ADMIN */}
         <Route element={<ProtectedRoute allowedRole="admin"><AdminLayout /></ProtectedRoute>}>
