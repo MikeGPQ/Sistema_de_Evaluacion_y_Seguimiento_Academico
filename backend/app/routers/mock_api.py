@@ -1,6 +1,5 @@
 from fastapi import FastAPI, APIRouter
 
-
 app = FastAPI(title="Servidor Mock de la API Externa")
 
 router = APIRouter(
@@ -84,6 +83,5 @@ def obtener_carga_academica_falsa():
             "Cupo_Maximo": 10
         }
     ]
-
 
 app.include_router(router)

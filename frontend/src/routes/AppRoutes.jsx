@@ -10,8 +10,8 @@ import ChangePassword from "../pages/ChangePassword";
 import ImportarAlumnos from "../pages/Alumnos/ImportarAlumnos";
 import ListadoAlumnos from "../pages/Alumnos/ListadoAlumnos";
 import CambiarEstatusAlumno from "../pages/Alumnos/CambiarEstatusAlumno";
-import GruposYHorarios from "../pages/Grupos y Horarios/GrupoyHorarios";
-
+import GruposYHorarios from "../pages/GruposyHorarios/GrupoyHorarios";
+import MiHorario from "../pages/Alumnos/MiHorario";
 // Layouts
 import AdminLayout from "../layouts/AdminLayout";
 import AlumnoLayout from "../layouts/AlumnoLayout";
@@ -34,14 +34,12 @@ const EnConstruccion = ({ modulo }) => {
   );
 };
 
-// Guardián de rutas
 const ProtectedRoute = ({ children, allowedRole }) => {
   const { isAuthenticated, user, loading } = useAuth();
 
   if (loading) return null;
   if (!isAuthenticated) return <Navigate to="/login" replace />;
 
-  //  HU-31: forzar cambio si es temporal
   if (user?.is_temp_password) return <Navigate to="/change-password?forced=1" replace />;
 
   if (allowedRole && user?.role?.name !== allowedRole) {
@@ -86,7 +84,6 @@ const AppRoutes = () => {
           }
         />
 
-        {/* HU-31 */}
         <Route
           path="/change-password"
           element={!isAuthenticated ? <Navigate to="/login" replace /> : <ChangePassword />}
@@ -100,6 +97,7 @@ const AppRoutes = () => {
           <Route path="/horarios" element={<GruposYHorarios />} />
 
           <Route path="/docentes" element={<EnConstruccion modulo="Sincronización Docente" />} />
+          <Route path="/horarios" element={<GruposYHorarios />} /> 
           <Route path="/reportes" element={<EnConstruccion modulo="Boletas y Listas" />} />
         </Route>
 
@@ -112,7 +110,7 @@ const AppRoutes = () => {
 
         {/* ALUMNO */}
         <Route path="/alumno" element={<ProtectedRoute allowedRole="alumno"><AlumnoLayout /></ProtectedRoute>}>
-          <Route path="horario" element={<EnConstruccion modulo="Mi Horario" />} />
+          <Route path="horario" element={<MiHorario />} />
           <Route path="asistencias" element={<EnConstruccion modulo="Mis Asistencias" />} />
           <Route path="calificaciones" element={<EnConstruccion modulo="Mis Calificaciones" />} />
         </Route>

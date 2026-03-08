@@ -70,7 +70,7 @@ def cambiar_estatus(
 
     nuevo_estatus = db.query(StudentStatus).filter(StudentStatus.id == status_id).first()
     if not nuevo_estatus:
-        raise HTTPException(status_code=400, detail="Estatus no válido")
+        raise HTTPException(status_code=400, detail="Estatus no vÃ¡lido")
 
     if nuevo_estatus.name in ('baja', 'baja_temporal') and not evidence_file:
         raise HTTPException(status_code=400, detail="Se requiere un archivo de evidencia para este estatus.")
