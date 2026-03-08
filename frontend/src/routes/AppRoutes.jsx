@@ -88,15 +88,15 @@ const AppRoutes = () => {
           path="/change-password"
           element={!isAuthenticated ? <Navigate to="/login" replace /> : <ChangePassword />}
         />
-         {/* HU-36 */}
+        
        <Route
-  path="/profile"
-  element={
-    <ProtectedRoute>
-      <Profile />
-    </ProtectedRoute>
-  }
-/>
+          path="/profile"
+          element={
+            <ProtectedRoute>
+              <Profile />
+            </ProtectedRoute>
+          }
+        />
 
         {/* ADMIN */}
         <Route element={<ProtectedRoute allowedRole="admin"><AdminLayout /></ProtectedRoute>}>
