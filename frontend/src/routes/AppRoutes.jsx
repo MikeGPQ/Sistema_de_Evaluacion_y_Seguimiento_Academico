@@ -34,14 +34,12 @@ const EnConstruccion = ({ modulo }) => {
   );
 };
 
-// Guardián de rutas
 const ProtectedRoute = ({ children, allowedRole }) => {
   const { isAuthenticated, user, loading } = useAuth();
 
   if (loading) return null;
   if (!isAuthenticated) return <Navigate to="/login" replace />;
 
-  // ✅ HU-31: forzar cambio si es temporal
   if (user?.is_temp_password) return <Navigate to="/change-password?forced=1" replace />;
 
   if (allowedRole && user?.role?.name !== allowedRole) {
@@ -86,7 +84,6 @@ const AppRoutes = () => {
           }
         />
 
-        {/* HU-31 */}
         <Route
           path="/change-password"
           element={!isAuthenticated ? <Navigate to="/login" replace /> : <ChangePassword />}
@@ -97,9 +94,9 @@ const AppRoutes = () => {
           <Route path="/alumnos/listado" element={<ListadoAlumnos />} />
           <Route path="/alumnos/importar" element={<ImportarAlumnos />} />
           <Route path="/alumnos/cambiar-estatus" element={<CambiarEstatusAlumno />} />
+          <Route path="/horarios" element={<GruposYHorarios />} />
 
           <Route path="/docentes" element={<EnConstruccion modulo="Sincronización Docente" />} />
-          {/* 🌟 AQUÍ CONECTAMOS TU MÓDULO: Reemplazamos EnConstruccion por GruposYHorarios */}
           <Route path="/horarios" element={<GruposYHorarios />} /> 
           <Route path="/reportes" element={<EnConstruccion modulo="Boletas y Listas" />} />
         </Route>

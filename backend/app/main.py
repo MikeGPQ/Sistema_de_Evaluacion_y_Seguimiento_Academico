@@ -15,6 +15,7 @@ from app.routers import sync
 from app.routers import enrollments
 from app.routers import catalogos
 from app.routers.sync import tarea_automatica_sincronizacion
+from app.routers import enrollments
 
 load_dotenv()
 
