@@ -16,6 +16,10 @@ const ChangePassword = () => {
   const navigate = useNavigate();
   const location = useLocation();
 
+  const isRecovery = location.state?.isRecovery || false;
+  const recoveryCode = location.state?.code || "";
+  const recoveryIdentifier = location.state?.identifier || "";
+
   const forced = useMemo(() => {
     const params = new URLSearchParams(location.search);
     return params.get("forced") === "1";
@@ -34,8 +38,7 @@ const ChangePassword = () => {
   const [error, setError] = useState("");
   const [ok, setOk] = useState("");
   const [loading, setLoading] = useState(false);
-
-  const identifier = user?.identifier;
+  const identifier = user?.identifier || recoveryIdentifier;
 
   const goHomeByRole = (role) => {
     if (role?.name === "admin") return navigate("/alumnos/listado");
@@ -45,15 +48,12 @@ const ChangePassword = () => {
 
   const validatePasswordStrength = (password) => {
     const regex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z\d]).{8,}$/;
-
     if (!password) {
       return "La nueva contraseña es obligatoria.";
     }
-
     if (!regex.test(password)) {
       return "La contraseña debe tener al menos 8 caracteres, una mayúscula, una minúscula, un número y un carácter especial.";
     }
-
     return "";
   };
 
@@ -63,7 +63,7 @@ const ChangePassword = () => {
     setOk("");
 
     if (!identifier) {
-      setError("No hay sesión activa. Inicia sesión nuevamente.");
+      setError("No hay sesión activa ni proceso de recuperación.");
       return;
     }
 
@@ -73,7 +73,7 @@ const ChangePassword = () => {
       return;
     }
 
-    if (form.current_password === form.new_password) {
+    if (!isRecovery && form.current_password === form.new_password) {
       setError("La nueva contraseña no puede ser igual a la contraseña actual.");
       return;
     }
@@ -85,21 +85,35 @@ const ChangePassword = () => {
 
     setLoading(true);
     try {
-      await client.put("/auth/change-password", {
-        identifier,
-        current_password: form.current_password,
-        new_password: form.new_password,
-        confirm_password: form.confirm_password,
-      });
+      if (isRecovery) {
+        await client.post("/auth/reset-password", {
+          identifier,
+          code: recoveryCode,
+          new_password: form.new_password,
+          confirm_password: form.confirm_password,
+        });
 
-      updateUser({ ...user, is_temp_password: false });
+        setOk("Contraseña recuperada exitosamente. Redirigiendo al login...");
+        setTimeout(() => {
+          navigate("/login");
+        }, 2000);
 
-      setOk("Contraseña actualizada exitosamente.");
-      setForm({ current_password: "", new_password: "", confirm_password: "" });
+      } else {
+        await client.put("/auth/change-password", {
+          identifier,
+          current_password: form.current_password,
+          new_password: form.new_password,
+          confirm_password: form.confirm_password,
+        });
 
-      setTimeout(() => {
-        goHomeByRole(user?.role);
-      }, 700);
+        updateUser({ ...user, is_temp_password: false });
+        setOk("Contraseña actualizada exitosamente.");
+        setForm({ current_password: "", new_password: "", confirm_password: "" });
+
+        setTimeout(() => {
+          goHomeByRole(user?.role);
+        }, 700);
+      }
     } catch (err) {
       const msg =
         err?.response?.data?.detail ||
@@ -141,7 +155,7 @@ const ChangePassword = () => {
 
           <div className="p-8 pb-10 flex flex-col text-center">
             <h1 className="text-[22px] font-bold text-[#1A1A1A] mb-1">
-              Cambio de Contraseña
+              {isRecovery ? "Restablecer Contraseña" : "Cambio de Contraseña"}
             </h1>
 
             {forced ? (
@@ -156,7 +170,9 @@ const ChangePassword = () => {
               </div>
             ) : (
               <p className="text-sm text-gray-500 mb-6 font-medium">
-                Actualiza tu contraseña para mantener tu cuenta segura.
+                {isRecovery
+                  ? "Ingresa tu nueva contraseña para recuperar el acceso a tu cuenta."
+                  : "Actualiza tu contraseña para mantener tu cuenta segura."}
               </p>
             )}
 
@@ -164,32 +180,34 @@ const ChangePassword = () => {
               onSubmit={onSubmit}
               className="space-y-5 text-left flex flex-col"
             >
-              <div className="space-y-1.5">
-                <label className="text-[10px] font-bold text-gray-700 uppercase tracking-wide ml-0.5">
-                  Contraseña actual
-                </label>
-                <div className="relative group">
-                  <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 group-focus-within:text-[#0B172A] transition-colors" />
-                  <input
-                    type={showCurrent ? "text" : "password"}
-                    required
-                    placeholder="••••••••"
-                    className="w-full pl-10 pr-10 py-2.5 bg-white border border-gray-300 rounded-lg outline-none focus:ring-1 focus:ring-[#0B172A] focus:border-[#0B172A] transition-all text-sm text-gray-800 placeholder:text-gray-400 tracking-widest"
-                    value={form.current_password}
-                    onChange={(e) =>
-                      setForm({ ...form, current_password: e.target.value })
-                    }
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowCurrent(!showCurrent)}
-                    className="absolute right-3.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 focus:outline-none"
-                    aria-label="Mostrar contraseña actual"
-                  >
-                    {showCurrent ? <EyeOff size={16} /> : <Eye size={16} />}
-                  </button>
+              {!isRecovery && (
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-bold text-gray-700 uppercase tracking-wide ml-0.5">
+                    Contraseña actual
+                  </label>
+                  <div className="relative group">
+                    <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 group-focus-within:text-[#0B172A] transition-colors" />
+                    <input
+                      type={showCurrent ? "text" : "password"}
+                      required
+                      placeholder="••••••••"
+                      className="w-full pl-10 pr-10 py-2.5 bg-white border border-gray-300 rounded-lg outline-none focus:ring-1 focus:ring-[#0B172A] focus:border-[#0B172A] transition-all text-sm text-gray-800 placeholder:text-gray-400 tracking-widest"
+                      value={form.current_password}
+                      onChange={(e) =>
+                        setForm({ ...form, current_password: e.target.value })
+                      }
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowCurrent(!showCurrent)}
+                      className="absolute right-3.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 focus:outline-none"
+                      aria-label="Mostrar contraseña actual"
+                    >
+                      {showCurrent ? <EyeOff size={16} /> : <Eye size={16} />}
+                    </button>
+                  </div>
                 </div>
-              </div>
+              )}
 
               <div className="space-y-1.5">
                 <label className="text-[10px] font-bold text-gray-700 uppercase tracking-wide ml-0.5">
@@ -216,8 +234,8 @@ const ChangePassword = () => {
                     {showNew ? <EyeOff size={16} /> : <Eye size={16} />}
                   </button>
                 </div>
-                <p className="text-[11px] text-gray-400 mt-1">
-                  Debe incluir mínimo 8 caracteres, una mayúscula, una minúscula, un número y un carácter especial.
+                <p className="text-[11px] text-[#0B172A] mt-1 font-semibold bg-blue-50 p-2 rounded border border-blue-100">
+                  Obligatorio: Mínimo 8 caracteres, incluir al menos una mayúscula, una minúscula, un número y un símbolo.
                 </p>
               </div>
 
@@ -279,21 +297,23 @@ const ChangePassword = () => {
                   onClick={onLogout}
                   className="inline-flex items-center gap-2 text-xs font-bold text-gray-500 hover:text-[#0B172A] transition-colors"
                 >
-                  <LogOut size={14} /> Cerrar sesión
+                  <LogOut size={14} /> {isRecovery ? "Cancelar" : "Cerrar sesión"}
                 </button>
 
-                <button
-                  type="button"
-                  onClick={onCancel}
-                  disabled={forced}
-                  className={`text-xs font-bold transition-colors ${
-                    forced
-                      ? "text-gray-300 cursor-not-allowed"
-                      : "text-gray-500 hover:text-[#0B172A]"
-                  }`}
-                >
-                  Cancelar
-                </button>
+                {!isRecovery && (
+                  <button
+                    type="button"
+                    onClick={onCancel}
+                    disabled={forced}
+                    className={`text-xs font-bold transition-colors ${
+                      forced
+                        ? "text-gray-300 cursor-not-allowed"
+                        : "text-gray-500 hover:text-[#0B172A]"
+                    }`}
+                  >
+                    Cancelar
+                  </button>
+                )}
               </div>
 
               <div className="pt-2 text-[11px] text-gray-400 text-center">

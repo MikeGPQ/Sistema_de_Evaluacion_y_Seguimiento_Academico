@@ -5,6 +5,7 @@ import { Hammer } from "lucide-react";
 // Páginas
 import LoginPage from "../pages/LoginPage";
 import ChangePassword from "../pages/ChangePassword";
+import RecoverPassword from "../pages/RecoverPassword";
 import Profile from "../pages/Profile";
 // Admin
 import ImportarAlumnos from "../pages/Alumnos/ImportarAlumnos";
@@ -85,8 +86,13 @@ const AppRoutes = () => {
         />
 
         <Route
+          path="/recover-password"
+          element={!isAuthenticated ? <RecoverPassword /> : <Navigate to="/" replace />}
+        />
+
+        <Route
           path="/change-password"
-          element={!isAuthenticated ? <Navigate to="/login" replace /> : <ChangePassword />}
+          element={<ChangePassword />}
         />
         
        <Route
