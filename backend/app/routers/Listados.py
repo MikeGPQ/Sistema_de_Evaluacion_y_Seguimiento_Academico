@@ -9,6 +9,7 @@ from app.models.student_status import StudentStatus
 from app.models.career import Career
 from app.models.student_status_log import StudentStatusLog
 from app.models.file import File as FileModel
+from app.models.enrollment import StudentEnrollment
 
 router = APIRouter(prefix="/alumnos", tags=["Alumnos"])
 
@@ -69,7 +70,7 @@ def cambiar_estatus(
 
     nuevo_estatus = db.query(StudentStatus).filter(StudentStatus.id == status_id).first()
     if not nuevo_estatus:
-        raise HTTPException(status_code=400, detail="Estatus no válido")
+        raise HTTPException(status_code=400, detail="Estatus no vÃ¡lido")
 
     if nuevo_estatus.name in ('baja', 'baja_temporal') and not evidence_file:
         raise HTTPException(status_code=400, detail="Se requiere un archivo de evidencia para este estatus.")
@@ -91,6 +92,16 @@ def cambiar_estatus(
         status_id_anterior = alumno.status_id
         alumno.status_id = status_id
 
+        
+        # Limpieza de horarios 
+        # Si el alumno pasa a inactivo, borramos sus inscripciones para liberar cupo
+        
+        if nuevo_estatus.name in ('baja', 'baja_temporal', 'egresado'):
+            db.query(StudentEnrollment).filter(
+                StudentEnrollment.student_matricula == matricula
+            ).delete()
+       
+
         if status_id_anterior != status_id or evidence_file_id is not None:
             nuevo_log = StudentStatusLog(
                 student_matricula=alumno.matricula,
@@ -102,11 +113,10 @@ def cambiar_estatus(
             db.add(nuevo_log)
 
         db.commit()
-        return {"message": "Estatus y Log actualizados correctamente", "nuevo_estatus": nuevo_estatus.name}
+        return {"message": "Estatus y Log actualizados correctamente. Si aplicaba, se liberaron sus materias.", "nuevo_estatus": nuevo_estatus.name}
     except Exception as e:
         db.rollback()
         raise HTTPException(status_code=500, detail=f"Error al actualizar estatus: {str(e)}")
-
 
 @router.get("/{matricula}/ultimo-log-estatus")
 def get_ultimo_log_estatus(matricula: str, db: Session = Depends(get_db)):
@@ -126,3 +136,4 @@ def get_ultimo_log_estatus(matricula: str, db: Session = Depends(get_db)):
         "evidence_file_id": log.evidence_file_id,
         "evidence_file_name": log.evidence_file.file_name if log.evidence_file else None
     }
+

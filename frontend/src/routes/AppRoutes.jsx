@@ -5,13 +5,17 @@ import { Hammer } from "lucide-react";
 // Páginas
 import LoginPage from "../pages/LoginPage";
 import ChangePassword from "../pages/ChangePassword";
+import RecoverPassword from "../pages/RecoverPassword";
+import Profile from "../pages/Profile";
 
 // Admin
 import ImportarAlumnos from "../pages/Alumnos/ImportarAlumnos";
 import ListadoAlumnos from "../pages/Alumnos/ListadoAlumnos";
 import CambiarEstatusAlumno from "../pages/Alumnos/CambiarEstatusAlumno";
+import GruposYHorarios from "../pages/GruposyHorarios/GrupoyHorarios";
+import MiHorario from "../pages/Alumnos/MiHorario";
 
-//Super Admin
+// Super Admin
 import ListadoAdministradores from "../pages/Administradores/ListadoAdministradores";
 
 // Layouts
@@ -76,7 +80,7 @@ const AppRoutes = () => {
               <LoginPage />
             ) : user?.is_temp_password ? (
               <Navigate to="/change-password?forced=1" replace />
-            ) : (user?.role?.name === "admin" || user?.role?.name === "super_admin") ? ( 
+            ) : (user?.role?.name === "admin" || user?.role?.name === "super_admin") ? (
               <Navigate to="/alumnos/listado" replace />
             ) : user?.role?.name === "docente" ? (
               <Navigate to="/docente/pase-lista" replace />
@@ -86,24 +90,36 @@ const AppRoutes = () => {
           }
         />
 
-        {/* CAMBIO DE CONTRASEÑA */}
         <Route
-          path="/change-password"
-          element={!isAuthenticated ? <Navigate to="/login" replace /> : <ChangePassword />}
+          path="/recover-password"
+          element={!isAuthenticated ? <RecoverPassword /> : <Navigate to="/" replace />}
         />
 
-        {/* ADMIN & SUPERADMIN */}
+        <Route
+          path="/change-password"
+          element={<ChangePassword />}
+        />
+
+        <Route
+          path="/profile"
+          element={
+            <ProtectedRoute>
+              <Profile />
+            </ProtectedRoute>
+          }
+        />
+
+        {/* ADMIN & SUPER ADMIN */}
         <Route element={<ProtectedRoute allowedRoles={["admin", "super_admin"]}><AdminLayout /></ProtectedRoute>}>
-          
-          {/* SUPERADMIN */}
+
           <Route path="/administradores/listado" element={<ListadoAdministradores />} />
-          
+
           <Route path="/alumnos/listado" element={<ListadoAlumnos />} />
           <Route path="/alumnos/importar" element={<ImportarAlumnos />} />
           <Route path="/alumnos/cambiar-estatus" element={<CambiarEstatusAlumno />} />
 
           <Route path="/docentes" element={<EnConstruccion modulo="Sincronización Docente" />} />
-          <Route path="/horarios" element={<EnConstruccion modulo="Grupos y Horarios" />} />
+          <Route path="/horarios" element={<GruposYHorarios />} />
           <Route path="/reportes" element={<EnConstruccion modulo="Boletas y Listas" />} />
         </Route>
 
@@ -116,7 +132,7 @@ const AppRoutes = () => {
 
         {/* ALUMNO */}
         <Route path="/alumno" element={<ProtectedRoute allowedRoles={["alumno"]}><AlumnoLayout /></ProtectedRoute>}>
-          <Route path="horario" element={<EnConstruccion modulo="Mi Horario" />} />
+          <Route path="horario" element={<MiHorario />} />
           <Route path="asistencias" element={<EnConstruccion modulo="Mis Asistencias" />} />
           <Route path="calificaciones" element={<EnConstruccion modulo="Mis Calificaciones" />} />
         </Route>
@@ -129,7 +145,7 @@ const AppRoutes = () => {
               <Navigate to="/login" replace />
             ) : user?.is_temp_password ? (
               <Navigate to="/change-password?forced=1" replace />
-            ) : (user?.role?.name === "admin" || user?.role?.name === "super_admin") ? ( 
+            ) : (user?.role?.name === "admin" || user?.role?.name === "super_admin") ? (
               <Navigate to="/alumnos/listado" replace />
             ) : user?.role?.name === "docente" ? (
               <Navigate to="/docente/pase-lista" replace />

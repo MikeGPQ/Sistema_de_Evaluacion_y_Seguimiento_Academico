@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Outlet, useLocation, Link } from 'react-router-dom';
+import { Outlet, useLocation, Link, useNavigate } from 'react-router-dom';
 import { 
   Users, 
   RefreshCcw, 
@@ -21,38 +21,50 @@ const formatName = (name) => {
 
 const AdminLayout = () => {
   const location = useLocation();
-  const { logout, user } = useAuth(); 
-  
+  const navigate = useNavigate();
+  const { user, logout } = useAuth();
+
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [isMobileOpen, setIsMobileOpen] = useState(false);
 
   const isActive = (path) => location.pathname.includes(path);
 
-  const nombreCrudo = user?.nombre_completo || "Usuario Administrador";
+  const nombreCrudo =
+    user?.full_name ||
+    user?.nombre_completo ||
+    user?.name ||
+    user?.nombre ||
+    "Usuario Administrador";
   const nombreUsuario = formatName(nombreCrudo);
   const inicialUsuario = nombreUsuario.charAt(0).toUpperCase();
-  
+
+  const displayArea =
+    user?.email ||
+    user?.correo ||
+    user?.identifier ||
+    "Control Escolar";
+
   const roleName = user?.role?.name?.toLowerCase();
   const isSuperAdmin = roleName === 'super_admin';
 
   return (
     <div className="flex h-screen bg-[#F8F9FA] font-sans overflow-hidden">
-      
+
       {isMobileOpen && (
-        <div 
+        <div
           className="fixed inset-0 bg-black/50 z-20 md:hidden"
           onClick={() => setIsMobileOpen(false)}
         />
       )}
 
-      <aside 
+      <aside
         className={`fixed md:relative inset-y-0 left-0 z-30 bg-[#0B172A] text-white flex flex-col flex-shrink-0 shadow-xl transition-all duration-300 ease-in-out
           ${isMobileOpen ? 'translate-x-0 w-[260px]' : '-translate-x-full md:translate-x-0'}
           ${isCollapsed ? 'md:w-20' : 'md:w-[260px]'}
         `}
       >
-        <button 
-          onClick={() => setIsCollapsed(!isCollapsed)} 
+        <button
+          onClick={() => setIsCollapsed(!isCollapsed)}
           className="hidden md:flex absolute top-1/2 -right-3.5 -translate-y-1/2 bg-[#F2A900] text-[#0B172A] p-1.5 rounded-full shadow-lg z-50 hover:scale-110 transition-transform"
           title={isCollapsed ? "Expandir menú" : "Contraer menú"}
         >
@@ -71,9 +83,9 @@ const AdminLayout = () => {
               </div>
             )}
           </div>
-          
-          <button 
-            onClick={() => setIsMobileOpen(false)} 
+
+          <button
+            onClick={() => setIsMobileOpen(false)}
             className="md:hidden p-1.5 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition-colors absolute right-4"
           >
             <X className="w-5 h-5" />
@@ -81,26 +93,35 @@ const AdminLayout = () => {
         </div>
 
         <div className={`p-4 border-b border-slate-800 bg-[#0b172a] flex items-center ${isCollapsed ? 'justify-center' : 'justify-between'}`}>
-          <div className="flex items-center gap-3 overflow-hidden">
+          <button
+            type="button"
+            onClick={() => navigate("/profile")}
+            className={`flex items-center gap-3 overflow-hidden text-left hover:bg-slate-800 rounded-lg p-1 transition-colors flex-1 ${isCollapsed ? 'justify-center' : ''}`}
+            title="Ver perfil"
+          >
             <div className="w-9 h-9 rounded-full bg-[#1A237E] flex items-center justify-center text-white font-bold text-xs shrink-0 border border-indigo-500">
               {inicialUsuario}
             </div>
             {!isCollapsed && (
               <div className="flex flex-col">
-                <span 
-                  className="text-sm font-semibold text-white whitespace-normal break-words leading-tight line-clamp-2" 
+                <span
+                  className="text-sm font-semibold text-white whitespace-normal break-words leading-tight line-clamp-2"
                   title={nombreUsuario}
                 >
                   {nombreUsuario}
                 </span>
                 <span className="text-[10px] text-slate-400 truncate mt-0.5 capitalize">
-                  {isSuperAdmin ? 'Súper Administrador' : 'Administrador'}
+                  {isSuperAdmin ? 'Súper Administrador' : displayArea}
                 </span>
               </div>
             )}
-          </div>
+          </button>
           {!isCollapsed && (
-            <button onClick={logout} className="p-2 text-slate-400 hover:text-red-400 hover:bg-slate-800 rounded-lg transition-colors shrink-0" title="Cerrar Sesión">
+            <button
+              onClick={logout}
+              className="p-2 text-slate-400 hover:text-red-400 hover:bg-slate-800 rounded-lg transition-colors shrink-0"
+              title="Cerrar Sesión"
+            >
               <LogOut className="w-5 h-5" />
             </button>
           )}
@@ -108,28 +129,28 @@ const AdminLayout = () => {
 
         <div className="flex-1 overflow-y-auto py-6 px-3 custom-scrollbar">
           <nav className="space-y-2">
-            
+
             {isSuperAdmin && (
               <Link to="/administradores/listado" title="Gestión de Administradores" className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-colors ${isCollapsed ? 'justify-center' : ''} ${isActive('/administradores') ? 'bg-[#1A237E] text-white font-semibold shadow-md' : 'text-slate-300 hover:bg-slate-800 hover:text-white'}`}>
-                <Shield className="w-[18px] h-[18px] shrink-0" /> 
+                <Shield className="w-[18px] h-[18px] shrink-0" />
                 {!isCollapsed && <span>Administradores</span>}
               </Link>
             )}
 
             <Link to="/alumnos/listado" title="Alumnos" className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-colors ${isCollapsed ? 'justify-center' : ''} ${isActive('/alumnos') ? 'bg-[#1A237E] text-white font-semibold shadow-md' : 'text-slate-300 hover:bg-slate-800 hover:text-white'}`}>
-              <Users className="w-[18px] h-[18px] shrink-0" /> 
+              <Users className="w-[18px] h-[18px] shrink-0" />
               {!isCollapsed && <span>Alumnos</span>}
             </Link>
             <Link to="/docentes" title="Sincronización Docente" className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-colors ${isCollapsed ? 'justify-center' : ''} ${isActive('/docentes') ? 'bg-[#1A237E] text-white font-semibold shadow-md' : 'text-slate-300 hover:bg-slate-800 hover:text-white'}`}>
-              <RefreshCcw className="w-[18px] h-[18px] shrink-0" /> 
+              <RefreshCcw className="w-[18px] h-[18px] shrink-0" />
               {!isCollapsed && <span>Sincronización Docente</span>}
             </Link>
             <Link to="/horarios" title="Grupos y Horarios" className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-colors ${isCollapsed ? 'justify-center' : ''} ${isActive('/horarios') ? 'bg-[#1A237E] text-white font-semibold shadow-md' : 'text-slate-300 hover:bg-slate-800 hover:text-white'}`}>
-              <CalendarDays className="w-[18px] h-[18px] shrink-0" /> 
+              <CalendarDays className="w-[18px] h-[18px] shrink-0" />
               {!isCollapsed && <span>Grupos y Horarios</span>}
             </Link>
             <Link to="/reportes" title="Boletas y Listas" className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-colors ${isCollapsed ? 'justify-center' : ''} ${isActive('/reportes') ? 'bg-[#1A237E] text-white font-semibold shadow-md' : 'text-slate-300 hover:bg-slate-800 hover:text-white'}`}>
-              <FileText className="w-[18px] h-[18px] shrink-0" /> 
+              <FileText className="w-[18px] h-[18px] shrink-0" />
               {!isCollapsed && <span>Boletas y Listas</span>}
             </Link>
           </nav>
@@ -137,7 +158,7 @@ const AdminLayout = () => {
 
         {isCollapsed && (
           <div className="p-4 flex justify-center border-t border-slate-800">
-             <button onClick={logout} className="p-2 text-slate-400 hover:text-red-400 hover:bg-slate-800 rounded-lg transition-colors" title="Cerrar Sesión">
+            <button onClick={logout} className="p-2 text-slate-400 hover:text-red-400 hover:bg-slate-800 rounded-lg transition-colors" title="Cerrar Sesión">
               <LogOut className="w-5 h-5" />
             </button>
           </div>
@@ -152,7 +173,7 @@ const AdminLayout = () => {
             </div>
             <span className="font-bold text-sm tracking-wide">SESA Admin</span>
           </div>
-          <button 
+          <button
             onClick={() => setIsMobileOpen(true)}
             className="p-1.5 text-slate-300 hover:text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-slate-500"
           >
@@ -161,7 +182,7 @@ const AdminLayout = () => {
         </header>
 
         <div className="flex-1 overflow-y-auto">
-          <Outlet /> 
+          <Outlet />
         </div>
       </main>
 

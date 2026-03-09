@@ -71,6 +71,7 @@ const LoginPage = () => {
   const handleForgotPassword = (e) => {
     e.preventDefault();
     setError('');
+    navigate('/recover-password');
 
     const savedUser = localStorage.getItem('user');
     if (!savedUser) {
