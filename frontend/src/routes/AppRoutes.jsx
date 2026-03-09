@@ -7,12 +7,17 @@ import LoginPage from "../pages/LoginPage";
 import ChangePassword from "../pages/ChangePassword";
 import RecoverPassword from "../pages/RecoverPassword";
 import Profile from "../pages/Profile";
+
 // Admin
 import ImportarAlumnos from "../pages/Alumnos/ImportarAlumnos";
 import ListadoAlumnos from "../pages/Alumnos/ListadoAlumnos";
 import CambiarEstatusAlumno from "../pages/Alumnos/CambiarEstatusAlumno";
 import GruposYHorarios from "../pages/GruposyHorarios/GrupoyHorarios";
 import MiHorario from "../pages/Alumnos/MiHorario";
+
+// Super Admin
+import ListadoAdministradores from "../pages/Administradores/ListadoAdministradores";
+
 // Layouts
 import AdminLayout from "../layouts/AdminLayout";
 import AlumnoLayout from "../layouts/AlumnoLayout";
@@ -35,7 +40,7 @@ const EnConstruccion = ({ modulo }) => {
   );
 };
 
-const ProtectedRoute = ({ children, allowedRole }) => {
+const ProtectedRoute = ({ children, allowedRoles }) => {
   const { isAuthenticated, user, loading } = useAuth();
 
   if (loading) return null;
@@ -43,8 +48,8 @@ const ProtectedRoute = ({ children, allowedRole }) => {
 
   if (user?.is_temp_password) return <Navigate to="/change-password?forced=1" replace />;
 
-  if (allowedRole && user?.role?.name !== allowedRole) {
-    if (user?.role?.name === "admin") return <Navigate to="/alumnos/listado" replace />;
+  if (allowedRoles && !allowedRoles.includes(user?.role?.name)) {
+    if (user?.role?.name === "admin" || user?.role?.name === "super_admin") return <Navigate to="/alumnos/listado" replace />;
     if (user?.role?.name === "alumno") return <Navigate to="/alumno/horario" replace />;
     if (user?.role?.name === "docente") return <Navigate to="/docente/pase-lista" replace />;
     return <Navigate to="/login" replace />;
@@ -75,7 +80,7 @@ const AppRoutes = () => {
               <LoginPage />
             ) : user?.is_temp_password ? (
               <Navigate to="/change-password?forced=1" replace />
-            ) : user?.role?.name === "admin" ? (
+            ) : (user?.role?.name === "admin" || user?.role?.name === "super_admin") ? (
               <Navigate to="/alumnos/listado" replace />
             ) : user?.role?.name === "docente" ? (
               <Navigate to="/docente/pase-lista" replace />
@@ -94,8 +99,8 @@ const AppRoutes = () => {
           path="/change-password"
           element={<ChangePassword />}
         />
-        
-       <Route
+
+        <Route
           path="/profile"
           element={
             <ProtectedRoute>
@@ -104,27 +109,29 @@ const AppRoutes = () => {
           }
         />
 
-        {/* ADMIN */}
-        <Route element={<ProtectedRoute allowedRole="admin"><AdminLayout /></ProtectedRoute>}>
+        {/* ADMIN & SUPER ADMIN */}
+        <Route element={<ProtectedRoute allowedRoles={["admin", "super_admin"]}><AdminLayout /></ProtectedRoute>}>
+
+          <Route path="/administradores/listado" element={<ListadoAdministradores />} />
+
           <Route path="/alumnos/listado" element={<ListadoAlumnos />} />
           <Route path="/alumnos/importar" element={<ImportarAlumnos />} />
           <Route path="/alumnos/cambiar-estatus" element={<CambiarEstatusAlumno />} />
-          <Route path="/horarios" element={<GruposYHorarios />} />
 
           <Route path="/docentes" element={<EnConstruccion modulo="Sincronización Docente" />} />
-          <Route path="/horarios" element={<GruposYHorarios />} /> 
+          <Route path="/horarios" element={<GruposYHorarios />} />
           <Route path="/reportes" element={<EnConstruccion modulo="Boletas y Listas" />} />
         </Route>
 
         {/* DOCENTE */}
-        <Route path="/docente" element={<ProtectedRoute allowedRole="docente"><DocenteLayout /></ProtectedRoute>}>
+        <Route path="/docente" element={<ProtectedRoute allowedRoles={["docente"]}><DocenteLayout /></ProtectedRoute>}>
           <Route path="pase-lista" element={<EnConstruccion modulo="Pase de Lista Digital" />} />
           <Route path="calificaciones" element={<EnConstruccion modulo="Captura de Calificaciones" />} />
           <Route path="actas" element={<EnConstruccion modulo="Generación de Actas Oficiales" />} />
         </Route>
 
         {/* ALUMNO */}
-        <Route path="/alumno" element={<ProtectedRoute allowedRole="alumno"><AlumnoLayout /></ProtectedRoute>}>
+        <Route path="/alumno" element={<ProtectedRoute allowedRoles={["alumno"]}><AlumnoLayout /></ProtectedRoute>}>
           <Route path="horario" element={<MiHorario />} />
           <Route path="asistencias" element={<EnConstruccion modulo="Mis Asistencias" />} />
           <Route path="calificaciones" element={<EnConstruccion modulo="Mis Calificaciones" />} />
@@ -138,7 +145,7 @@ const AppRoutes = () => {
               <Navigate to="/login" replace />
             ) : user?.is_temp_password ? (
               <Navigate to="/change-password?forced=1" replace />
-            ) : user?.role?.name === "admin" ? (
+            ) : (user?.role?.name === "admin" || user?.role?.name === "super_admin") ? (
               <Navigate to="/alumnos/listado" replace />
             ) : user?.role?.name === "docente" ? (
               <Navigate to="/docente/pase-lista" replace />

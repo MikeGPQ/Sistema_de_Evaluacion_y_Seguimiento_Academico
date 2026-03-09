@@ -1,32 +1,37 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Outlet, useLocation, Link, useNavigate } from 'react-router-dom';
-import {
-  ClipboardList,
-  FileEdit,
+import { 
+  ClipboardList, 
+  FileEdit, 
   FileCheck,
-  LogOut
+  LogOut,
+  Menu,
+  X,
+  ChevronLeft,
+  ChevronRight
 } from 'lucide-react';
 import { useAuth } from '../hooks/AuthContext';
+
+const formatName = (name) => {
+  if (!name) return "";
+  return name.toLowerCase().replace(/\b\w/g, char => char.toUpperCase());
+};
 
 const DocenteLayout = () => {
   const location = useLocation();
   const navigate = useNavigate();
   const { user, logout } = useAuth();
-
+  const [isCollapsed, setIsCollapsed] = useState(false);
+  const [isMobileOpen, setIsMobileOpen] = useState(false);
   const isActive = (path) => location.pathname.includes(path);
 
-  const displayName =
+  const nombreCrudo =
     user?.full_name ||
     user?.nombre_completo ||
     user?.name ||
     user?.nombre ||
     'Profesor';
-
-  const displayArea =
-    user?.email ||
-    user?.correo ||
-    user?.identifier ||
-    'Plantilla Activa';
+  const nombreUsuario = formatName(nombreCrudo);
 
   const getInitials = (name) => {
     if (!name) return 'PR';
@@ -38,87 +43,139 @@ const DocenteLayout = () => {
       .join('');
   };
 
+  const displayArea =
+    user?.email ||
+    user?.correo ||
+    user?.identifier ||
+    'Plantilla Activa';
+
   return (
     <div className="flex h-screen bg-[#F8F9FA] font-sans overflow-hidden">
-      <aside className="w-[260px] bg-[#0B172A] text-white flex flex-col flex-shrink-0 shadow-xl z-20">
-        <div className="h-16 flex items-center px-6 border-b border-slate-800 bg-[#070e1a]">
-          <div className="w-7 h-7 bg-[#F2A900] rounded text-[#0B172A] flex items-center justify-center font-black text-sm mr-3 shadow-sm">
-            U
+
+      {isMobileOpen && (
+        <div
+          className="fixed inset-0 bg-black/50 z-20 md:hidden"
+          onClick={() => setIsMobileOpen(false)}
+        />
+      )}
+
+      <aside
+        className={`fixed md:relative inset-y-0 left-0 z-30 bg-[#0B172A] text-white flex flex-col flex-shrink-0 shadow-xl transition-all duration-300 ease-in-out
+          ${isMobileOpen ? 'translate-x-0 w-[260px]' : '-translate-x-full md:translate-x-0'}
+          ${isCollapsed ? 'md:w-20' : 'md:w-[260px]'}
+        `}
+      >
+        <button
+          onClick={() => setIsCollapsed(!isCollapsed)}
+          className="hidden md:flex absolute top-1/2 -right-3.5 -translate-y-1/2 bg-[#F2A900] text-[#0B172A] p-1.5 rounded-full shadow-lg z-50 hover:scale-110 transition-transform"
+          title={isCollapsed ? "Expandir menú" : "Contraer menú"}
+        >
+          {isCollapsed ? <ChevronRight className="w-4 h-4 font-bold" /> : <ChevronLeft className="w-4 h-4 font-bold" />}
+        </button>
+
+        <div className="h-16 flex items-center justify-between px-4 border-b border-slate-800 bg-[#070e1a]">
+          <div className="flex items-center overflow-hidden w-full">
+            <div className={`w-8 h-8 bg-[#F2A900] rounded text-[#0B172A] flex items-center justify-center font-black text-sm shrink-0 shadow-sm transition-all ${isCollapsed ? 'mx-auto' : ''}`}>
+              U
+            </div>
+            {!isCollapsed && (
+              <div className="flex flex-col ml-3 transition-opacity duration-300">
+                <span className="font-bold text-base tracking-wide leading-tight">SESA Docente</span>
+                <span className="text-[9px] text-slate-400 uppercase tracking-widest">Campus Campeche</span>
+              </div>
+            )}
           </div>
-          <div className="flex flex-col">
-            <span className="font-bold text-base tracking-wide leading-tight">SESA Docente</span>
-            <span className="text-[9px] text-slate-400 uppercase tracking-widest">Campus Campeche</span>
-          </div>
+
+          <button
+            onClick={() => setIsMobileOpen(false)}
+            className="md:hidden p-1.5 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition-colors absolute right-4"
+          >
+            <X className="w-5 h-5" />
+          </button>
         </div>
 
-        <div className="flex-1 overflow-y-auto py-6 px-4 custom-scrollbar">
-          <nav className="space-y-1.5">
-            <Link
-              to="/docente/pase-lista"
-              className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-colors ${
-                isActive('/pase-lista')
-                  ? 'bg-[#1A237E] text-white font-semibold shadow-md'
-                  : 'text-slate-300 hover:bg-slate-800 hover:text-white'
-              }`}
+        <div className={`p-4 border-b border-slate-800 bg-[#0b172a] flex items-center ${isCollapsed ? 'justify-center' : 'justify-between'}`}>
+          <button
+            type="button"
+            onClick={() => navigate('/profile')}
+            className={`flex items-center gap-3 overflow-hidden text-left hover:bg-slate-800 rounded-lg p-1 transition-colors flex-1 ${isCollapsed ? 'justify-center' : ''}`}
+            title="Ver perfil"
+          >
+            <div className="w-9 h-9 rounded-full bg-[#10B981] flex items-center justify-center text-white font-bold text-xs shrink-0 border border-emerald-400">
+              {getInitials(nombreUsuario)}
+            </div>
+            {!isCollapsed && (
+              <div className="flex flex-col truncate">
+                <span
+                  className="text-sm font-semibold text-white whitespace-normal break-words leading-tight line-clamp-2"
+                  title={nombreUsuario}
+                >
+                  {nombreUsuario}
+                </span>
+                <span className="text-[10px] text-slate-400 truncate mt-0.5">
+                  {displayArea}
+                </span>
+              </div>
+            )}
+          </button>
+          {!isCollapsed && (
+            <button
+              onClick={logout}
+              className="p-2 text-slate-400 hover:text-red-400 hover:bg-slate-800 rounded-lg transition-colors shrink-0"
+              title="Cerrar Sesión"
             >
-              <ClipboardList className="w-[18px] h-[18px]" /> Pase de Lista
-            </Link>
+              <LogOut className="w-5 h-5" />
+            </button>
+          )}
+        </div>
 
-            <Link
-              to="/docente/calificaciones"
-              className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-colors ${
-                isActive('/calificaciones')
-                  ? 'bg-[#1A237E] text-white font-semibold shadow-md'
-                  : 'text-slate-300 hover:bg-slate-800 hover:text-white'
-              }`}
-            >
-              <FileEdit className="w-[18px] h-[18px]" /> Calificaciones
+        <div className="flex-1 overflow-y-auto py-6 px-3 custom-scrollbar">
+          <nav className="space-y-2">
+            <Link to="/docente/pase-lista" title="Pase de Lista" className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-colors ${isCollapsed ? 'justify-center' : ''} ${isActive('/pase-lista') ? 'bg-[#1A237E] text-white font-semibold shadow-md' : 'text-slate-300 hover:bg-slate-800 hover:text-white'}`}>
+              <ClipboardList className="w-[18px] h-[18px] shrink-0" />
+              {!isCollapsed && <span>Pase de Lista</span>}
             </Link>
-
-            <Link
-              to="/docente/actas"
-              className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-colors ${
-                isActive('/actas')
-                  ? 'bg-[#1A237E] text-white font-semibold shadow-md'
-                  : 'text-slate-300 hover:bg-slate-800 hover:text-white'
-              }`}
-            >
-              <FileCheck className="w-[18px] h-[18px]" /> Generar Actas
+            <Link to="/docente/calificaciones" title="Calificaciones" className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-colors ${isCollapsed ? 'justify-center' : ''} ${isActive('/calificaciones') ? 'bg-[#1A237E] text-white font-semibold shadow-md' : 'text-slate-300 hover:bg-slate-800 hover:text-white'}`}>
+              <FileEdit className="w-[18px] h-[18px] shrink-0" />
+              {!isCollapsed && <span>Calificaciones</span>}
+            </Link>
+            <Link to="/docente/actas" title="Generar Actas" className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-colors ${isCollapsed ? 'justify-center' : ''} ${isActive('/actas') ? 'bg-[#1A237E] text-white font-semibold shadow-md' : 'text-slate-300 hover:bg-slate-800 hover:text-white'}`}>
+              <FileCheck className="w-[18px] h-[18px] shrink-0" />
+              {!isCollapsed && <span>Generar Actas</span>}
             </Link>
           </nav>
         </div>
 
-        <div className="p-4 border-t border-slate-800 bg-[#070e1a] flex items-center justify-between gap-2">
-          <button
-            type="button"
-            onClick={() => navigate('/profile')}
-            className="flex items-center gap-3 overflow-hidden text-left hover:bg-slate-800 rounded-lg p-1 transition-colors flex-1"
-            title="Ver perfil"
-          >
-            <div className="w-9 h-9 rounded-full bg-[#10B981] flex items-center justify-center text-white font-bold text-xs shrink-0 border border-emerald-400">
-              {getInitials(displayName)}
-            </div>
-            <div className="flex flex-col truncate">
-              <span className="text-sm font-semibold truncate text-white">{displayName}</span>
-              <span className="text-[10px] text-slate-400 truncate">{displayArea}</span>
-            </div>
-          </button>
-
-          <button
-            onClick={logout}
-            className="p-2 text-slate-400 hover:text-red-400 hover:bg-slate-800 rounded-lg transition-colors"
-            title="Cerrar Sesión"
-          >
-            <LogOut className="w-5 h-5" />
-          </button>
-        </div>
+        {isCollapsed && (
+          <div className="p-4 flex justify-center border-t border-slate-800">
+            <button onClick={logout} className="p-2 text-slate-400 hover:text-red-400 hover:bg-slate-800 rounded-lg transition-colors" title="Cerrar Sesión">
+              <LogOut className="w-5 h-5" />
+            </button>
+          </div>
+        )}
       </aside>
 
       <main className="flex-1 flex flex-col min-w-0 overflow-hidden relative">
+        <header className="md:hidden flex items-center justify-between bg-[#070e1a] text-white p-4 shadow-md z-10">
+          <div className="flex items-center gap-2">
+            <div className="w-7 h-7 bg-[#F2A900] rounded text-[#0B172A] flex items-center justify-center font-black text-sm shadow-sm">
+              U
+            </div>
+            <span className="font-bold text-sm tracking-wide">SESA Docente</span>
+          </div>
+          <button
+            onClick={() => setIsMobileOpen(true)}
+            className="p-1.5 text-slate-300 hover:text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-slate-500"
+          >
+            <Menu className="w-6 h-6" />
+          </button>
+        </header>
+
         <div className="flex-1 overflow-y-auto">
           <Outlet />
         </div>
       </main>
+
     </div>
   );
 };

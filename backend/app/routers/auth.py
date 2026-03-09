@@ -19,6 +19,10 @@ from app.schemas.auth import (
 )
 from app.core.security import verify_password, get_password_hash
 
+from app.models.administrator import Administrator
+from app.models.teacher import Teacher
+from app.models.student import Student
+
 router = APIRouter(prefix="/auth", tags=["auth"])
 
 @router.post("/login", response_model=UserResponse)
@@ -37,6 +41,29 @@ def login(data: LoginRequest, db: Session = Depends(get_db)):
     user.last_login = datetime.utcnow()
     db.commit()
     db.refresh(user)
+
+    nombre_completo = "Usuario del Sistema"
+
+    if getattr(user, "role", None):
+        role_name = user.role.name.lower()
+        perfil = None
+        
+        if role_name in ["admin", "super_admin"]:
+            perfil = db.query(Administrator).filter(Administrator.numero_empleado == user.identifier).first()
+        elif role_name == "docente":
+            perfil = db.query(Teacher).filter(Teacher.external_id == user.identifier).first()
+        elif role_name == "alumno":
+            perfil = db.query(Student).filter(Student.matricula == user.identifier).first()
+
+        if perfil:
+            partes = [
+                getattr(perfil, "nombre", ""),
+                getattr(perfil, "apellido_paterno", ""),
+                getattr(perfil, "apellido_materno", "")
+            ]
+            nombre_completo = " ".join(filter(None, partes)).strip()
+
+    setattr(user, "nombre_completo", nombre_completo)
 
     return user
 
@@ -61,13 +88,8 @@ def change_password(data: PasswordChangeRequest, db: Session = Depends(get_db)):
 
     return {"message": "Contraseña actualizada exitosamente"}
 
-# ==========================================
-# HU-32: FLUJO DE RECUPERACIÓN DE CONTRASEÑA
-# ==========================================
-
 @router.post("/forgot-password")
 def forgot_password(data: ForgotPasswordRequest, db: Session = Depends(get_db)):
-    # MODIFICADO: Búsqueda estricta ÚNICAMENTE por correo electrónico
     user = db.query(User).filter(User.email == data.identifier).first()
     
     if not user:
@@ -76,17 +98,14 @@ def forgot_password(data: ForgotPasswordRequest, db: Session = Depends(get_db)):
             detail="El correo electrónico ingresado no se encuentra registrado en el sistema."
         )
 
-    # Invalida códigos anteriores para que solo el nuevo sea válido
     db.query(PasswordResetCode).filter(
         PasswordResetCode.user_id == user.id,
         PasswordResetCode.is_used == False
     ).update({"is_used": True})
     db.commit()
 
-    # Generar código de 6 dígitos
     reset_code = ''.join(secrets.choice(string.digits) for _ in range(6))
     
-    # Hora de Mérida para la base de datos
     ahora_merida = datetime.now(ZoneInfo("America/Merida")).replace(tzinfo=None)
     expires = ahora_merida + timedelta(minutes=10)
 
@@ -98,7 +117,6 @@ def forgot_password(data: ForgotPasswordRequest, db: Session = Depends(get_db)):
     db.add(db_code)
     db.commit()
 
-    # Envío de correo
     try:
         remitente = "sesacorp10@gmail.com"
         password_aplicacion = "enecpjvwkoseedip"
@@ -134,7 +152,6 @@ def forgot_password(data: ForgotPasswordRequest, db: Session = Depends(get_db)):
 
 @router.post("/validate-reset-code")
 def validate_reset_code(data: ValidateCodeRequest, db: Session = Depends(get_db)):
-    # MODIFICADO: Validación estricta ÚNICAMENTE por correo electrónico
     user = db.query(User).filter(User.email == data.identifier).first()
     
     if not user:
@@ -152,7 +169,6 @@ def validate_reset_code(data: ValidateCodeRequest, db: Session = Depends(get_db)
     if not code_record:
         raise HTTPException(status_code=400, detail="El código es incorrecto o ha expirado.")
     
-    # El código se marca como usado aquí para evitar reutilización
     code_record.is_used = True
     db.commit()
 
@@ -163,16 +179,10 @@ def reset_password(data: ResetPasswordRequest, db: Session = Depends(get_db)):
     if data.new_password != data.confirm_password:
         raise HTTPException(status_code=400, detail="Las contraseñas no coinciden")
 
-    # En este último paso sí conservamos la búsqueda por identifier (Matrícula)
-    # porque 'validate-reset-code' devuelve el identifier original del usuario para 
-    # asegurar que la actualización de la contraseña se hace en el registro correcto.
     user = db.query(User).filter(User.identifier == data.identifier).first()
     if not user:
         raise HTTPException(status_code=404, detail="Usuario no encontrado")
 
-    # Eliminamos la búsqueda del código aquí, ya que fue validado y marcado 
-    # como 'is_used=True' en el paso anterior (validate-reset-code).
-    
     user.password_hash = get_password_hash(data.new_password)
     user.is_temp_password = False
     

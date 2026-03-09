@@ -1,4 +1,5 @@
 import re
+from typing import Optional
 from pydantic import BaseModel, Field, field_validator
 
 PASSWORD_DESC = "Debe tener al menos 8 caracteres, una mayúscula, minúscula, un número y un carácter especial"
@@ -25,6 +26,7 @@ class UserResponse(BaseModel):
     identifier: str
     role: RoleResponse
     is_temp_password: bool
+    nombre_completo: Optional[str] = None
 
     class Config:
         from_attributes = True
