@@ -27,6 +27,9 @@ class UserResponse(BaseModel):
     role: RoleResponse
     is_temp_password: bool
     nombre_completo: Optional[str] = None
+    email_personal: Optional[str] = None
+    email_institucional: Optional[str] = None
+    foto_id: Optional[int] = None
 
     class Config:
         from_attributes = True

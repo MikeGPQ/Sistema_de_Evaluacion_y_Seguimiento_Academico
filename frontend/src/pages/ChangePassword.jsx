@@ -7,6 +7,8 @@ import {
   ArrowRight,
   GraduationCap,
   LogOut,
+  CheckCircle2,
+  XCircle,
 } from "lucide-react";
 import client from "../lib/axios";
 import { useAuth } from "../hooks/AuthContext";
@@ -36,6 +38,7 @@ const ChangePassword = () => {
   });
 
   const [error, setError] = useState("");
+  const [fieldError, setFieldError] = useState("");
   const [ok, setOk] = useState("");
   const [loading, setLoading] = useState(false);
   const identifier = user?.identifier || recoveryIdentifier;
@@ -60,6 +63,7 @@ const ChangePassword = () => {
   const onSubmit = async (e) => {
     e.preventDefault();
     setError("");
+    setFieldError("");
     setOk("");
 
     if (!identifier) {
@@ -67,19 +71,43 @@ const ChangePassword = () => {
       return;
     }
 
+    if (!isRecovery && !form.current_password.trim()) {
+      setError("Escribe la contraseña actual.");
+      setFieldError("current_password");
+      return;
+    }
+
+    if (!form.new_password.trim()) {
+      setError("Escribe la nueva contraseña.");
+      setFieldError("new_password");
+      return;
+    }
+
     const passwordError = validatePasswordStrength(form.new_password);
     if (passwordError) {
       setError(passwordError);
+      setFieldError("new_password");
       return;
     }
 
     if (!isRecovery && form.current_password === form.new_password) {
       setError("La nueva contraseña no puede ser igual a la contraseña actual.");
+      setFieldError("new_password");
       return;
     }
 
-    if (form.new_password !== form.confirm_password) {
+    const trimmedNew = form.new_password.trim();
+    const trimmedConfirm = form.confirm_password.trim();
+
+    if (!trimmedConfirm) {
+      setError("Escribe la confirmación de la contraseña.");
+      setFieldError("confirm_password");
+      return;
+    }
+
+    if (trimmedNew !== trimmedConfirm) {
       setError("La nueva contraseña y la confirmación no coinciden.");
+      setFieldError("confirm_password");
       return;
     }
 
@@ -89,8 +117,8 @@ const ChangePassword = () => {
         await client.post("/auth/reset-password", {
           identifier,
           code: recoveryCode,
-          new_password: form.new_password,
-          confirm_password: form.confirm_password,
+          new_password: trimmedNew,
+          confirm_password: trimmedConfirm,
         });
 
         setOk("Contraseña recuperada exitosamente. Redirigiendo al login...");
@@ -101,9 +129,9 @@ const ChangePassword = () => {
       } else {
         await client.put("/auth/change-password", {
           identifier,
-          current_password: form.current_password,
-          new_password: form.new_password,
-          confirm_password: form.confirm_password,
+          current_password: form.current_password.trim(),
+          new_password: trimmedNew,
+          confirm_password: trimmedConfirm,
         });
 
         updateUser({ ...user, is_temp_password: false });
@@ -119,6 +147,9 @@ const ChangePassword = () => {
         err?.response?.data?.detail ||
         "No se pudo actualizar la contraseña. Verifica los datos.";
       setError(msg);
+      if (msg === "La contraseña actual es incorrecta") {
+        setFieldError("current_password");
+      }
       console.error("Error change-password:", err?.response?.data || err.message);
     } finally {
       setLoading(false);
@@ -191,11 +222,17 @@ const ChangePassword = () => {
                       type={showCurrent ? "text" : "password"}
                       required
                       placeholder="••••••••"
-                      className="w-full pl-10 pr-10 py-2.5 bg-white border border-gray-300 rounded-lg outline-none focus:ring-1 focus:ring-[#0B172A] focus:border-[#0B172A] transition-all text-sm text-gray-800 placeholder:text-gray-400 tracking-widest"
+                      className={`w-full pl-10 pr-10 py-2.5 bg-white border rounded-lg outline-none focus:ring-1 transition-all text-sm text-gray-800 placeholder:text-gray-400 tracking-widest ${
+                        fieldError === "current_password"
+                          ? "border-red-400 focus:ring-red-400 focus:border-red-400"
+                          : "border-gray-300 focus:ring-[#0B172A] focus:border-[#0B172A]"
+                      }`}
                       value={form.current_password}
-                      onChange={(e) =>
-                        setForm({ ...form, current_password: e.target.value })
-                      }
+                      onChange={(e) => {
+                        setForm({ ...form, current_password: e.target.value });
+                        if (fieldError === "current_password") setFieldError("");
+                        if (error) setError("");
+                      }}
                     />
                     <button
                       type="button"
@@ -219,11 +256,17 @@ const ChangePassword = () => {
                     type={showNew ? "text" : "password"}
                     required
                     placeholder="Mínimo 8 caracteres"
-                    className="w-full pl-10 pr-10 py-2.5 bg-white border border-gray-300 rounded-lg outline-none focus:ring-1 focus:ring-[#0B172A] focus:border-[#0B172A] transition-all text-sm text-gray-800 placeholder:text-gray-400 tracking-widest"
+                    className={`w-full pl-10 pr-10 py-2.5 bg-white border rounded-lg outline-none focus:ring-1 transition-all text-sm text-gray-800 placeholder:text-gray-400 tracking-widest ${
+                      fieldError === "new_password"
+                        ? "border-red-400 focus:ring-red-400 focus:border-red-400"
+                        : "border-gray-300 focus:ring-[#0B172A] focus:border-[#0B172A]"
+                    }`}
                     value={form.new_password}
-                    onChange={(e) =>
-                      setForm({ ...form, new_password: e.target.value })
-                    }
+                    onChange={(e) => {
+                      setForm({ ...form, new_password: e.target.value });
+                      if (fieldError === "new_password") setFieldError("");
+                      if (error) setError("");
+                    }}
                   />
                   <button
                     type="button"
@@ -234,9 +277,30 @@ const ChangePassword = () => {
                     {showNew ? <EyeOff size={16} /> : <Eye size={16} />}
                   </button>
                 </div>
-                <p className="text-[11px] text-[#0B172A] mt-1 font-semibold bg-blue-50 p-2 rounded border border-blue-100">
-                  Obligatorio: Mínimo 8 caracteres, incluir al menos una mayúscula, una minúscula, un número y un símbolo.
-                </p>
+                {form.new_password.length > 0 && (() => {
+                  const p = form.new_password;
+                  const rules = [
+                    { label: "Mínimo 8 caracteres", ok: p.length >= 8 },
+                    { label: "Al menos una mayúscula", ok: /[A-Z]/.test(p) },
+                    { label: "Al menos una minúscula", ok: /[a-z]/.test(p) },
+                    { label: "Al menos un número", ok: /\d/.test(p) },
+                    { label: "Al menos un símbolo", ok: /[^A-Za-z\d]/.test(p) },
+                  ];
+                  return (
+                    <div className="mt-1 bg-gray-50 border border-gray-200 rounded-lg p-2.5 space-y-1">
+                      {rules.map(({ label, ok }) => (
+                        <div key={label} className="flex items-center gap-2">
+                          {ok
+                            ? <CheckCircle2 size={13} className="text-green-500 shrink-0" />
+                            : <XCircle size={13} className="text-red-400 shrink-0" />}
+                          <span className={`text-[11px] font-medium ${ok ? "text-green-600" : "text-red-400"}`}>
+                            {label}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  );
+                })()}
               </div>
 
               <div className="space-y-1.5">
@@ -249,11 +313,17 @@ const ChangePassword = () => {
                     type={showConfirm ? "text" : "password"}
                     required
                     placeholder="Repite la nueva contraseña"
-                    className="w-full pl-10 pr-10 py-2.5 bg-white border border-gray-300 rounded-lg outline-none focus:ring-1 focus:ring-[#0B172A] focus:border-[#0B172A] transition-all text-sm text-gray-800 placeholder:text-gray-400 tracking-widest"
+                    className={`w-full pl-10 pr-10 py-2.5 bg-white border rounded-lg outline-none focus:ring-1 transition-all text-sm text-gray-800 placeholder:text-gray-400 tracking-widest ${
+                      fieldError === "confirm_password"
+                        ? "border-red-400 focus:ring-red-400 focus:border-red-400"
+                        : "border-gray-300 focus:ring-[#0B172A] focus:border-[#0B172A]"
+                    }`}
                     value={form.confirm_password}
-                    onChange={(e) =>
-                      setForm({ ...form, confirm_password: e.target.value })
-                    }
+                    onChange={(e) => {
+                      setForm({ ...form, confirm_password: e.target.value });
+                      if (fieldError === "confirm_password") setFieldError("");
+                      if (error) setError("");
+                    }}
                   />
                   <button
                     type="button"

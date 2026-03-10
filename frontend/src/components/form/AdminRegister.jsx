@@ -64,6 +64,11 @@ export default function AdminRegister({ isOpen, onClose, adminAEditar }) {
 
     if (name === 'email_personal') {
       finalValue = finalValue.replace(/\s/g, '').toLowerCase();
+      // Solo un arroba permitido
+      const firstAt = finalValue.indexOf('@');
+      if (firstAt !== -1) {
+        finalValue = finalValue.slice(0, firstAt + 1) + finalValue.slice(firstAt + 1).replace(/@/g, '');
+      }
     }
 
     if (name === 'email_institucional') {
@@ -175,14 +180,15 @@ export default function AdminRegister({ isOpen, onClose, adminAEditar }) {
 
             <div className="mt-2">
               <label className="block text-xs font-bold text-gray-600 mb-1">Correo Personal <span className="text-red-500">*</span></label>
-              <input 
-                type="email" 
-                name="email_personal" 
-                value={formData.email_personal} 
-                onChange={handleChange} 
+              <input
+                type="email"
+                name="email_personal"
+                value={formData.email_personal}
+                onChange={handleChange}
+                onKeyDown={(e) => { if (e.key === ' ') e.preventDefault(); }}
                 maxLength={150}
-                className={`w-full border rounded-md p-2.5 text-sm lowercase outline-none transition-all ${erroresEnVivo.email_personal ? 'border-red-500 bg-red-50 focus:ring-red-500 text-red-700' : validacionExitosa.email_personal ? 'border-green-500 bg-green-50 focus:ring-green-500 text-green-700' : 'border-gray-300 focus:border-[#1A237E]'}`} 
-                required 
+                className={`w-full border rounded-md p-2.5 text-sm lowercase outline-none transition-all ${erroresEnVivo.email_personal ? 'border-red-500 bg-red-50 focus:ring-red-500 text-red-700' : validacionExitosa.email_personal ? 'border-green-500 bg-green-50 focus:ring-green-500 text-green-700' : 'border-gray-300 focus:border-[#1A237E]'}`}
+                required
               />
               {erroresEnVivo.email_personal && <p className="text-xs text-red-600 mt-1.5 font-bold">{erroresEnVivo.email_personal}</p>}
             </div>

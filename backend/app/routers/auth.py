@@ -62,6 +62,9 @@ def login(data: LoginRequest, db: Session = Depends(get_db)):
                 getattr(perfil, "apellido_materno", "")
             ]
             nombre_completo = " ".join(filter(None, partes)).strip()
+            setattr(user, "email_personal", getattr(perfil, "email_personal", None))
+            setattr(user, "email_institucional", getattr(perfil, "email_institucional", None))
+            setattr(user, "foto_id", getattr(perfil, "foto_id", None))
 
     setattr(user, "nombre_completo", nombre_completo)
 
@@ -182,6 +185,9 @@ def reset_password(data: ResetPasswordRequest, db: Session = Depends(get_db)):
     user = db.query(User).filter(User.identifier == data.identifier).first()
     if not user:
         raise HTTPException(status_code=404, detail="Usuario no encontrado")
+
+    if verify_password(data.new_password, user.password_hash):
+        raise HTTPException(status_code=400, detail="La nueva contraseña no puede ser igual a la contraseña actual.")
 
     user.password_hash = get_password_hash(data.new_password)
     user.is_temp_password = False
