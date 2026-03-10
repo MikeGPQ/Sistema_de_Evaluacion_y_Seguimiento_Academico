@@ -36,7 +36,16 @@ const AdminLayout = () => {
     user?.nombre ||
     "Usuario Administrador";
   const nombreUsuario = formatName(nombreCrudo);
-  const inicialUsuario = nombreUsuario.charAt(0).toUpperCase();
+
+  const getInitials = (name) => {
+    if (!name) return 'AD';
+    return name
+      .split(' ')
+      .filter(Boolean)
+      .slice(0, 2)
+      .map((word) => word[0].toUpperCase())
+      .join('');
+  };
 
   const displayArea =
     user?.email ||
@@ -100,7 +109,7 @@ const AdminLayout = () => {
             title="Ver perfil"
           >
             <div className="w-9 h-9 rounded-full bg-[#1A237E] flex items-center justify-center text-white font-bold text-xs shrink-0 border border-indigo-500">
-              {inicialUsuario}
+              {getInitials(nombreUsuario)}
             </div>
             {!isCollapsed && (
               <div className="flex flex-col">

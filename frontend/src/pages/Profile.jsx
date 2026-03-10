@@ -78,10 +78,11 @@ const Profile = () => {
           <div className="p-8">
             <div className="flex flex-col lg:flex-row gap-8">
               <div className="w-full lg:w-[220px] flex flex-col items-center">
-                {photo ? (
+                {photo && !imgError ? (
                   <img
                     src={photo}
                     alt="Foto de perfil"
+                    onError={() => setImgError(true)}
                     className="w-32 h-32 rounded-full object-cover border-4 border-gray-100 shadow-sm"
                   />
                 ) : (

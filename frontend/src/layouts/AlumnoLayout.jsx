@@ -23,6 +23,12 @@ const AlumnoLayout = () => {
   const { user, logout } = useAuth();
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [isMobileOpen, setIsMobileOpen] = useState(false);
+  const [avatarError, setAvatarError] = useState(false);
+
+  const photoUrl =
+    user?.foto_id
+      ? `${import.meta.env.VITE_API_URL}/files/${user.foto_id}`
+      : null;
   const isActive = (path) => location.pathname.includes(path);
 
   const nombreCrudo =
@@ -101,9 +107,18 @@ const AlumnoLayout = () => {
             className={`flex items-center gap-3 overflow-hidden text-left hover:bg-slate-800 rounded-lg p-1 transition-colors flex-1 ${isCollapsed ? 'justify-center' : ''}`}
             title="Ver perfil"
           >
-            <div className="w-9 h-9 rounded-full bg-[#00AEEF] flex items-center justify-center text-white font-bold text-xs shrink-0 border border-cyan-400">
-              {getInitials(nombreUsuario)}
-            </div>
+            {photoUrl && !avatarError ? (
+              <img
+                src={photoUrl}
+                alt="Foto de perfil"
+                onError={() => setAvatarError(true)}
+                className="w-9 h-9 rounded-full object-cover shrink-0 border border-cyan-400"
+              />
+            ) : (
+              <div className="w-9 h-9 rounded-full bg-[#00AEEF] flex items-center justify-center text-white font-bold text-xs shrink-0 border border-cyan-400">
+                {getInitials(nombreUsuario)}
+              </div>
+            )}
             {!isCollapsed && (
               <div className="flex flex-col truncate">
                 <span

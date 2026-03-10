@@ -40,7 +40,7 @@ const LoginPage = () => {
     try {
       const response = await client.post('/auth/login', {
         identifier: cleanIdentifier,
-        password: credentials.password 
+        password: credentials.password.trim()
       });
 
       authLogin(response.data);
