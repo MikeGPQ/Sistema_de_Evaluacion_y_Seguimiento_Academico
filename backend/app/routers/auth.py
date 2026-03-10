@@ -62,6 +62,9 @@ def login(data: LoginRequest, db: Session = Depends(get_db)):
                 getattr(perfil, "apellido_materno", "")
             ]
             nombre_completo = " ".join(filter(None, partes)).strip()
+            setattr(user, "email_personal", getattr(perfil, "email_personal", None))
+            setattr(user, "email_institucional", getattr(perfil, "email_institucional", None))
+            setattr(user, "foto_id", getattr(perfil, "foto_id", None))
 
     setattr(user, "nombre_completo", nombre_completo)
 

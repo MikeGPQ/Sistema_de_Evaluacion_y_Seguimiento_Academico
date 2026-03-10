@@ -1,4 +1,4 @@
-import React from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   User,
@@ -13,8 +13,11 @@ import { useAuth } from "../hooks/AuthContext";
 const Profile = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
+  const [imgError, setImgError] = useState(false);
 
   const roleName = user?.role?.name || "usuario";
+
+  useEffect(() => { setImgError(false); }, [user?.foto_id]);
 
   const fullName =
     user?.full_name ||
@@ -24,34 +27,21 @@ const Profile = () => {
     user?.username ||
     "Nombre no disponible";
 
-  const userId =
-    user?.id ||
-    user?.user_id ||
-    user?.identifier ||
-    "No disponible";
+  const identifier = user?.identifier || "No disponible";
 
-  const matricula =
-    user?.matricula ||
-    user?.enrollment ||
-    user?.student_code ||
-    user?.identifier ||
-    "No disponible";
+  const emailPersonal = user?.email_personal || null;
 
-  const email =
-    user?.personal_email ||
-    user?.email ||
-    user?.correo ||
-    user?.correo_personal ||
-    "No disponible";
+  const emailInstitucional = user?.email_institucional || null;
+
+  const hasEmails = roleName === "admin" || roleName === "super_admin" || roleName === "alumno";
 
   const photo =
-    user?.photo_url ||
-    user?.photo ||
-    user?.avatar ||
-    user?.foto ||
-    null;
+    (roleName === "alumno" && user?.foto_id)
+      ? `${import.meta.env.VITE_API_URL}/files/${user.foto_id}`
+      : null;
 
   const getRoleLabel = (role) => {
+    if (role === "super_admin") return "Super Administrador";
     if (role === "admin") return "Administrador";
     if (role === "docente") return "Docente";
     if (role === "alumno") return "Alumno";
@@ -69,7 +59,7 @@ const Profile = () => {
   };
 
   const goBackByRole = () => {
-    if (roleName === "admin") return navigate("/alumnos/listado");
+    if (roleName === "admin" || roleName === "super_admin") return navigate("/alumnos/listado");
     if (roleName === "docente") return navigate("/docente/pase-lista");
     return navigate("/alumno/horario");
   };
@@ -122,31 +112,36 @@ const Profile = () => {
                   <div className="bg-gray-50 border border-gray-100 rounded-xl p-4">
                     <p className="text-[11px] font-bold uppercase tracking-wide text-gray-500 mb-2 flex items-center gap-2">
                       <IdCard size={14} />
-                      ID
+                      Matrícula / ID
                     </p>
                     <p className="text-sm text-gray-800 font-semibold break-words">
-                      {userId}
+                      {identifier}
                     </p>
                   </div>
 
-                  <div className="bg-gray-50 border border-gray-100 rounded-xl p-4">
-                    <p className="text-[11px] font-bold uppercase tracking-wide text-gray-500 mb-2">
-                      Matrícula
-                    </p>
-                    <p className="text-sm text-gray-800 font-semibold break-words">
-                      {matricula}
-                    </p>
-                  </div>
+                  {hasEmails && (
+                    <div className="bg-gray-50 border border-gray-100 rounded-xl p-4">
+                      <p className="text-[11px] font-bold uppercase tracking-wide text-gray-500 mb-2 flex items-center gap-2">
+                        <Mail size={14} />
+                        Correo personal
+                      </p>
+                      <p className="text-sm text-gray-800 font-semibold break-all">
+                        {emailPersonal || "No disponible"}
+                      </p>
+                    </div>
+                  )}
 
-                  <div className="bg-gray-50 border border-gray-100 rounded-xl p-4">
-                    <p className="text-[11px] font-bold uppercase tracking-wide text-gray-500 mb-2 flex items-center gap-2">
-                      <Mail size={14} />
-                      Correo personal
-                    </p>
-                    <p className="text-sm text-gray-800 font-semibold break-all">
-                      {email}
-                    </p>
-                  </div>
+                  {hasEmails && (
+                    <div className="bg-gray-50 border border-gray-100 rounded-xl p-4">
+                      <p className="text-[11px] font-bold uppercase tracking-wide text-gray-500 mb-2 flex items-center gap-2">
+                        <Mail size={14} />
+                        Correo institucional
+                      </p>
+                      <p className="text-sm text-gray-800 font-semibold break-all">
+                        {emailInstitucional || "No disponible"}
+                      </p>
+                    </div>
+                  )}
                 </div>
 
                 <div className="mt-8 flex flex-col sm:flex-row gap-3">
