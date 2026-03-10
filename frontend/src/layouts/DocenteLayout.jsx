@@ -14,7 +14,8 @@ import { useAuth } from '../hooks/AuthContext';
 
 const formatName = (name) => {
   if (!name) return "";
-  return name.toLowerCase().replace(/\b\w/g, char => char.toUpperCase());
+  return name.toLowerCase().split(" ").filter(Boolean)
+    .map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(" ");
 };
 
 const DocenteLayout = () => {
@@ -23,6 +24,7 @@ const DocenteLayout = () => {
   const { user, logout } = useAuth();
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [isMobileOpen, setIsMobileOpen] = useState(false);
+  const effectivelyCollapsed = isCollapsed && !isMobileOpen;
   const isActive = (path) => location.pathname.includes(path);
 
   const nombreCrudo =
@@ -94,17 +96,17 @@ const DocenteLayout = () => {
           </button>
         </div>
 
-        <div className={`p-4 border-b border-slate-800 bg-[#0b172a] flex items-center ${isCollapsed ? 'justify-center' : 'justify-between'}`}>
+        <div className={`p-4 border-b border-slate-800 bg-[#0b172a] flex items-center ${effectivelyCollapsed ? 'justify-center' : 'justify-between'}`}>
           <button
             type="button"
             onClick={() => navigate('/profile')}
-            className={`flex items-center gap-3 overflow-hidden text-left hover:bg-slate-800 rounded-lg p-1 transition-colors flex-1 ${isCollapsed ? 'justify-center' : ''}`}
+            className={`flex items-center gap-3 overflow-hidden text-left hover:bg-slate-800 rounded-lg p-1 transition-colors flex-1 ${effectivelyCollapsed ? 'justify-center' : ''}`}
             title="Ver perfil"
           >
             <div className="w-9 h-9 rounded-full bg-[#10B981] flex items-center justify-center text-white font-bold text-xs shrink-0 border border-emerald-400">
               {getInitials(nombreUsuario)}
             </div>
-            {!isCollapsed && (
+            {!effectivelyCollapsed && (
               <div className="flex flex-col truncate">
                 <span
                   className="text-sm font-semibold text-white whitespace-normal break-words leading-tight line-clamp-2"
@@ -118,7 +120,7 @@ const DocenteLayout = () => {
               </div>
             )}
           </button>
-          {!isCollapsed && (
+          {!effectivelyCollapsed && (
             <button
               onClick={logout}
               className="p-2 text-slate-400 hover:text-red-400 hover:bg-slate-800 rounded-lg transition-colors shrink-0"
@@ -131,22 +133,22 @@ const DocenteLayout = () => {
 
         <div className="flex-1 overflow-y-auto py-6 px-3 custom-scrollbar">
           <nav className="space-y-2">
-            <Link to="/docente/pase-lista" title="Pase de Lista" className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-colors ${isCollapsed ? 'justify-center' : ''} ${isActive('/pase-lista') ? 'bg-[#1A237E] text-white font-semibold shadow-md' : 'text-slate-300 hover:bg-slate-800 hover:text-white'}`}>
+            <Link to="/docente/pase-lista" title="Pase de Lista" className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-colors ${effectivelyCollapsed ? 'justify-center' : ''} ${isActive('/pase-lista') ? 'bg-[#1A237E] text-white font-semibold shadow-md' : 'text-slate-300 hover:bg-slate-800 hover:text-white'}`}>
               <ClipboardList className="w-[18px] h-[18px] shrink-0" />
-              {!isCollapsed && <span>Pase de Lista</span>}
+              {!effectivelyCollapsed && <span>Pase de Lista</span>}
             </Link>
-            <Link to="/docente/calificaciones" title="Calificaciones" className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-colors ${isCollapsed ? 'justify-center' : ''} ${isActive('/calificaciones') ? 'bg-[#1A237E] text-white font-semibold shadow-md' : 'text-slate-300 hover:bg-slate-800 hover:text-white'}`}>
+            <Link to="/docente/calificaciones" title="Calificaciones" className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-colors ${effectivelyCollapsed ? 'justify-center' : ''} ${isActive('/calificaciones') ? 'bg-[#1A237E] text-white font-semibold shadow-md' : 'text-slate-300 hover:bg-slate-800 hover:text-white'}`}>
               <FileEdit className="w-[18px] h-[18px] shrink-0" />
-              {!isCollapsed && <span>Calificaciones</span>}
+              {!effectivelyCollapsed && <span>Calificaciones</span>}
             </Link>
-            <Link to="/docente/actas" title="Generar Actas" className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-colors ${isCollapsed ? 'justify-center' : ''} ${isActive('/actas') ? 'bg-[#1A237E] text-white font-semibold shadow-md' : 'text-slate-300 hover:bg-slate-800 hover:text-white'}`}>
+            <Link to="/docente/actas" title="Generar Actas" className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-colors ${effectivelyCollapsed ? 'justify-center' : ''} ${isActive('/actas') ? 'bg-[#1A237E] text-white font-semibold shadow-md' : 'text-slate-300 hover:bg-slate-800 hover:text-white'}`}>
               <FileCheck className="w-[18px] h-[18px] shrink-0" />
-              {!isCollapsed && <span>Generar Actas</span>}
+              {!effectivelyCollapsed && <span>Generar Actas</span>}
             </Link>
           </nav>
         </div>
 
-        {isCollapsed && (
+        {effectivelyCollapsed && (
           <div className="p-4 flex justify-center border-t border-slate-800">
             <button onClick={logout} className="p-2 text-slate-400 hover:text-red-400 hover:bg-slate-800 rounded-lg transition-colors" title="Cerrar Sesión">
               <LogOut className="w-5 h-5" />

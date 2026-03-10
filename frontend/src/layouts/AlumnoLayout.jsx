@@ -14,7 +14,8 @@ import { useAuth } from '../hooks/AuthContext';
 
 const formatName = (name) => {
   if (!name) return "";
-  return name.toLowerCase().replace(/\b\w/g, char => char.toUpperCase());
+  return name.toLowerCase().split(" ").filter(Boolean)
+    .map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(" ");
 };
 
 const AlumnoLayout = () => {
@@ -24,6 +25,7 @@ const AlumnoLayout = () => {
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [isMobileOpen, setIsMobileOpen] = useState(false);
   const [avatarError, setAvatarError] = useState(false);
+  const effectivelyCollapsed = isCollapsed && !isMobileOpen;
 
   const photoUrl =
     user?.foto_id
@@ -100,11 +102,11 @@ const AlumnoLayout = () => {
           </button>
         </div>
 
-        <div className={`p-4 border-b border-slate-800 bg-[#0b172a] flex items-center ${isCollapsed ? 'justify-center' : 'justify-between'}`}>
+        <div className={`p-4 border-b border-slate-800 bg-[#0b172a] flex items-center ${effectivelyCollapsed ? 'justify-center' : 'justify-between'}`}>
           <button
             type="button"
             onClick={() => navigate('/profile')}
-            className={`flex items-center gap-3 overflow-hidden text-left hover:bg-slate-800 rounded-lg p-1 transition-colors flex-1 ${isCollapsed ? 'justify-center' : ''}`}
+            className={`flex items-center gap-3 overflow-hidden text-left hover:bg-slate-800 rounded-lg p-1 transition-colors flex-1 ${effectivelyCollapsed ? 'justify-center' : ''}`}
             title="Ver perfil"
           >
             {photoUrl && !avatarError ? (
@@ -119,7 +121,7 @@ const AlumnoLayout = () => {
                 {getInitials(nombreUsuario)}
               </div>
             )}
-            {!isCollapsed && (
+            {!effectivelyCollapsed && (
               <div className="flex flex-col truncate">
                 <span
                   className="text-sm font-semibold text-white whitespace-normal break-words leading-tight line-clamp-2"
@@ -133,7 +135,7 @@ const AlumnoLayout = () => {
               </div>
             )}
           </button>
-          {!isCollapsed && (
+          {!effectivelyCollapsed && (
             <button
               onClick={logout}
               className="p-2 text-slate-400 hover:text-red-400 hover:bg-slate-800 rounded-lg transition-colors shrink-0"
@@ -146,22 +148,22 @@ const AlumnoLayout = () => {
 
         <div className="flex-1 overflow-y-auto py-6 px-3 custom-scrollbar">
           <nav className="space-y-2">
-            <Link to="/alumno/horario" title="Mi Horario" className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-colors ${isCollapsed ? 'justify-center' : ''} ${isActive('/horario') ? 'bg-[#1A237E] text-white font-semibold shadow-md' : 'text-slate-300 hover:bg-slate-800 hover:text-white'}`}>
+            <Link to="/alumno/horario" title="Mi Horario" className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-colors ${effectivelyCollapsed ? 'justify-center' : ''} ${isActive('/horario') ? 'bg-[#1A237E] text-white font-semibold shadow-md' : 'text-slate-300 hover:bg-slate-800 hover:text-white'}`}>
               <CalendarDays className="w-[18px] h-[18px] shrink-0" />
-              {!isCollapsed && <span>Mi Horario</span>}
+              {!effectivelyCollapsed && <span>Mi Horario</span>}
             </Link>
-            <Link to="/alumno/asistencias" title="Mis Asistencias" className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-colors ${isCollapsed ? 'justify-center' : ''} ${isActive('/asistencias') ? 'bg-[#1A237E] text-white font-semibold shadow-md' : 'text-slate-300 hover:bg-slate-800 hover:text-white'}`}>
+            <Link to="/alumno/asistencias" title="Mis Asistencias" className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-colors ${effectivelyCollapsed ? 'justify-center' : ''} ${isActive('/asistencias') ? 'bg-[#1A237E] text-white font-semibold shadow-md' : 'text-slate-300 hover:bg-slate-800 hover:text-white'}`}>
               <CheckSquare className="w-[18px] h-[18px] shrink-0" />
-              {!isCollapsed && <span>Mis Asistencias</span>}
+              {!effectivelyCollapsed && <span>Mis Asistencias</span>}
             </Link>
-            <Link to="/alumno/calificaciones" title="Mis Calificaciones" className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-colors ${isCollapsed ? 'justify-center' : ''} ${isActive('/calificaciones') ? 'bg-[#1A237E] text-white font-semibold shadow-md' : 'text-slate-300 hover:bg-slate-800 hover:text-white'}`}>
+            <Link to="/alumno/calificaciones" title="Mis Calificaciones" className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-colors ${effectivelyCollapsed ? 'justify-center' : ''} ${isActive('/calificaciones') ? 'bg-[#1A237E] text-white font-semibold shadow-md' : 'text-slate-300 hover:bg-slate-800 hover:text-white'}`}>
               <Award className="w-[18px] h-[18px] shrink-0" />
-              {!isCollapsed && <span>Mis Calificaciones</span>}
+              {!effectivelyCollapsed && <span>Mis Calificaciones</span>}
             </Link>
           </nav>
         </div>
 
-        {isCollapsed && (
+        {effectivelyCollapsed && (
           <div className="p-4 flex justify-center border-t border-slate-800">
             <button onClick={logout} className="p-2 text-slate-400 hover:text-red-400 hover:bg-slate-800 rounded-lg transition-colors" title="Cerrar Sesión">
               <LogOut className="w-5 h-5" />

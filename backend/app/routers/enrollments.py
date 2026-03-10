@@ -20,6 +20,20 @@ def time_to_minutes(time_str):
     except:
         return 0
 
+# CUPOS EN TIEMPO REAL (para polling del frontend)
+@router.get("/cupos/{periodo}")
+def obtener_cupos_actuales(periodo: str, db: Session = Depends(get_db)):
+    grupos = db.query(AcademicGroup).filter(AcademicGroup.periodo == periodo).all()
+    resultado = {}
+    for grupo in grupos:
+        inscritos = db.query(StudentEnrollment).filter(
+            StudentEnrollment.academic_group_id == grupo.id,
+            StudentEnrollment.period_name == periodo
+        ).count()
+        resultado[grupo.id] = max(0, grupo.cupo_maximo - inscritos)
+    return resultado
+
+
 #  ENVIAR GRUPOS Y CALCULAR CUPOS REALES
 @router.get("/{matricula}/disponibles")
 def obtener_grupos_disponibles(matricula: str, db: Session = Depends(get_db)):
@@ -40,7 +54,6 @@ def obtener_grupos_disponibles(matricula: str, db: Session = Depends(get_db)):
     carrera = db.query(Career).filter(Career.id == alumno.career_id).first()
     nombre_carrera = carrera.name if carrera else "Sin carrera asignada"
     nombre_completo = f"{alumno.nombre} {alumno.apellido_paterno} {alumno.apellido_materno}"
-    bloquear_grupo_base = alumno.cuatrimestre_actual > 1
 
     inscripciones_db = db.query(StudentEnrollment).filter(
         StudentEnrollment.student_matricula == matricula,
@@ -48,7 +61,16 @@ def obtener_grupos_disponibles(matricula: str, db: Session = Depends(get_db)):
     ).all()
     grupos_inscritos = [inscripcion.academic_group_id for inscripcion in inscripciones_db]
 
-    grupos_db = db.query(AcademicGroup).filter(AcademicGroup.periodo == "2026-1").all()
+    grupos_db = (
+        db.query(AcademicGroup)
+        .join(Subject, AcademicGroup.subject_id == Subject.id)
+        .filter(
+            AcademicGroup.periodo == "2026-1",
+            Subject.career_id == alumno.career_id,
+            Subject.cuatrimestre == alumno.cuatrimestre_actual
+        )
+        .all()
+    )
     materias_dict = {}
     
     for grupo in grupos_db:
@@ -94,7 +116,6 @@ def obtener_grupos_disponibles(matricula: str, db: Session = Depends(get_db)):
     return {
         "alumno_matricula": alumno.matricula, "alumno_nombre": nombre_completo.strip().upper(),
         "alumno_cuatrimestre": alumno.cuatrimestre_actual, "carrera": nombre_carrera,
-        "grupo_base_bloqueado": bloquear_grupo_base, "grupo_base": "2A" if bloquear_grupo_base else None,
         "grupos_inscritos": grupos_inscritos, "materias_regulares": list(materias_dict.values()),
         "materias_recursamiento": [] 
     }

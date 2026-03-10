@@ -132,7 +132,11 @@ const MiHorario = () => {
               </h1>
               <p className="text-gray-500 text-sm">Ciclo Escolar 2026-1</p>
             </div>
-            <button onClick={handleDownloadPDF} className="flex items-center px-5 py-2.5 bg-[#1A237E] text-white rounded-md text-sm font-bold hover:bg-[#283593] transition-colors shadow-sm justify-center">
+            <button
+              onClick={handleDownloadPDF}
+              disabled={clasesAsignadas.length === 0}
+              className="flex items-center px-5 py-2.5 bg-[#1A237E] text-white rounded-md text-sm font-bold hover:bg-[#283593] transition-colors shadow-sm justify-center disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-[#1A237E]"
+            >
               <Download className="w-4 h-4 mr-2" /> Descargar Horario (PDF)
             </button>
           </div>
@@ -165,6 +169,13 @@ const MiHorario = () => {
                </div>
             </div>
 
+            {clasesAsignadas.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-16 text-gray-400">
+                <BookOpen className="w-12 h-12 mb-4 opacity-30" />
+                <p className="text-base font-semibold">Sin materias asignadas</p>
+                <p className="text-sm mt-1">Aún no tienes materias registradas para este periodo.</p>
+              </div>
+            ) : (
             <div className="overflow-x-auto">
               <table className="w-full text-sm text-left border-collapse min-w-[1000px] table-fixed">
                 <thead className="bg-gray-50 text-gray-600 text-[11px] uppercase font-black text-center">
@@ -204,6 +215,7 @@ const MiHorario = () => {
                 </tbody>
               </table>
             </div>
+            )}
           </div>
         </div>
       </main>

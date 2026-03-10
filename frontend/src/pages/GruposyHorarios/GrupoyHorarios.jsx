@@ -65,8 +65,6 @@ const GruposYHorarios = () => {
         nombre: data.alumno_nombre,
         cuatrimestre: data.alumno_cuatrimestre,
         carrera: data.carrera,
-        grupoBase: data.grupo_base,
-        bloqueado: data.grupo_base_bloqueado
       });
       
       setMateriasRegulares(data.materias_regulares);
@@ -147,8 +145,41 @@ const GruposYHorarios = () => {
         });
 
         if (!confirmacion.isConfirmed) return;
+
+        // Baja inmediata: guardar sin esta materia
+        const nuevaSeleccion = { ...seleccion };
+        delete nuevaSeleccion[subjectId];
+        const materiasPayload = Object.entries(nuevaSeleccion).map(([sid, data]) => ({
+          subject_id: parseInt(sid),
+          group_id: data.group_id,
+          is_retake: data.is_retake
+        }));
+        try {
+          await client.post(`/asignacion/${alumnoInfo.matricula}/guardar`, { materias: materiasPayload });
+          setSeleccion(nuevaSeleccion);
+          setInscripcionesOriginales(materiasPayload.map(m => m.group_id));
+          const resCupos = await client.get('/asignacion/cupos/2026-1');
+          const cuposActualizados = resCupos.data;
+          const aplicarCupos = (materias) =>
+            materias.map(mat => ({
+              ...mat,
+              grupos_disponibles: mat.grupos_disponibles.map(g => ({
+                ...g,
+                cupo_disponible: cuposActualizados[g.group_id] ?? g.cupo_disponible
+              }))
+            }));
+          setMateriasRegulares(prev => aplicarCupos(prev));
+          setMateriasRecursamiento(prev => aplicarCupos(prev));
+          const resHorario = await client.get(`/asignacion/${alumnoInfo.matricula}/horario`);
+          setHorarioReal(resHorario.data);
+          Swal.fire({ icon: 'success', title: 'Baja registrada', text: 'La materia fue dada de baja exitosamente.', confirmButtonColor: '#1A237E' });
+        } catch (error) {
+          Swal.fire({ icon: 'error', title: 'Error', text: error.response?.data?.detail || 'No se pudo dar de baja la materia.', confirmButtonColor: '#1A237E' });
+        }
+        return;
       }
 
+      // Grupo seleccionado en sesión pero no inscrito oficialmente: quitar solo del estado local
       setSeleccion(prev => {
         const nueva = { ...prev };
         delete nueva[subjectId];
@@ -188,9 +219,26 @@ const GruposYHorarios = () => {
         confirmButtonColor: '#1A237E'
       });
 
+      // Actualizamos inscripciones originales para que el flujo de dar de baja funcione correctamente
+      setInscripcionesOriginales(materiasPayload.map(m => m.group_id));
+
       // Recargamos el horario tras guardar
       const resHorario = await client.get(`/asignacion/${alumnoInfo.matricula}/horario`);
       setHorarioReal(resHorario.data);
+
+      // Actualizamos cupos disponibles tras el cambio
+      const resCupos = await client.get('/asignacion/cupos/2026-1');
+      const cuposActualizados = resCupos.data;
+      const aplicarCupos = (materias) =>
+        materias.map(mat => ({
+          ...mat,
+          grupos_disponibles: mat.grupos_disponibles.map(g => ({
+            ...g,
+            cupo_disponible: cuposActualizados[g.group_id] ?? g.cupo_disponible
+          }))
+        }));
+      setMateriasRegulares(prev => aplicarCupos(prev));
+      setMateriasRecursamiento(prev => aplicarCupos(prev));
 
     } catch (error) {
       Swal.fire({
@@ -399,12 +447,6 @@ const GruposYHorarios = () => {
                       </p>
                     </div>
                   </div>
-                  {alumnoInfo.bloqueado && (
-                    <div className="bg-white px-3 py-1.5 rounded border border-blue-100 text-xs font-bold text-blue-800 flex items-center gap-2">
-                      <AlertTriangle className="w-4 h-4 text-orange-500" />
-                      Grupo Base Bloqueado ({alumnoInfo.grupoBase})
-                    </div>
-                  )}
                 </div>
 
                 {materiasRecursamiento.length > 0 && (
@@ -496,11 +538,18 @@ const GruposYHorarios = () => {
                     <div className="bg-green-100 p-3 rounded-lg text-green-600"><Clock className="w-6 h-6" /></div>
                   </div>
                 </div>
-                <button onClick={handleDownloadPDF} className="flex items-center px-5 py-2.5 bg-blue-600 text-white rounded-md text-sm font-bold hover:bg-blue-700 transition-colors shadow-sm w-full md:w-auto justify-center"><Download className="w-4 h-4 mr-2" /> Descargar PDF</button>
+                <button onClick={handleDownloadPDF} disabled={horarioReal.length === 0} className="flex items-center px-5 py-2.5 bg-blue-600 text-white rounded-md text-sm font-bold hover:bg-blue-700 transition-colors shadow-sm w-full md:w-auto justify-center disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-blue-600"><Download className="w-4 h-4 mr-2" /> Descargar PDF</button>
               </div>
 
               <div id="horario-imprimible" className="bg-white border border-gray-200 rounded-lg shadow-sm overflow-hidden p-6">
                 <div className="mb-6 border-b pb-4"><h2 className="text-2xl font-bold text-[#1A237E]">Horario de Clases - {alumnoInfo.nombre}</h2><p className="text-gray-500 text-sm">Periodo 2026-1 | {alumnoInfo.carrera}</p></div>
+                {horarioReal.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center py-16 text-gray-400">
+                    <BookOpen className="w-12 h-12 mb-4 opacity-30" />
+                    <p className="text-base font-semibold">Sin materias asignadas</p>
+                    <p className="text-sm mt-1">Este alumno no tiene materias registradas para este periodo.</p>
+                  </div>
+                ) : (
                 <div className="overflow-x-auto">
                   <table className="w-full text-sm text-left border-collapse min-w-[1000px] table-fixed">
                     <thead className="bg-gray-50 text-gray-600 text-xs uppercase font-bold text-center">
@@ -537,6 +586,7 @@ const GruposYHorarios = () => {
                     </tbody>
                   </table>
                 </div>
+                )}
               </div>
             </div>
           )}

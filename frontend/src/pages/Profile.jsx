@@ -33,7 +33,7 @@ const Profile = () => {
 
   const emailInstitucional = user?.email_institucional || null;
 
-  const hasEmails = roleName === "admin" || roleName === "super_admin" || roleName === "alumno";
+  const hasEmails = roleName === "admin" || roleName === "super_admin" || roleName === "alumno" || roleName === "docente";
 
   const photo =
     (roleName === "alumno" && user?.foto_id)

@@ -16,7 +16,8 @@ import { useAuth } from '../hooks/AuthContext';
 
 const formatName = (name) => {
   if (!name) return "";
-  return name.toLowerCase().replace(/\b\w/g, char => char.toUpperCase());
+  return name.toLowerCase().split(" ").filter(Boolean)
+    .map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(" ");
 };
 
 const AdminLayout = () => {
@@ -26,6 +27,7 @@ const AdminLayout = () => {
 
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [isMobileOpen, setIsMobileOpen] = useState(false);
+  const effectivelyCollapsed = isCollapsed && !isMobileOpen;
 
   const isActive = (path) => location.pathname.includes(path);
 
@@ -101,17 +103,17 @@ const AdminLayout = () => {
           </button>
         </div>
 
-        <div className={`p-4 border-b border-slate-800 bg-[#0b172a] flex items-center ${isCollapsed ? 'justify-center' : 'justify-between'}`}>
+        <div className={`p-4 border-b border-slate-800 bg-[#0b172a] flex items-center ${effectivelyCollapsed ? 'justify-center' : 'justify-between'}`}>
           <button
             type="button"
             onClick={() => navigate("/profile")}
-            className={`flex items-center gap-3 overflow-hidden text-left hover:bg-slate-800 rounded-lg p-1 transition-colors flex-1 ${isCollapsed ? 'justify-center' : ''}`}
+            className={`flex items-center gap-3 overflow-hidden text-left hover:bg-slate-800 rounded-lg p-1 transition-colors flex-1 ${effectivelyCollapsed ? 'justify-center' : ''}`}
             title="Ver perfil"
           >
             <div className="w-9 h-9 rounded-full bg-[#1A237E] flex items-center justify-center text-white font-bold text-xs shrink-0 border border-indigo-500">
               {getInitials(nombreUsuario)}
             </div>
-            {!isCollapsed && (
+            {!effectivelyCollapsed && (
               <div className="flex flex-col">
                 <span
                   className="text-sm font-semibold text-white whitespace-normal break-words leading-tight line-clamp-2"
@@ -119,13 +121,13 @@ const AdminLayout = () => {
                 >
                   {nombreUsuario}
                 </span>
-                <span className="text-[10px] text-slate-400 truncate mt-0.5 capitalize">
-                  {isSuperAdmin ? 'Súper Administrador' : displayArea}
+                <span className="text-[10px] text-slate-400 truncate mt-0.5">
+                  {displayArea}
                 </span>
               </div>
             )}
           </button>
-          {!isCollapsed && (
+          {!effectivelyCollapsed && (
             <button
               onClick={logout}
               className="p-2 text-slate-400 hover:text-red-400 hover:bg-slate-800 rounded-lg transition-colors shrink-0"
@@ -140,32 +142,32 @@ const AdminLayout = () => {
           <nav className="space-y-2">
 
             {isSuperAdmin && (
-              <Link to="/administradores/listado" title="Gestión de Administradores" className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-colors ${isCollapsed ? 'justify-center' : ''} ${isActive('/administradores') ? 'bg-[#1A237E] text-white font-semibold shadow-md' : 'text-slate-300 hover:bg-slate-800 hover:text-white'}`}>
+              <Link to="/administradores/listado" title="Gestión de Administradores" className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-colors ${effectivelyCollapsed ? 'justify-center' : ''} ${isActive('/administradores') ? 'bg-[#1A237E] text-white font-semibold shadow-md' : 'text-slate-300 hover:bg-slate-800 hover:text-white'}`}>
                 <Shield className="w-[18px] h-[18px] shrink-0" />
-                {!isCollapsed && <span>Administradores</span>}
+                {!effectivelyCollapsed && <span>Administradores</span>}
               </Link>
             )}
 
-            <Link to="/alumnos/listado" title="Alumnos" className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-colors ${isCollapsed ? 'justify-center' : ''} ${isActive('/alumnos') ? 'bg-[#1A237E] text-white font-semibold shadow-md' : 'text-slate-300 hover:bg-slate-800 hover:text-white'}`}>
+            <Link to="/alumnos/listado" title="Alumnos" className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-colors ${effectivelyCollapsed ? 'justify-center' : ''} ${isActive('/alumnos') ? 'bg-[#1A237E] text-white font-semibold shadow-md' : 'text-slate-300 hover:bg-slate-800 hover:text-white'}`}>
               <Users className="w-[18px] h-[18px] shrink-0" />
-              {!isCollapsed && <span>Alumnos</span>}
+              {!effectivelyCollapsed && <span>Alumnos</span>}
             </Link>
-            <Link to="/docentes" title="Sincronización Docente" className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-colors ${isCollapsed ? 'justify-center' : ''} ${isActive('/docentes') ? 'bg-[#1A237E] text-white font-semibold shadow-md' : 'text-slate-300 hover:bg-slate-800 hover:text-white'}`}>
+            <Link to="/docentes" title="Sincronización Docente" className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-colors ${effectivelyCollapsed ? 'justify-center' : ''} ${isActive('/docentes') ? 'bg-[#1A237E] text-white font-semibold shadow-md' : 'text-slate-300 hover:bg-slate-800 hover:text-white'}`}>
               <RefreshCcw className="w-[18px] h-[18px] shrink-0" />
-              {!isCollapsed && <span>Sincronización Docente</span>}
+              {!effectivelyCollapsed && <span>Sincronización Docente</span>}
             </Link>
-            <Link to="/horarios" title="Grupos y Horarios" className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-colors ${isCollapsed ? 'justify-center' : ''} ${isActive('/horarios') ? 'bg-[#1A237E] text-white font-semibold shadow-md' : 'text-slate-300 hover:bg-slate-800 hover:text-white'}`}>
+            <Link to="/horarios" title="Grupos y Horarios" className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-colors ${effectivelyCollapsed ? 'justify-center' : ''} ${isActive('/horarios') ? 'bg-[#1A237E] text-white font-semibold shadow-md' : 'text-slate-300 hover:bg-slate-800 hover:text-white'}`}>
               <CalendarDays className="w-[18px] h-[18px] shrink-0" />
-              {!isCollapsed && <span>Grupos y Horarios</span>}
+              {!effectivelyCollapsed && <span>Grupos y Horarios</span>}
             </Link>
-            <Link to="/reportes" title="Boletas y Listas" className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-colors ${isCollapsed ? 'justify-center' : ''} ${isActive('/reportes') ? 'bg-[#1A237E] text-white font-semibold shadow-md' : 'text-slate-300 hover:bg-slate-800 hover:text-white'}`}>
+            <Link to="/reportes" title="Boletas y Listas" className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-colors ${effectivelyCollapsed ? 'justify-center' : ''} ${isActive('/reportes') ? 'bg-[#1A237E] text-white font-semibold shadow-md' : 'text-slate-300 hover:bg-slate-800 hover:text-white'}`}>
               <FileText className="w-[18px] h-[18px] shrink-0" />
-              {!isCollapsed && <span>Boletas y Listas</span>}
+              {!effectivelyCollapsed && <span>Boletas y Listas</span>}
             </Link>
           </nav>
         </div>
 
-        {isCollapsed && (
+        {effectivelyCollapsed && (
           <div className="p-4 flex justify-center border-t border-slate-800">
             <button onClick={logout} className="p-2 text-slate-400 hover:text-red-400 hover:bg-slate-800 rounded-lg transition-colors" title="Cerrar Sesión">
               <LogOut className="w-5 h-5" />
