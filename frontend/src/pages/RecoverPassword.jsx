@@ -83,9 +83,22 @@ const RecoverPassword = () => {
                       required
                       placeholder="ej. alumno@red.unid.mx"
                       value={email}
+                      onKeyDown={(e) => {
+                        if (e.key === ' ') e.preventDefault();
+                        if (e.key === '@' && email.includes('@')) e.preventDefault();
+                      }}
+                      onPaste={(e) => {
+                        e.preventDefault();
+                        const pasted = e.clipboardData.getData('text').replace(/\s/g, '');
+                        const combined = email + pasted;
+                        const arrobas = (combined.match(/@/g) || []).length;
+                        setEmail(arrobas > 1 ? combined.replace(/@(?=.*@)/g, '') : combined);
+                      }}
                       onChange={(e) => {
-                        const sinEspacios = e.target.value.replace(/\s/g, '');
-                        setEmail(sinEspacios);
+                        const val = e.target.value.replace(/\s/g, '');
+                        const arrobas = (val.match(/@/g) || []).length;
+                        if (arrobas > 1) return;
+                        setEmail(val);
                         if (error) setError('');
                       }}
                       className="w-full pl-10 pr-4 py-2.5 bg-white border border-gray-300 rounded-lg text-sm focus:ring-1 focus:ring-[#0B172A] focus:border-[#0B172A]"

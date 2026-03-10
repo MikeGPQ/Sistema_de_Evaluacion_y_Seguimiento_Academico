@@ -186,6 +186,9 @@ def reset_password(data: ResetPasswordRequest, db: Session = Depends(get_db)):
     if not user:
         raise HTTPException(status_code=404, detail="Usuario no encontrado")
 
+    if verify_password(data.new_password, user.password_hash):
+        raise HTTPException(status_code=400, detail="La nueva contraseña no puede ser igual a la contraseña actual.")
+
     user.password_hash = get_password_hash(data.new_password)
     user.is_temp_password = False
     
