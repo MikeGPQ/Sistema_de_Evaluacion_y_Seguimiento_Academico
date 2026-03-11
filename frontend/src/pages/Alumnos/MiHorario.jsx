@@ -24,7 +24,13 @@ const MiHorario = () => {
 
   useEffect(() => {
     const cargarDatosAcademicos = async () => {
-      const matriculaActiva = user?.identifier || user?.matricula || '20240001';
+      const matriculaActiva = user?.identifier;
+
+      if (!matriculaActiva) {
+        setCargando(false);
+        return;
+      }
+
       try {
         const resPerfil = await client.get(`/asignacion/${matriculaActiva}/disponibles`);
         setAlumnoInfo({
@@ -41,6 +47,7 @@ const MiHorario = () => {
         setCargando(false);
       }
     };
+    
     if (user) cargarDatosAcademicos();
   }, [user]);
 
@@ -50,60 +57,84 @@ const MiHorario = () => {
 
     Swal.fire({ 
       title: 'Generando PDF', 
-      text: 'Optimizando tamaño y resolución...', 
+      text: 'Optimizando resolución...', 
       allowOutsideClick: false, 
       didOpen: () => Swal.showLoading() 
     });
-
+    
     window.scrollTo(0, 0);
 
     const scrollableDiv = input.querySelector('.overflow-x-auto');
     const originalOverflowX = scrollableDiv ? scrollableDiv.style.overflowX : '';
     const originalOverflowY = scrollableDiv ? scrollableDiv.style.overflowY : '';
     
-    if (scrollableDiv) {
+    if (scrollableDiv) { 
       scrollableDiv.style.overflowX = 'hidden'; 
       scrollableDiv.style.overflowY = 'hidden'; 
     }
 
     try {
-      // 🌟 PixelRatio 4: Nitidez absoluta incluso con zoom
+      await new Promise(resolve => setTimeout(resolve, 100));
       const dataUrl = await toPng(input, { 
         quality: 1.0, 
         backgroundColor: '#ffffff', 
-        pixelRatio: 4 
+        pixelRatio: 2 
       });
-
-      // Calculamos dimensiones reales del elemento en mm (aprox)
+      
       const imgWidthPx = input.offsetWidth;
       const imgHeightPx = input.offsetHeight;
-      const pdfWidth = 280; // Ancho fijo para mantener consistencia
+      const pdfWidth = 280; 
       const pdfHeight = (imgHeightPx * pdfWidth) / imgWidthPx;
 
-      // 🌟 PDF de tamaño personalizado para que NO se vea lejos
-      const pdf = new jsPDF({
-        orientation: 'p',
-        unit: 'mm',
-        format: [pdfWidth + 20, pdfHeight + 60] 
+      const pdf = new jsPDF({ 
+        orientation: 'p', 
+        unit: 'mm', 
+        format: [pdfWidth + 20, pdfHeight + 70] 
       });
 
-      pdf.setFontSize(22); pdf.setTextColor(26, 35, 126);
-      pdf.text(`SESA - HORARIO ESCOLAR`, 15, 20);
-      
-      pdf.setFontSize(12); pdf.setTextColor(100);
-      pdf.text(`Alumno: ${alumnoInfo.nombre} | Matrícula: ${alumnoInfo.matricula}`, 15, 30);
-      pdf.text(`Carrera: ${alumnoInfo.carrera} | Periodo: 2026-1`, 15, 38);
+      // --- HEADER INSTITUCIONAL ---
+      pdf.setFillColor(15, 23, 42);
+      pdf.roundedRect(15, 15, 14, 14, 2, 2, 'F');
+      pdf.setTextColor(255, 255, 255);
+      pdf.setFont("helvetica", "bold");
+      pdf.setFontSize(16);
+      pdf.text("U", 22, 24.5, { align: "center" });
 
-      // Pegamos la imagen a tamaño completo
-      pdf.addImage(dataUrl, 'PNG', 10, 50, pdfWidth, pdfHeight);
+      pdf.setTextColor(15, 23, 42);
+      pdf.setFontSize(22);
+      pdf.text("UNID", 33, 22);
+
+      pdf.setTextColor(100, 116, 139);
+      pdf.setFontSize(10);
+      pdf.setFont("helvetica", "normal");
+      pdf.text("Universidad Interamericana para el", 33, 27);
+      pdf.text("Desarrollo", 33, 31.5);
+
+      pdf.setTextColor(15, 23, 42);
+      pdf.setFontSize(15);
+      pdf.setFont("helvetica", "bold");
+      pdf.text("HORARIO ESCOLAR OFICIAL", pdfWidth + 5, 25, { align: "right" });
+
+      pdf.setDrawColor(242, 169, 0); 
+      pdf.setLineWidth(1.5);
+      pdf.line(15, 36, pdfWidth + 5, 36);
+
+      // --- DATOS DEL ALUMNO ---
+      pdf.setFontSize(11);
+      pdf.setTextColor(100, 100, 100);
+      pdf.setFont("helvetica", "normal");
+      pdf.text(`Alumno: ${alumnoInfo.nombre} | Matrícula: ${alumnoInfo.matricula}`, 15, 45);
+
+      // --- RENDERIZADO DE TABLA ---
+      pdf.addImage(dataUrl, 'PNG', 10, 58, pdfWidth, pdfHeight);
       pdf.save(`Horario_${alumnoInfo.matricula}.pdf`);
       
-    } catch (error) {
-      Swal.fire('Error', 'Fallo al generar el PDF.', 'error');
+    } catch (error) { 
+      Swal.fire('Error', 'Fallo al generar el PDF.', 'error'); 
     } finally {
-      if (scrollableDiv) {
-        scrollableDiv.style.overflowX = originalOverflowX;
-        scrollableDiv.style.overflowY = originalOverflowY;
+      if (scrollableDiv) { 
+        scrollableDiv.style.overflowX = originalOverflowX; 
+        scrollableDiv.style.overflowY = originalOverflowY; 
       }
       Swal.close();
     }
@@ -159,13 +190,13 @@ const MiHorario = () => {
           <div id="horario-imprimible" className="bg-white border border-gray-200 rounded-xl shadow-md overflow-hidden p-8">
             <div className="mb-8 flex flex-col md:flex-row justify-between md:items-start border-b-2 border-gray-100 pb-6">
                <div className="flex-1 pr-4">
-                <h2 className="text-xl md:text-2xl font-black text-[#1A237E] uppercase tracking-tight leading-tight mb-4">{alumnoInfo?.carrera}</h2>
+                <h2 className="text-2xl font-bold text-[#1A237E] uppercase leading-tight mb-4">{alumnoInfo?.carrera}</h2>
                 <div className="inline-block bg-gray-50 px-4 py-1.5 rounded border border-gray-200">
-                  <p className="text-gray-500 text-[10px] font-black uppercase tracking-widest">CUATRIMESTRE: <span className="text-[#1A237E] ml-1">{alumnoInfo?.cuatrimestre}</span></p>
+                  <p className="text-gray-500 text-xs font-bold uppercase tracking-widest">CUATRIMESTRE: <span className="text-[#1A237E] ml-1">{alumnoInfo?.cuatrimestre}</span></p>
                 </div>
                </div>
                <div className="shrink-0 mt-4 md:mt-0">
-                  <span className="bg-blue-50 text-[#1A237E] text-[10px] font-bold px-4 py-2 rounded-full uppercase border border-blue-100 whitespace-nowrap shadow-sm inline-block">SESA - Sistema Escolar</span>
+                  <span className="bg-blue-50 text-[#1A237E] text-xs font-bold px-4 py-2 rounded-full uppercase border border-blue-100 whitespace-nowrap shadow-sm inline-block">SESA - Sistema Escolar</span>
                </div>
             </div>
 
@@ -178,36 +209,36 @@ const MiHorario = () => {
             ) : (
             <div className="overflow-x-auto">
               <table className="w-full text-sm text-left border-collapse min-w-[1000px] table-fixed">
-                <thead className="bg-gray-50 text-gray-600 text-[11px] uppercase font-black text-center">
+                <thead className="bg-gray-50 text-gray-600 text-xs uppercase font-bold text-center">
                   <tr>
-                    <th className="py-4 px-4 w-28 border border-gray-200 bg-gray-100">Hora</th>
-                    {DIAS_SEMANA.map(dia => (<th key={dia} className="py-4 px-4 border border-gray-200 w-1/6">{dia}</th>))}
+                    <th className="py-3 px-4 w-28 border border-gray-200 bg-gray-100">Hora</th>
+                    {DIAS_SEMANA.map(dia => (<th key={dia} className="py-3 px-4 border border-gray-200 w-1/6">{dia}</th>))}
                   </tr>
                 </thead>
                 <tbody>
                   {HORAS_CLASE.map((hora, idx) => {
                     const rowHour = parseInt(hora.split(':')[0]);
                     return (
-                      <tr key={idx} className="border-b border-gray-100">
-                        <td className="py-4 px-2 font-bold text-gray-400 text-center border-r border-gray-200 bg-gray-50/50 text-[10px]">{hora}</td>
+                      <tr key={idx} className="border-b border-gray-200">
+                        <td className="py-4 px-2 font-medium text-gray-500 text-center border-r border-gray-200 bg-gray-50">{hora}</td>
                         {DIAS_SEMANA.map(dia => {
                           const claseInicia = clasesAsignadas.find(c => c.dia === dia && c.hora_inicio === rowHour);
                           const claseContinua = clasesAsignadas.find(c => c.dia === dia && c.hora_inicio < rowHour && (c.hora_inicio + c.duracion) > rowHour);
                           if (claseContinua) return null;
                           if (claseInicia) {
                             return (
-                              <td key={`${dia}-${hora}`} rowSpan={claseInicia.duracion} className="p-1.5 border-r border-gray-100 align-top">
-                                <div className="text-white rounded-lg p-3 flex flex-col shadow-sm transition-all hover:scale-[1.02]" style={{ backgroundColor: claseInicia.color, height: '100%', minHeight: `${claseInicia.duracion * 4.5}rem` }}>
-                                  <span className="font-black text-[10px] leading-tight uppercase tracking-tight mb-2">{claseInicia.materia}</span>
+                              <td key={`${dia}-${hora}`} rowSpan={claseInicia.duracion} className="p-2 border-r border-gray-200 align-top">
+                                <div className="text-white rounded-md p-3 flex flex-col shadow-sm transition-transform hover:scale-[1.02]" style={{ backgroundColor: claseInicia.color, height: '100%', minHeight: `${claseInicia.duracion * 4.5}rem` }}>
+                                  <span className="font-bold text-xs leading-tight uppercase mb-1">{claseInicia.materia}</span>
                                   <div className="mt-auto border-t border-white/20 pt-2">
-                                    <span className="block text-[9px] opacity-90 font-medium truncate">{claseInicia.profe}</span>
-                                    <span className="text-[9px] font-mono mt-1 bg-black/15 inline-block px-2 py-0.5 rounded whitespace-nowrap">{claseInicia.aula || 'S/A'}</span>
+                                    <span className="block text-[10px] opacity-90 truncate">{claseInicia.profe}</span>
+                                    <span className="block text-[10px] font-mono mt-1 bg-black/10 inline-block px-1.5 py-0.5 rounded">{claseInicia.aula || 'Por Asignar'}</span>
                                   </div>
                                 </div>
                               </td>
                             );
                           }
-                          return <td key={`${dia}-${hora}`} className="p-1.5 border-r border-gray-100 align-top"></td>;
+                          return <td key={`${dia}-${hora}`} className="p-2 border-r border-gray-200 align-top"></td>;
                         })}
                       </tr>
                     );

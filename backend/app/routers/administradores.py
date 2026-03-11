@@ -173,7 +173,6 @@ def register_admin(admin_data: AdminCreate, db: Session = Depends(get_db)):
                         <p style="font-size: 16px;">Se ha creado tu cuenta de administrador exitosamente.</p>
                         <div style="background-color: #f8fafc; border-left: 5px solid #1A237E; padding: 20px; margin: 30px 0;">
                             <p style="margin: 8px 0; font-size: 16px;"><strong>ID Empleado:</strong> {nuevo_numero_empleado}</p>
-                            <p style="margin: 8px 0; font-size: 16px;"><strong>Correo de acceso:</strong> {email_login}</p>
                             <p style="margin: 8px 0; font-size: 16px;"><strong>Contraseña temporal:</strong> {raw_password}</p>
                         </div>
                     </div>
