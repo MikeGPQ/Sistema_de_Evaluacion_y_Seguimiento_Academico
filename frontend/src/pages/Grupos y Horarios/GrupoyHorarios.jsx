@@ -2,13 +2,27 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { 
   Search, ArrowLeft, BookOpen, Clock, AlertTriangle, 
-  CheckCircle, Save, Calendar, User
+  CheckCircle, Save, Calendar, User, Download, ChevronRight, ChevronLeft
 } from 'lucide-react';
 import client from '../../lib/axios';
 import Swal from 'sweetalert2';
+import jsPDF from 'jspdf';
+import { toPng } from 'html-to-image';
+
+// --- Constantes globales para el horario gráfico ---
+const HORAS_CLASE = [
+  "7:00 - 8:00", "8:00 - 9:00", "9:00 - 10:00", 
+  "10:00 - 11:00", "11:00 - 12:00", "12:00 - 13:00", 
+  "13:00 - 14:00", "14:00 - 15:00", "15:00 - 16:00",
+  "16:00 - 17:00", "17:00 - 18:00", "18:00 - 19:00",
+  "19:00 - 20:00", "20:00 - 21:00"
+];
+const DIAS_SEMANA = ["LUNES", "MARTES", "MIÉRCOLES", "JUEVES", "VIERNES", "SÁBADO"];
 
 const GruposYHorarios = () => {
   const navigate = useNavigate();
+  const [vistaActual, setVistaActual] = useState('asignacion'); // Controla las pestañas
+  
   const [matriculaBuscada, setMatriculaBuscada] = useState('');
   const [cargando, setCargando] = useState(false);
   const [guardando, setGuardando] = useState(false);
@@ -17,6 +31,7 @@ const GruposYHorarios = () => {
   const [alumnoInfo, setAlumnoInfo] = useState(null);
   const [materiasRegulares, setMateriasRegulares] = useState([]);
   const [materiasRecursamiento, setMateriasRecursamiento] = useState([]);
+  const [horarioReal, setHorarioReal] = useState([]); // Guarda la tabla gráfica
   
   // Estado de la selección del usuario
   const [seleccion, setSeleccion] = useState({});
@@ -31,11 +46,20 @@ const GruposYHorarios = () => {
     setSeleccion({});
     setInscripcionesOriginales([]); 
     setMostrarSugerencias(false); 
+    setHorarioReal([]);
 
     try {
       const response = await client.get(`/asignacion/${matriculaAUsar}/disponibles`);
       const data = response.data;
       
+      // Intentamos cargar el horario del nuevo endpoint
+      try {
+        const resHorario = await client.get(`/asignacion/${matriculaAUsar}/horario`);
+        setHorarioReal(resHorario.data);
+      } catch (err) {
+        console.error("Error cargando horario", err);
+      }
+
       setAlumnoInfo({
         matricula: data.alumno_matricula,
         nombre: data.alumno_nombre,
@@ -48,11 +72,9 @@ const GruposYHorarios = () => {
       setMateriasRegulares(data.materias_regulares);
       setMateriasRecursamiento(data.materias_recursamiento);
 
-      // ---AUTO-SELECCIÓN DE MATERIAS YA INSCRITAS ---
       const seleccionInicial = {};
       const gruposQueYaTenia = data.grupos_inscritos || [];
 
-      // Función rápida para escanear el catálogo y armar la selección
       const escanearCatalogo = (catalogo, isRetake) => {
         catalogo.forEach(mat => {
           mat.grupos_disponibles.forEach(g => {
@@ -66,13 +88,11 @@ const GruposYHorarios = () => {
       escanearCatalogo(data.materias_regulares, false);
       escanearCatalogo(data.materias_recursamiento, true);
 
-      // Guardamos la selección inicial y la lista original para protegerla
       setSeleccion(seleccionInicial);
       setInscripcionesOriginales(gruposQueYaTenia);
+      setVistaActual('asignacion');
 
     } catch (error) {
-      
-      // Extraemos el mensaje de FastAPI. Si no hay, ponemos el genérico por defecto.
       const mensajeBackend = error.response?.data?.detail || 'No se encontraron materias disponibles para esta matrícula.';
       const esBloqueo = error.response?.status === 403; 
 
@@ -83,18 +103,16 @@ const GruposYHorarios = () => {
         confirmButtonColor: '#1A237E'
       });
       
-      // Limpiamos el input para que pueda buscar a otro alumno fácilmente
       if (esBloqueo) setMatriculaBuscada(''); 
-
     } finally {
       setCargando(false);
     }
   };
+
   const handleCambioInput = async (e) => {
-    const valor = e.target.value.replace(/\D/g, ''); // Solo permite números
+    const valor = e.target.value.replace(/\D/g, ''); 
     setMatriculaBuscada(valor);
 
-    // Solo empezamos a sugerir a partir del tercer número y nos detenemos al llegar a 8
     if (valor.length >= 3 && valor.length < 8) {
       try {
         const res = await client.get(`/asignacion/buscar-alumno?q=${valor}`);
@@ -115,10 +133,7 @@ const GruposYHorarios = () => {
   };
 
   const handleSeleccionGrupo = async (subjectId, groupId, isRetake) => {
-    // Verificar si el administrador está intentando DESELECCIONAR el grupo
     if (seleccion[subjectId]?.group_id === groupId) {
-      
-      // Si ese grupo venía de la base de datos, lanzamos la advertencia
       if (inscripcionesOriginales.includes(groupId)) {
         const confirmacion = await Swal.fire({
           title: '¿Dar de baja materia?',
@@ -131,11 +146,9 @@ const GruposYHorarios = () => {
           cancelButtonText: 'Cancelar'
         });
 
-        // Si el administrador da clic en "Cancelar", detenemos todo y no lo borramos
         if (!confirmacion.isConfirmed) return;
       }
 
-      // 3. Si aceptó (o si era una materia nueva que apenas iba a meter), la quitamos
       setSeleccion(prev => {
         const nueva = { ...prev };
         delete nueva[subjectId];
@@ -143,7 +156,6 @@ const GruposYHorarios = () => {
       });
 
     } else {
-      // Si está agregando una materia nueva (o cambiando de grupo)
       setSeleccion(prev => ({
         ...prev,
         [subjectId]: { group_id: groupId, is_retake: isRetake }
@@ -169,12 +181,17 @@ const GruposYHorarios = () => {
         materias: materiasPayload
       });
       
-      Swal.fire({
+      await Swal.fire({
         icon: 'success',
         title: 'Carga Guardada',
         text: response.data.message,
         confirmButtonColor: '#1A237E'
       });
+
+      // Recargamos el horario tras guardar
+      const resHorario = await client.get(`/asignacion/${alumnoInfo.matricula}/horario`);
+      setHorarioReal(resHorario.data);
+
     } catch (error) {
       Swal.fire({
         icon: 'error',
@@ -187,7 +204,42 @@ const GruposYHorarios = () => {
     }
   };
 
-  // Componente interno para renderizar las tarjetas de materias
+  // --- LÓGICA DEL PDF ---
+  const handleDownloadPDF = async () => {
+    const input = document.getElementById('horario-imprimible');
+    if (!input || !alumnoInfo) return;
+
+    Swal.fire({ title: 'Generando PDF', text: 'Optimizando resolución...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+    window.scrollTo(0, 0);
+
+    const scrollableDiv = input.querySelector('.overflow-x-auto');
+    const originalOverflowX = scrollableDiv ? scrollableDiv.style.overflowX : '';
+    const originalOverflowY = scrollableDiv ? scrollableDiv.style.overflowY : '';
+    if (scrollableDiv) { scrollableDiv.style.overflowX = 'hidden'; scrollableDiv.style.overflowY = 'hidden'; }
+
+    try {
+      await new Promise(resolve => setTimeout(resolve, 100));
+      const dataUrl = await toPng(input, { quality: 1.0, backgroundColor: '#ffffff', pixelRatio: 4 });
+      const imgWidthPx = input.offsetWidth;
+      const imgHeightPx = input.offsetHeight;
+      const pdfWidth = 280; 
+      const pdfHeight = (imgHeightPx * pdfWidth) / imgWidthPx;
+
+      const pdf = new jsPDF({ orientation: 'p', unit: 'mm', format: [pdfWidth + 20, pdfHeight + 60] });
+      pdf.setFontSize(22); pdf.setTextColor(26, 35, 126); pdf.text(`SESA - HORARIO ESCOLAR`, 15, 20);
+      pdf.setFontSize(12); pdf.setTextColor(100);
+      pdf.text(`Alumno: ${alumnoInfo.nombre} | Matrícula: ${alumnoInfo.matricula}`, 15, 30);
+      pdf.text(`Carrera: ${alumnoInfo.carrera} | Periodo: 2026-1`, 15, 38);
+      pdf.addImage(dataUrl, 'PNG', 10, 50, pdfWidth, pdfHeight);
+      pdf.save(`Horario_${alumnoInfo.matricula}.pdf`);
+    } catch (error) { 
+      Swal.fire('Error', 'Fallo al generar el PDF.', 'error'); 
+    } finally {
+      if (scrollableDiv) { scrollableDiv.style.overflowX = originalOverflowX; scrollableDiv.style.overflowY = originalOverflowY; }
+      Swal.close();
+    }
+  };
+
   const TarjetaMateria = ({ materia, isRetake }) => (
     <div className="bg-white border border-gray-200 rounded-lg shadow-sm p-4 mb-4 hover:border-blue-300 transition-colors">
       <div className="flex justify-between items-start mb-3 border-b pb-2">
@@ -216,7 +268,6 @@ const GruposYHorarios = () => {
               className={`flex items-center justify-between p-2.5 rounded-md border cursor-pointer transition-all ${isLleno ? 'bg-gray-50 border-gray-200 opacity-60 cursor-not-allowed' : isSelected ? 'bg-blue-50 border-[#1A237E] ring-1 ring-[#1A237E]' : 'bg-white border-gray-300 hover:bg-gray-50'}`}
             >
               <div className="flex items-center gap-3">
-                
                 <input 
                   type="radio" 
                   checked={isSelected}
@@ -256,17 +307,32 @@ const GruposYHorarios = () => {
 
       <main className="flex-1 p-8">
         <div className="max-w-7xl mx-auto">
-          <button 
-            onClick={() => navigate('/alumnos/listado')}
-            className="flex items-center text-sm text-gray-600 hover:text-[#1A237E] font-medium mb-4 transition-colors group"
-          >
-            <ArrowLeft className="w-4 h-4 mr-1.5 group-hover:-translate-x-1 transition-transform" />
-            Volver al listado
-          </button>
+          
+          {/* HEADER CON BOTONES DE PESTAÑAS */}
+          <div className="flex flex-col md:flex-row md:items-end justify-between mb-6 gap-4">
+            <div>
+              <button 
+                onClick={() => navigate('/alumnos/listado')}
+                className="flex items-center text-sm text-gray-600 hover:text-[#1A237E] font-medium mb-4 transition-colors group"
+              >
+                <ArrowLeft className="w-4 h-4 mr-1.5 group-hover:-translate-x-1 transition-transform" />
+                Volver al listado
+              </button>
+              <h1 className="text-2xl font-bold text-gray-900 mb-2">Asignación de Horarios y Grupos</h1>
+              <p className="text-gray-500 text-sm">Gestiona la carga académica, recursamientos y validación de cupos.</p>
+            </div>
 
-          <div className="mb-6">
-            <h1 className="text-2xl font-bold text-gray-900 mb-2">Asignación de Horarios y Grupos</h1>
-            <p className="text-gray-500 text-sm">Gestiona la carga académica, recursamientos y validación de cupos.</p>
+            {/* botones de vista*/}
+            {alumnoInfo && (
+              <div className="flex bg-gray-200 p-1 rounded-lg shadow-inner">
+                <button onClick={() => setVistaActual('asignacion')} className={`flex items-center px-4 py-2 rounded-md text-sm font-bold transition-all ${vistaActual === 'asignacion' ? 'bg-white shadow text-[#1A237E]' : 'text-gray-500 hover:text-gray-700'}`}>
+                  <ChevronLeft className="w-4 h-4 mr-1" /> Asignar Carga
+                </button>
+                <button onClick={() => setVistaActual('horario')} className={`flex items-center px-4 py-2 rounded-md text-sm font-bold transition-all ${vistaActual === 'horario' ? 'bg-white shadow text-[#1A237E]' : 'text-gray-500 hover:text-gray-700'}`}>
+                  Ver Horario <ChevronRight className="w-4 h-4 ml-1" />
+                </button>
+              </div>
+            )}
           </div>
 
           {/* BUSCADOR */}
@@ -280,20 +346,19 @@ const GruposYHorarios = () => {
                 <input 
                   type="text" 
                   value={matriculaBuscada}
-                  maxLength={8} /* bloque cuando excedes 8 caracteres */
-                  onChange={handleCambioInput} /* Llamamos a la función que hace la búsqueda mientras escribes */
-                  onBlur={() => setTimeout(() => setMostrarSugerencias(false), 200)} /*  Oculta la lista si das clic fuera de la caja */
+                  maxLength={8}
+                  onChange={handleCambioInput}
+                  onBlur={() => setTimeout(() => setMostrarSugerencias(false), 200)}
                   placeholder="Ej. 20240001 (Escribe al menos 3 números...)" 
                   className="block w-full pl-10 pr-3 py-2.5 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-[#1A237E] font-mono"
                 />
                 
-                {/*LISTA DESPLEGABLE DE SUGERENCIAS */}
                 {mostrarSugerencias && sugerencias.length > 0 && (
                   <ul className="absolute z-50 w-full bg-white border border-gray-200 mt-1 rounded-md shadow-xl max-h-60 overflow-auto divide-y divide-gray-100">
                     {sugerencias.map(s => (
                       <li 
                         key={s.matricula}
-                        onMouseDown={() => handleSeleccionarSugerencia(s.matricula)} // usamos onmousedown para que se ejecute antes del onblur
+                        onMouseDown={() => handleSeleccionarSugerencia(s.matricula)}
                         className="px-4 py-3 hover:bg-blue-50 cursor-pointer flex justify-between items-center transition-colors"
                       >
                         <span className="font-bold text-[#1A237E] font-mono">{s.matricula}</span>
@@ -307,21 +372,21 @@ const GruposYHorarios = () => {
             </div>
             <button 
               onClick={() => buscarAlumno()}
-              disabled={cargando || matriculaBuscada.length !== 8} /* este boton se habilita cuando solo son 8 digitos */
+              disabled={cargando || matriculaBuscada.length !== 8}
               className="bg-[#1A237E] text-white px-6 py-2.5 rounded-md text-sm font-bold hover:bg-[#283593] disabled:opacity-50 transition-colors shadow-sm whitespace-nowrap"
             >
               {cargando ? 'Buscando...' : 'Cargar Catálogo'}
             </button>
           </div>
 
-         
-          {alumnoInfo && (
+          {/* ======================================================== */}
+          {/* PESTAÑA 1: VISTA DE ASIGNACIÓN NORMAL                      */}
+          {/* ======================================================== */}
+          {alumnoInfo && vistaActual === 'asignacion' && (
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 animate-in fade-in duration-300">
-              
               
               <div className="lg:col-span-8 space-y-6">
                 
-                {/* INFO DEL ALUMNO */}
                 <div className="bg-blue-50 border border-blue-200 p-4 rounded-lg flex items-center justify-between">
                   <div className="flex items-center gap-4">
                     <div className="bg-[#1A237E] p-3 rounded-full text-white">
@@ -342,7 +407,6 @@ const GruposYHorarios = () => {
                   )}
                 </div>
 
-                {/* MATERIAS DE RECURSAMIENTO (Prioridad) */}
                 {materiasRecursamiento.length > 0 && (
                   <div>
                     <h3 className="text-sm font-bold text-red-700 flex items-center gap-2 mb-3 border-b border-red-200 pb-2">
@@ -354,7 +418,6 @@ const GruposYHorarios = () => {
                   </div>
                 )}
 
-                {/* MATERIAS REGULARES */}
                 <div>
                   <h3 className="text-sm font-bold text-gray-800 flex items-center gap-2 mb-3 border-b border-gray-200 pb-2">
                     <BookOpen className="w-4 h-4 text-blue-600" /> Carga Regular (Periodo Actual)
@@ -366,7 +429,6 @@ const GruposYHorarios = () => {
 
               </div>
 
-              {/* COLUMNA DERECHA: RESUMEN Y GUARDADO */}
               <div className="lg:col-span-4">
                 <div className="bg-white border border-gray-200 rounded-lg shadow-sm sticky top-6">
                   <div className="p-4 border-b border-gray-200 bg-gray-50 rounded-t-lg">
@@ -415,6 +477,67 @@ const GruposYHorarios = () => {
                 </div>
               </div>
 
+            </div>
+          )}
+
+          {/* ======================================================== */}
+          {/* PESTAÑA 2: VISTA DEL HORARIO GRÁFICO                       */}
+          {/* ======================================================== */}
+          {alumnoInfo && vistaActual === 'horario' && (
+            <div className="animate-in fade-in duration-300">
+              <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4">
+                <div className="flex gap-4 w-full md:w-auto">
+                  <div className="bg-white border border-gray-200 rounded-lg p-4 flex items-center justify-between min-w-[200px] shadow-sm">
+                    <div><p className="text-xs text-gray-500 font-bold uppercase tracking-wider">Asignaturas</p><p className="text-3xl font-bold text-gray-800">{new Set(horarioReal.map(c => c.materia)).size}</p></div>
+                    <div className="bg-blue-100 p-3 rounded-lg text-blue-600"><BookOpen className="w-6 h-6" /></div>
+                  </div>
+                  <div className="bg-white border border-gray-200 rounded-lg p-4 flex items-center justify-between min-w-[200px] shadow-sm">
+                    <div><p className="text-xs text-gray-500 font-bold uppercase tracking-wider">Hrs semanales</p><p className="text-3xl font-bold text-gray-800">{horarioReal.reduce((sum, clase) => sum + (clase.duracion || 0), 0)}</p></div>
+                    <div className="bg-green-100 p-3 rounded-lg text-green-600"><Clock className="w-6 h-6" /></div>
+                  </div>
+                </div>
+                <button onClick={handleDownloadPDF} className="flex items-center px-5 py-2.5 bg-blue-600 text-white rounded-md text-sm font-bold hover:bg-blue-700 transition-colors shadow-sm w-full md:w-auto justify-center"><Download className="w-4 h-4 mr-2" /> Descargar PDF</button>
+              </div>
+
+              <div id="horario-imprimible" className="bg-white border border-gray-200 rounded-lg shadow-sm overflow-hidden p-6">
+                <div className="mb-6 border-b pb-4"><h2 className="text-2xl font-bold text-[#1A237E]">Horario de Clases - {alumnoInfo.nombre}</h2><p className="text-gray-500 text-sm">Periodo 2026-1 | {alumnoInfo.carrera}</p></div>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm text-left border-collapse min-w-[1000px] table-fixed">
+                    <thead className="bg-gray-50 text-gray-600 text-xs uppercase font-bold text-center">
+                      <tr><th className="py-3 px-4 w-28 border border-gray-200 bg-gray-100">Hora</th>{DIAS_SEMANA.map(dia => (<th key={dia} className="py-3 px-4 border border-gray-200 w-1/6">{dia}</th>))}</tr>
+                    </thead>
+                    <tbody>
+                      {HORAS_CLASE.map((hora, idx) => {
+                        const rowHour = parseInt(hora.split(':')[0]);
+                        return (
+                          <tr key={idx} className="border-b border-gray-200">
+                            <td className="py-4 px-2 font-medium text-gray-500 text-center border-r border-gray-200 bg-gray-50">{hora}</td>
+                            {DIAS_SEMANA.map(dia => {
+                              const claseInicia = horarioReal.find(c => c.dia === dia && c.hora_inicio === rowHour);
+                              const claseContinua = horarioReal.find(c => c.dia === dia && c.hora_inicio < rowHour && (c.hora_inicio + c.duracion) > rowHour);
+                              if (claseContinua) return null;
+                              if (claseInicia) {
+                                return (
+                                  <td key={`${dia}-${hora}`} rowSpan={claseInicia.duracion} className="p-2 border-r border-gray-200 align-top">
+                                    <div className="text-white rounded-md p-3 flex flex-col shadow-sm transition-transform hover:scale-[1.02]" style={{ backgroundColor: claseInicia.color, height: '100%', minHeight: `${claseInicia.duracion * 4.5}rem` }}>
+                                      <span className="font-bold text-xs leading-tight uppercase mb-1">{claseInicia.materia}</span>
+                                      <div className="mt-auto border-t border-white/20 pt-2">
+                                        <span className="block text-[10px] opacity-90 truncate">{claseInicia.profe}</span>
+                                        <span className="block text-[10px] font-mono mt-1 bg-black/10 inline-block px-1.5 py-0.5 rounded">{claseInicia.aula || 'S/A'}</span>
+                                      </div>
+                                    </div>
+                                  </td>
+                                );
+                              }
+                              return <td key={`${dia}-${hora}`} className="p-2 border-r border-gray-200 align-top"></td>;
+                            })}
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
             </div>
           )}
 
