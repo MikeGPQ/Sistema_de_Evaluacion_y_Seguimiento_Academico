@@ -56,10 +56,22 @@ def obtener_grupos_disponibles(matricula: str, db: Session = Depends(get_db)):
         materia = db.query(Subject).filter(Subject.id == grupo.subject_id).first()
         if not materia: continue
             
+        # =================================================================
+        # FILTRO DE CARRERA Y TRONCO COMÚN 
+        # =================================================================
+        es_su_carrera = getattr(materia, 'career_id', alumno.career_id) == alumno.career_id
+        tipo_mat = str(getattr(materia, 'tipo', '')).lower()
+        es_tronco_comun = 'tronco' in tipo_mat or 'común' in tipo_mat or 'comun' in tipo_mat
+        
+        if not (es_su_carrera or es_tronco_comun):
+            continue 
+        # =================================================================
+            
         if materia.id not in materias_dict:
             materias_dict[materia.id] = {
                 "subject_id": materia.id, "nombre": materia.nombre, 
-                "tipo": "Carrera", "grupos_disponibles": []
+                "tipo": "Tronco Común" if es_tronco_comun else "Carrera", 
+                "grupos_disponibles": []
             }
             
         # calculo para cupos 
@@ -72,14 +84,22 @@ def obtener_grupos_disponibles(matricula: str, db: Session = Depends(get_db)):
         if cupos_libres < 0: cupos_libres = 0
 
         horario_texto = "Horario por definir"
+        sesiones_puras = [] # REQUERIDO PARA LA VALIDACIÓN EN TIEMPO REAL
+        
         try:
             h_data = grupo.horario_json
             if isinstance(h_data, str): h_data = json.loads(h_data)
             
             if isinstance(h_data, list) and len(h_data) > 0:
+                sesiones_puras = h_data
                 horarios_formateados = [f"{h.get('dia', '')} {h.get('inicio', '')}-{h.get('fin', '')}" for h in h_data]
                 horario_texto = " y ".join(horarios_formateados) 
             elif isinstance(h_data, dict):
+                for dia, horas in h_data.items():
+                    try:
+                        inicio, fin = horas.split('-')
+                        sesiones_puras.append({"dia": dia.capitalize(), "inicio": inicio.strip(), "fin": fin.strip()})
+                    except: pass
                 k, v = list(h_data.items())[0]
                 horario_texto = f"{k.capitalize()} {v}"
         except Exception:
@@ -89,7 +109,8 @@ def obtener_grupos_disponibles(matricula: str, db: Session = Depends(get_db)):
             "group_id": grupo.id,
             "nombre": grupo.identificador_grupo,  
             "cupo_disponible": cupos_libres, 
-            "horario": horario_texto
+            "horario": horario_texto,
+            "horario_raw": sesiones_puras 
         })
 
     return {
@@ -106,6 +127,7 @@ def obtener_grupos_disponibles(matricula: str, db: Session = Depends(get_db)):
 def guardar_carga_academica(matricula: str, request: GuardarCargaRequest, db: Session = Depends(get_db)):
     grupos_seleccionados = [m.group_id for m in request.materias]
     
+    # Traemos los datos reales de los grupos que el alumno quiere meter
     grupos_a_inscribir = db.query(AcademicGroup).filter(AcademicGroup.id.in_(grupos_seleccionados)).all()
     
     # VALIDACIÓN DE CUPO LLENO (Seguridad Backend) 
@@ -115,6 +137,7 @@ def guardar_carga_academica(matricula: str, request: GuardarCargaRequest, db: Se
             StudentEnrollment.period_name == "2026-1"
         ).count()
         
+        # Verificamos si el alumno ya estaba en este grupo para no contar su propio lugar
         ya_estaba_inscrito = db.query(StudentEnrollment).filter(
             StudentEnrollment.academic_group_id == grupo.id,
             StudentEnrollment.student_matricula == matricula
@@ -209,7 +232,9 @@ def guardar_carga_academica(matricula: str, request: GuardarCargaRequest, db: Se
 def buscar_alumno_autocomplete(q: str, db: Session = Depends(get_db)):
     if not q or len(q) < 3: 
         return []
+    
     alumnos = db.query(Student).filter(Student.matricula.like(f"{q}%")).limit(5).all()
+    
     resultados = []
     for a in alumnos:
         resultados.append({
@@ -218,13 +243,12 @@ def buscar_alumno_autocomplete(q: str, db: Session = Depends(get_db)):
         })
     return resultados
 
-# =====================================================================
 # endpoint para obtener el horario real del alumno
-# =====================================================================
 @router.get("/{matricula}/horario")
 def obtener_horario_real(matricula: str, db: Session = Depends(get_db)):
+    
     query = text("""
-        SELECT ag.horario_json, m.nombre AS materia, CONCAT(t.nombre, ' ', t.apellido_paterno) AS profe
+        SELECT ag.horario_json, m.nombre AS materia, m.tipo AS tipo_materia, CONCAT(t.nombre, ' ', t.apellido_paterno) AS profe
         FROM student_enrollments se
         JOIN academic_groups ag ON se.academic_group_id = ag.id
         JOIN subjects m ON ag.subject_id = m.id
@@ -233,11 +257,33 @@ def obtener_horario_real(matricula: str, db: Session = Depends(get_db)):
     """)
     resultados = db.execute(query, {"matricula": matricula}).mappings().all()
     horario_formateado = []
-    colores = ['#3b82f6', '#f97316', '#22c55e', '#ef4444', '#14b8a6', '#a855f7', '#6366f1']
     
-    for idx, row in enumerate(resultados):
-        materia, profe, color = row["materia"], row["profe"] or "S/A", colores[idx % len(colores)]
+    
+    colores_carrera = ['#3b82f6', '#22c55e', '#f97316', '#ef4444', '#14b8a6', '#ec4899'] # Colores vivos
+    color_tronco_comun = '#475569' # Color Gris Pizarra para Tronco Común (destaca pero es neutro)
+    
+    mapa_colores = {}
+    idx_color = 0
+    
+    for row in resultados:
+        materia = row["materia"]
+        profe = row["profe"] or "S/A"
         h_json = row["horario_json"]
+        tipo_mat = str(row.get("tipo_materia", "")).lower()
+        
+        # Validamos si es tronco común
+        es_tronco_comun = 'tronco' in tipo_mat or 'común' in tipo_mat or 'comun' in tipo_mat
+        
+        #  Asignación de color
+        if materia not in mapa_colores:
+            if es_tronco_comun:
+                mapa_colores[materia] = color_tronco_comun
+            else:
+                mapa_colores[materia] = colores_carrera[idx_color % len(colores_carrera)]
+                idx_color += 1
+                
+        color_final = mapa_colores[materia]
+        
         if not h_json: continue
         
         try:
@@ -261,7 +307,7 @@ def obtener_horario_real(matricula: str, db: Session = Depends(get_db)):
                             horario_formateado.append({
                                 "dia": dia, "hora_inicio": h_i, "duracion": duracion,
                                 "hora": f"{h_i}:00 - {h_f}:00", "materia": materia, 
-                                "profe": profe, "aula": "Por Asignar", "color": color
+                                "profe": profe, "aula": "Por Asignar", "color": color_final # Usamos el color calculado
                             })
                     except ValueError: pass
                     
@@ -281,7 +327,7 @@ def obtener_horario_real(matricula: str, db: Session = Depends(get_db)):
                             horario_formateado.append({
                                 "dia": dia, "hora_inicio": h_i, "duracion": duracion,
                                 "hora": f"{h_i}:00 - {h_f}:00", "materia": materia, 
-                                "profe": profe, "aula": "Por Asignar", "color": color
+                                "profe": profe, "aula": "Por Asignar", "color": color_final 
                             })
                     except ValueError: pass
                         

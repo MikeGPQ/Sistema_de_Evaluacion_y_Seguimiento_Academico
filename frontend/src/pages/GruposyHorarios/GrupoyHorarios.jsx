@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { 
   Search, ArrowLeft, BookOpen, Clock, AlertTriangle, 
-  CheckCircle, Save, Calendar, User, Download, ChevronRight, ChevronLeft
+  CheckCircle, Save, Calendar, User, Download, ChevronRight, ChevronLeft, Zap
 } from 'lucide-react';
 import client from '../../lib/axios';
 import Swal from 'sweetalert2';
@@ -19,25 +19,34 @@ const HORAS_CLASE = [
 ];
 const DIAS_SEMANA = ["LUNES", "MARTES", "MIÉRCOLES", "JUEVES", "VIERNES", "SÁBADO"];
 
+// Función matemática en el frontend para comparar horas (ej. 17:00 a minutos)
+const timeToMinutes = (t) => {
+  if (!t) return 0;
+  const [h, m] = t.split(':');
+  return parseInt(h) * 60 + parseInt(m);
+};
+
 const GruposYHorarios = () => {
   const navigate = useNavigate();
-  const [vistaActual, setVistaActual] = useState('asignacion'); // Controla las pestañas
+  const [vistaActual, setVistaActual] = useState('asignacion'); 
   
   const [matriculaBuscada, setMatriculaBuscada] = useState('');
   const [cargando, setCargando] = useState(false);
   const [guardando, setGuardando] = useState(false);
   
-  // Estado de los datos Mockeados
   const [alumnoInfo, setAlumnoInfo] = useState(null);
   const [materiasRegulares, setMateriasRegulares] = useState([]);
   const [materiasRecursamiento, setMateriasRecursamiento] = useState([]);
-  const [horarioReal, setHorarioReal] = useState([]); // Guarda la tabla gráfica
+  const [horarioReal, setHorarioReal] = useState([]); 
   
-  // Estado de la selección del usuario
   const [seleccion, setSeleccion] = useState({});
   const [inscripcionesOriginales, setInscripcionesOriginales] = useState([]);
   const [sugerencias, setSugerencias] = useState([]);
   const [mostrarSugerencias, setMostrarSugerencias] = useState(false);
+
+  const seleccionValues = Object.values(seleccion).map(s => s.group_id).sort().join(',');
+  const originalValues = [...inscripcionesOriginales].sort().join(',');
+  const hayCambios = seleccionValues !== originalValues;
 
   const buscarAlumno = async (matriculaAUsar = matriculaBuscada) => {
     if (!matriculaAUsar) return;
@@ -52,7 +61,21 @@ const GruposYHorarios = () => {
       const response = await client.get(`/asignacion/${matriculaAUsar}/disponibles`);
       const data = response.data;
       
-      // Intentamos cargar el horario del nuevo endpoint
+      // =================================================================
+      // Regla de que solo alumnos de primer cuatrimestre podran ser asignados desde este modulo
+      // =================================================================
+      if (data.alumno_cuatrimestre !== 1) {
+        Swal.fire({
+          icon: 'warning',
+          title: 'Acceso Denegado',
+          text: `El alumno cursa el ${data.alumno_cuatrimestre}º cuatrimestre. Este módulo es de uso exclusivo para estudiantes de Nuevo Ingreso (1er Cuatrimestre).`,
+          confirmButtonColor: '#1A237E'
+        });
+        setCargando(false);
+        setMatriculaBuscada(''); 
+        return; 
+      }
+      
       try {
         const resHorario = await client.get(`/asignacion/${matriculaAUsar}/horario`);
         setHorarioReal(resHorario.data);
@@ -132,6 +155,34 @@ const GruposYHorarios = () => {
     buscarAlumno(matriculaElegida); 
   };
 
+  // ========================================================
+  // validacion de choques de horarios en el frontend 
+  // ========================================================
+  const verificarChoquesFront = (grupoEvaluar, seleccionActual) => {
+    const sesionesEvaluar = grupoEvaluar.horario_raw || [];
+    const seleccionIds = Object.values(seleccionActual).map(s => s.group_id);
+
+    for (const mat of [...materiasRegulares, ...materiasRecursamiento]) {
+      for (const g of mat.grupos_disponibles) {
+        if (seleccionIds.includes(g.group_id)) {
+           const sesionesSel = g.horario_raw || [];
+           for (const s1 of sesionesEvaluar) {
+             for (const s2 of sesionesSel) {
+               if (s1.dia.toLowerCase() === s2.dia.toLowerCase()) {
+                 const ini1 = timeToMinutes(s1.inicio); const fin1 = timeToMinutes(s1.fin);
+                 const ini2 = timeToMinutes(s2.inicio); const fin2 = timeToMinutes(s2.fin);
+                 if (!(fin1 <= ini2 || ini1 >= fin2)) {
+                   return { hayChoque: true, materiaChoque: mat.nombre, dia: s1.dia };
+                 }
+               }
+             }
+           }
+        }
+      }
+    }
+    return { hayChoque: false };
+  };
+
   const handleSeleccionGrupo = async (subjectId, groupId, isRetake) => {
     if (seleccion[subjectId]?.group_id === groupId) {
       if (inscripcionesOriginales.includes(groupId)) {
@@ -147,6 +198,26 @@ const GruposYHorarios = () => {
         });
 
         if (!confirmacion.isConfirmed) return;
+
+        // logica de baja para quitar materia
+        const nuevaSeleccion = { ...seleccion };
+        delete nuevaSeleccion[subjectId];
+        const materiasPayload = Object.entries(nuevaSeleccion).map(([sid, data]) => ({
+          subject_id: parseInt(sid),
+          group_id: data.group_id,
+          is_retake: data.is_retake
+        }));
+        try {
+          await client.post(`/asignacion/${alumnoInfo.matricula}/guardar`, { materias: materiasPayload });
+          setSeleccion(nuevaSeleccion);
+          setInscripcionesOriginales(materiasPayload.map(m => m.group_id));
+          const resHorario = await client.get(`/asignacion/${alumnoInfo.matricula}/horario`);
+          setHorarioReal(resHorario.data);
+          Swal.fire({ icon: 'success', title: 'Baja registrada', text: 'La materia fue dada de baja exitosamente.', confirmButtonColor: '#1A237E' });
+        } catch (error) {
+          Swal.fire({ icon: 'error', title: 'Error', text: error.response?.data?.detail || 'No se pudo dar de baja la materia.', confirmButtonColor: '#1A237E' });
+        }
+        return;
       }
 
       setSeleccion(prev => {
@@ -156,11 +227,73 @@ const GruposYHorarios = () => {
       });
 
     } else {
+      // VALIDAMOS CHOQUE ANTES DE PINTAR EL CIRCULITO
+      let grupoNuevo = null;
+      [...materiasRegulares, ...materiasRecursamiento].forEach(mat => {
+        if (mat.subject_id === subjectId) {
+          const g = mat.grupos_disponibles.find(x => x.group_id === groupId);
+          if (g) grupoNuevo = g;
+        }
+      });
+
+      if (grupoNuevo) {
+        const choque = verificarChoquesFront(grupoNuevo, seleccion);
+        if (choque.hayChoque) {
+          Swal.fire({
+            icon: 'error', title: 'Choque de Horario',
+            text: `No se puede agregar. El grupo choca el ${choque.dia} con la materia '${choque.materiaChoque}'.`,
+            confirmButtonColor: '#1A237E'
+          });
+          return; 
+        }
+      }
+
       setSeleccion(prev => ({
         ...prev,
         [subjectId]: { group_id: groupId, is_retake: isRetake }
       }));
     }
+  };
+
+  // ========================================================
+  // logica de carga automatica para alumnos de 1er cuatrimestre
+  // ========================================================
+  const handleCargaAutomatica = async () => {
+    const confirmacion = await Swal.fire({
+      title: 'Carga Automática',
+      text: 'Se seleccionarán materias disponibles evitando choques de horario. ¿Deseas continuar?',
+      icon: 'question',
+      showCancelButton: true,
+      confirmButtonText: 'Sí, cargar automáticamente',
+      cancelButtonText: 'Cancelar',
+      confirmButtonColor: '#22c55e'
+    });
+    
+    if (!confirmacion.isConfirmed) return;
+
+    let nuevaSeleccion = { ...seleccion };
+    
+    materiasRegulares.forEach(mat => {
+      if (nuevaSeleccion[mat.subject_id]) return; 
+
+      for (let i = 0; i < mat.grupos_disponibles.length; i++) {
+        const g = mat.grupos_disponibles[i];
+        if (g.cupo_disponible <= 0) continue; 
+        
+        const choque = verificarChoquesFront(g, nuevaSeleccion);
+        if (!choque.hayChoque) {
+          nuevaSeleccion[mat.subject_id] = { group_id: g.group_id, is_retake: false };
+          break; 
+        }
+      }
+    });
+
+    setSeleccion(nuevaSeleccion);
+    Swal.fire({ 
+      icon: 'success', title: '¡Asignación Sugerida!', 
+      text: 'Revisa las materias y haz clic en Confirmar para guardar en la base de datos.', 
+      timer: 3000, showConfirmButton: false 
+    });
   };
 
   const handleGuardarCarga = async () => {
@@ -188,9 +321,10 @@ const GruposYHorarios = () => {
         confirmButtonColor: '#1A237E'
       });
 
-      // Recargamos el horario tras guardar
       const resHorario = await client.get(`/asignacion/${alumnoInfo.matricula}/horario`);
       setHorarioReal(resHorario.data);
+      // Actualizamos el original para que el botón se deshabilite
+      setInscripcionesOriginales(materiasPayload.map(m => m.group_id));
 
     } catch (error) {
       Swal.fire({
@@ -308,7 +442,6 @@ const GruposYHorarios = () => {
       <main className="flex-1 p-8">
         <div className="max-w-7xl mx-auto">
           
-          {/* HEADER CON BOTONES DE PESTAÑAS */}
           <div className="flex flex-col md:flex-row md:items-end justify-between mb-6 gap-4">
             <div>
               <button 
@@ -322,7 +455,6 @@ const GruposYHorarios = () => {
               <p className="text-gray-500 text-sm">Gestiona la carga académica, recursamientos y validación de cupos.</p>
             </div>
 
-            {/* botones de vista*/}
             {alumnoInfo && (
               <div className="flex bg-gray-200 p-1 rounded-lg shadow-inner">
                 <button onClick={() => setVistaActual('asignacion')} className={`flex items-center px-4 py-2 rounded-md text-sm font-bold transition-all ${vistaActual === 'asignacion' ? 'bg-white shadow text-[#1A237E]' : 'text-gray-500 hover:text-gray-700'}`}>
@@ -335,7 +467,6 @@ const GruposYHorarios = () => {
             )}
           </div>
 
-          {/* BUSCADOR */}
           <div className="bg-white p-5 rounded-lg shadow-sm border border-gray-200 mb-6 flex flex-col md:flex-row items-end gap-4">
             <div className="flex-1 w-full">
               <label className="block text-xs font-bold text-gray-700 uppercase mb-2">Buscar Alumno por Matrícula</label>
@@ -367,7 +498,6 @@ const GruposYHorarios = () => {
                     ))}
                   </ul>
                 )}
-                
               </div>
             </div>
             <button 
@@ -379,14 +509,10 @@ const GruposYHorarios = () => {
             </button>
           </div>
 
-          {/* ======================================================== */}
-          {/* PESTAÑA 1: VISTA DE ASIGNACIÓN NORMAL                      */}
-          {/* ======================================================== */}
           {alumnoInfo && vistaActual === 'asignacion' && (
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 animate-in fade-in duration-300">
               
               <div className="lg:col-span-8 space-y-6">
-                
                 <div className="bg-blue-50 border border-blue-200 p-4 rounded-lg flex items-center justify-between">
                   <div className="flex items-center gap-4">
                     <div className="bg-[#1A237E] p-3 rounded-full text-white">
@@ -431,7 +557,23 @@ const GruposYHorarios = () => {
 
               <div className="lg:col-span-4">
                 <div className="bg-white border border-gray-200 rounded-lg shadow-sm sticky top-6">
-                  <div className="p-4 border-b border-gray-200 bg-gray-50 rounded-t-lg">
+                  
+                  
+                  {/* boton de carga automatica */}
+                  
+                  {alumnoInfo.cuatrimestre === 1 && Object.keys(seleccion).length === 0 && (
+                    <div className="p-4 border-b border-gray-200 bg-green-50 rounded-t-lg">
+                      <button 
+                        onClick={handleCargaAutomatica}
+                        className="w-full bg-green-600 text-white py-2.5 rounded-md text-sm font-bold hover:bg-green-700 transition-colors flex items-center justify-center gap-2 shadow-sm"
+                      >
+                        <Zap className="w-4 h-4" /> Asignación Automática
+                      </button>
+                      <p className="text-[10px] text-green-700 text-center mt-2 leading-tight">Calcula el mejor horario disponible automáticamente.</p>
+                    </div>
+                  )}
+
+                  <div className={`p-4 border-b border-gray-200 bg-gray-50 ${alumnoInfo.cuatrimestre !== 1 || Object.keys(seleccion).length > 0 ? 'rounded-t-lg' : ''}`}>
                     <h3 className="text-sm font-bold text-gray-800 flex items-center gap-2">
                       <Calendar className="w-4 h-4 text-[#1A237E]" />
                       Resumen de Inscripción
@@ -464,11 +606,12 @@ const GruposYHorarios = () => {
 
                     <button 
                       onClick={handleGuardarCarga}
-                      disabled={guardando || Object.keys(seleccion).length === 0}
+                      // bloqueamos el boton si estamos guardando y si no hay cambios respecto a la carga original para evitar guardados innecesarios
+                      disabled={guardando || Object.keys(seleccion).length === 0 || !hayCambios}
                       className="w-full bg-[#1A237E] text-white py-3 rounded-md text-sm font-bold hover:bg-[#283593] flex justify-center items-center gap-2 disabled:opacity-50 disabled:bg-gray-400 shadow-sm transition-colors"
                     >
                       <Save className="w-4 h-4" />
-                      {guardando ? 'Validando y Guardando...' : 'Confirmar Inscripción'}
+                      {guardando ? 'Guardando...' : (!hayCambios ? 'Carga Actualizada' : 'Confirmar Inscripción')}
                     </button>
                     <p className="text-[10px] text-center text-gray-400 mt-3">
                       Al confirmar, el sistema validará cupos y cruces de horario.
@@ -480,9 +623,7 @@ const GruposYHorarios = () => {
             </div>
           )}
 
-          {/* ======================================================== */}
-          {/* PESTAÑA 2: VISTA DEL HORARIO GRÁFICO                       */}
-          {/* ======================================================== */}
+          {/* VISTA 2: HORARIO GRÁFICO */}
           {alumnoInfo && vistaActual === 'horario' && (
             <div className="animate-in fade-in duration-300">
               <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4">
@@ -540,7 +681,6 @@ const GruposYHorarios = () => {
               </div>
             </div>
           )}
-
         </div>
       </main>
     </div>
