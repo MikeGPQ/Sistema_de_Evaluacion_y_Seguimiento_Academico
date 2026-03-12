@@ -7,6 +7,7 @@ export default function AdminRegister({ isOpen, onClose, adminAEditar }) {
   const [isLoading, setIsLoading] = useState(false);
   const [erroresEnVivo, setErroresEnVivo] = useState({ email_personal: '' });
   const [validacionExitosa, setValidacionExitosa] = useState({ email_personal: false });
+  const [datosOriginales, setDatosOriginales] = useState(null);
 
   const [formData, setFormData] = useState({
     numero_empleado: '',
@@ -17,7 +18,7 @@ export default function AdminRegister({ isOpen, onClose, adminAEditar }) {
     email_institucional: ''
   });
 
-  useEffect(() => {
+useEffect(() => {
     if (isOpen) {
       setErroresEnVivo({ email_personal: '' });
       setValidacionExitosa({ email_personal: false });
@@ -28,23 +29,32 @@ export default function AdminRegister({ isOpen, onClose, adminAEditar }) {
             email_inst_limpio = email_inst_limpio.split('@')[0];
         }
 
-        setFormData({
+        const esActivo = adminAEditar.estatus === 'Activo';
+
+        const dataCargada = {
           numero_empleado: adminAEditar.numero_empleado,
           nombre: adminAEditar.nombre || '',
           apellido_paterno: adminAEditar.apellido_paterno || '',
           apellido_materno: adminAEditar.apellido_materno || '',
           email_personal: adminAEditar.email_personal || '',
-          email_institucional: email_inst_limpio
-        });
+          email_institucional: email_inst_limpio,
+          is_active: esActivo 
+        };
+
+        setFormData(dataCargada);
+        setDatosOriginales(dataCargada);
       } else {
-        setFormData({
+        const defaultData = {
           numero_empleado: '',
           nombre: '',
           apellido_paterno: '',
           apellido_materno: '',
           email_personal: '',
-          email_institucional: ''
-        });
+          email_institucional: '',
+          is_active: true 
+        };
+        setFormData(defaultData);
+        setDatosOriginales(null);
       }
     }
   }, [isOpen, adminAEditar]);
@@ -111,16 +121,24 @@ export default function AdminRegister({ isOpen, onClose, adminAEditar }) {
     }
 
     try {
-      if (adminAEditar) {
-        Swal.fire({ title: 'Actualizado', text: 'Función de actualización en desarrollo', icon: 'info' });
-      } else {
-        const { numero_empleado, email_institucional, ...restoDatos } = formData;
-        
-        const payload = {
-            ...restoDatos,
-            email_institucional: finalEmailInstitucional
-        };
+      const { numero_empleado, email_institucional, ...restoDatos } = formData;
+      
+      const payload = {
+          ...restoDatos,
+          email_institucional: finalEmailInstitucional
+      };
 
+      if (adminAEditar) {
+        await client.put(`/administradores/actualizar/${adminAEditar.numero_empleado}`, payload);
+        
+        Swal.fire({ 
+          title: 'Actualizado', 
+          text: 'Los datos del administrador han sido actualizados.', 
+          icon: 'success',
+          confirmButtonColor: '#1A237E'
+        }).then(() => onClose());
+
+      } else {
         const res = await client.post('/administradores/register', payload);
         Swal.fire({ 
           title: 'Administrador Registrado', 
@@ -207,8 +225,32 @@ export default function AdminRegister({ isOpen, onClose, adminAEditar }) {
                 <span className="inline-flex items-center px-3 rounded-r-md border border-l-0 border-gray-300 bg-gray-50 text-gray-500 text-sm">@red.unid.mx</span>
               </div>
             </div>
+
+          {adminAEditar && (
+              <div className="mt-2">
+                <label className="block text-xs font-bold text-gray-600 mb-1">Estatus en el Sistema</label>
+                <div className="w-full border border-gray-300 rounded-md px-3 py-2 flex items-center justify-between bg-white min-h-[42px] focus-within:border-[#1A237E] transition-colors">
+                  <span className="text-sm text-gray-500">Acceso Administrativo</span>
+                  
+                  <label className="relative inline-flex items-center cursor-pointer">
+                    <input 
+                      type="checkbox" 
+                      className="sr-only peer" 
+                      checked={formData.is_active}
+                      onChange={(e) => setFormData(prev => ({ ...prev, is_active: e.target.checked }))}
+                    />
+                    <div className="w-9 h-5 bg-red-400 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-green-500"></div>
+                    <span className={`ml-3 text-sm font-bold w-14 text-right ${formData.is_active ? 'text-green-600' : 'text-red-500'}`}>
+                      {formData.is_active ? 'Activo' : 'Inactivo'}
+                    </span>
+                  </label>
+                </div>
+              </div>
+            )}
           </div>
         </div>
+
+        
 
         <div className="flex justify-between items-center pt-4">
           <span className="text-xs text-red-500">* Campos obligatorios</span>
@@ -216,13 +258,22 @@ export default function AdminRegister({ isOpen, onClose, adminAEditar }) {
             <button type="button" onClick={onClose} disabled={isLoading} className="px-5 py-2 border border-gray-300 rounded-md text-sm font-semibold text-gray-700 bg-white hover:bg-gray-50 transition-colors disabled:opacity-50">
               Cancelar
             </button>
-            <button 
-              type="submit" 
-              disabled={isLoading || !!erroresEnVivo.email_personal} 
-              className={`flex items-center px-6 py-2 rounded-md text-sm font-bold text-white shadow-sm transition-all ${(isLoading || !!erroresEnVivo.email_personal) ? 'bg-indigo-300 cursor-not-allowed' : 'bg-[#1A237E] hover:bg-indigo-900'}`}
-            >
-              {isLoading ? 'Procesando...' : (adminAEditar ? 'Actualizar' : 'Guardar Administrador')}
-            </button>
+ 
+            {(() => {
+              const camposEditables = ['nombre', 'apellido_paterno', 'apellido_materno', 'email_personal', 'email_institucional', 'is_active'];
+              const sinCambios = !!(adminAEditar && datosOriginales && !camposEditables.some(c => String(formData[c] ?? '') !== String(datosOriginales[c] ?? '')));
+              const deshabilitado = isLoading || !!erroresEnVivo.email_personal || sinCambios;
+              
+              return (
+                <button 
+                  type="submit" 
+                  disabled={deshabilitado} 
+                  className={`flex items-center px-6 py-2 rounded-md text-sm font-bold text-white shadow-sm transition-all ${deshabilitado ? 'bg-indigo-300 cursor-not-allowed' : 'bg-[#1A237E] hover:bg-indigo-900'}`}
+                >
+                  {isLoading ? 'Procesando...' : (adminAEditar ? 'Actualizar' : 'Guardar Administrador')}
+                </button>
+              );
+            })()}
           </div>
         </div>
       </form>

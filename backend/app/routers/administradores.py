@@ -22,6 +22,9 @@ router = APIRouter(prefix="/administradores", tags=["Administradores"])
 class AdminItem(BaseModel):
     numero_empleado: str
     nombre_completo: str
+    nombre: str                            
+    apellido_paterno: str                 
+    apellido_materno: Optional[str] = None 
     email_institucional: Optional[str] = None
     email_personal: Optional[str] = None  
     estatus: str
@@ -36,6 +39,58 @@ class AdminCreate(BaseModel):
     apellido_materno: str
     email_personal: EmailStr
     email_institucional: Optional[str] = None
+
+class AdminUpdate(BaseModel):
+    nombre: str
+    apellido_paterno: str
+    apellido_materno: Optional[str] = None
+    email_personal: EmailStr
+    email_institucional: Optional[str] = None
+    is_active: bool 
+
+@router.put("/actualizar/{numero_empleado}", status_code=status.HTTP_200_OK)
+def update_admin(numero_empleado: str, admin_data: AdminUpdate, db: Session = Depends(get_db)):
+    # 1. Buscar al administrador existente
+    admin = db.query(Administrator).filter(Administrator.numero_empleado == numero_empleado).first()
+    if not admin:
+        raise HTTPException(status_code=404, detail="Administrador no encontrado.")
+
+    # 2. Validar que el nuevo correo personal no pertenezca a otro usuario
+    if admin_data.email_personal != admin.email_personal:
+        if db.query(User).filter(User.email == admin_data.email_personal, User.identifier != numero_empleado).first() or \
+           db.query(Administrator).filter(Administrator.email_personal == admin_data.email_personal, Administrator.numero_empleado != numero_empleado).first() or \
+           db.query(Student).filter(Student.email_personal == admin_data.email_personal).first():
+            raise HTTPException(status_code=400, detail="El correo personal ya está registrado por otro usuario.")
+
+    # 3. Validar que el nuevo correo institucional no pertenezca a otro usuario
+    if admin_data.email_institucional and admin_data.email_institucional != admin.email_institucional:
+        if db.query(User).filter(User.email == admin_data.email_institucional, User.identifier != numero_empleado).first() or \
+           db.query(Administrator).filter(Administrator.email_institucional == admin_data.email_institucional, Administrator.numero_empleado != numero_empleado).first() or \
+           db.query(Student).filter(Student.email_institucional == admin_data.email_institucional).first():
+            raise HTTPException(status_code=400, detail="El correo institucional ya está registrado por otro usuario.")
+
+    try:
+        admin.nombre = admin_data.nombre
+        admin.apellido_paterno = admin_data.apellido_paterno
+        admin.apellido_materno = admin_data.apellido_materno
+        admin.email_personal = admin_data.email_personal
+        admin.email_institucional = admin_data.email_institucional
+        admin.is_active = admin_data.is_active 
+
+        # Actualizar la tabla User
+        user = db.query(User).filter(User.identifier == numero_empleado).first()
+        if user:
+            user.email = admin_data.email_institucional if admin_data.email_institucional else admin_data.email_personal
+
+        db.commit()
+        return {
+            "message": "Administrador actualizado correctamente",
+            "numero_empleado": numero_empleado
+        }
+
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Error interno al actualizar: {str(e)}")
 
 @router.get("/listado", response_model=PaginatedAdminResponse)
 def get_administrators(
@@ -76,6 +131,9 @@ def get_administrators(
         lista_formateada.append({
             "numero_empleado": admin.numero_empleado,
             "nombre_completo": nombre_completo,
+            "nombre": admin.nombre,                     
+            "apellido_paterno": admin.apellido_paterno, 
+            "apellido_materno": admin.apellido_materno,  
             "email_institucional": admin.email_institucional,
             "email_personal": admin.email_personal,
             "estatus": "Activo" if admin.is_active else "Inactivo"
