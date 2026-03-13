@@ -410,4 +410,4 @@ const GruposYHorarios = () => {
   );
 };
 
-export default GruposYHorarios;
+export default GruposYHorarios;      
