@@ -136,3 +136,4 @@ def get_ultimo_log_estatus(matricula: str, db: Session = Depends(get_db)):
         "evidence_file_id": log.evidence_file_id,
         "evidence_file_name": log.evidence_file.file_name if log.evidence_file else None
     }
+

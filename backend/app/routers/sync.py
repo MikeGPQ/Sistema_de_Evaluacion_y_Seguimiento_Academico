@@ -29,11 +29,17 @@ def tarea_automatica_sincronizacion():
             if not docente:
                 docente = Teacher(
                     external_id=item["ID_Docente"], nombre=item["Nombre_Docente"],
-                    apellido_paterno=item["Apellido_Paterno"], apellido_materno=item["Apellido_Materno"]
+                    apellido_paterno=item["Apellido_Paterno"], apellido_materno=item["Apellido_Materno"],
+                    email_personal=item.get("Email_Personal", ""),
+                    email_institucional=item.get("Email_Institucional")
                 )
                 db.add(docente)
                 db.commit()
                 db.refresh(docente)
+            else:
+                docente.email_personal = item.get("Email_Personal", docente.email_personal)
+                docente.email_institucional = item.get("Email_Institucional", docente.email_institucional)
+                db.commit()
 
             materia = db.query(Subject).filter(Subject.external_id == item["ID_Materia"]).first()
             if not materia:
