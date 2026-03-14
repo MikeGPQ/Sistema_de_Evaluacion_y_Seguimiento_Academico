@@ -1,7 +1,7 @@
 import json
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
-from sqlalchemy import text 
+from sqlalchemy import text, or_ 
 from app.db.database import get_db
 from app.schemas.enrollment import GuardarCargaRequest
 from app.models.student import Student
@@ -21,14 +21,16 @@ def time_to_minutes(time_str):
     except:
         return 0
 
-#  ENVIAR GRUPOS Y CALCULAR CUPOS REALES
+# =================================================================
+# ENVIAR GRUPOS Y CALCULAR CUPOS REALES
+# =================================================================
 @router.get("/{matricula}/disponibles")
 def obtener_grupos_disponibles(matricula: str, db: Session = Depends(get_db)):
     alumno = db.query(Student).filter(Student.matricula == matricula).first()
     if not alumno:
         raise HTTPException(status_code=404, detail="No existe un alumno.")
     
-    #validacion de estado
+    # Validacion de estado
     estatus_obj = db.query(StudentStatus).filter(StudentStatus.id == alumno.status_id).first()
     estado_alumno = estatus_obj.name.lower() if estatus_obj else "activo"
     
@@ -49,23 +51,30 @@ def obtener_grupos_disponibles(matricula: str, db: Session = Depends(get_db)):
     ).all()
     grupos_inscritos = [inscripcion.academic_group_id for inscripcion in inscripciones_db]
 
-    grupos_db = db.query(AcademicGroup).filter(AcademicGroup.periodo == "2026-1").all()
+    # =================================================================
+    # solo 1er cuatrimestre y materias de tronco común
+    # =================================================================
+    grupos_db = (
+        db.query(AcademicGroup)
+        .join(Subject, AcademicGroup.subject_id == Subject.id)
+        .filter(
+            AcademicGroup.periodo == "2026-1",
+            Subject.cuatrimestre == 1, #Solo materias de 1er cuatrimestre
+            or_(
+                Subject.career_id == alumno.career_id, # Materias de su propia carrera
+                Subject.career_id == None              # O Materias de Tronco Común 
+            )
+        )
+        .all()
+    )
+    
     materias_dict = {}
     
     for grupo in grupos_db:
-        materia = db.query(Subject).filter(Subject.id == grupo.subject_id).first()
+        materia = grupo.subject 
         if not materia: continue
             
-        # =================================================================
-        # FILTRO DE CARRERA Y TRONCO COMÚN 
-        # =================================================================
-        es_su_carrera = getattr(materia, 'career_id', alumno.career_id) == alumno.career_id
-        tipo_mat = str(getattr(materia, 'tipo', '')).lower()
-        es_tronco_comun = 'tronco' in tipo_mat or 'común' in tipo_mat or 'comun' in tipo_mat
-        
-        if not (es_su_carrera or es_tronco_comun):
-            continue 
-        # =================================================================
+        es_tronco_comun = materia.career_id is None # null en la db es tronco común
             
         if materia.id not in materias_dict:
             materias_dict[materia.id] = {
@@ -74,7 +83,7 @@ def obtener_grupos_disponibles(matricula: str, db: Session = Depends(get_db)):
                 "grupos_disponibles": []
             }
             
-        # calculo para cupos 
+        # Calculo para cupos 
         alumnos_inscritos = db.query(StudentEnrollment).filter(
             StudentEnrollment.academic_group_id == grupo.id,
             StudentEnrollment.period_name == "2026-1"
@@ -122,7 +131,9 @@ def obtener_grupos_disponibles(matricula: str, db: Session = Depends(get_db)):
     }
 
 
-#  VALIDACIONES AL GUARDAR 
+# =================================================================
+# VALIDACIONES AL GUARDAR 
+# =================================================================
 @router.post("/{matricula}/guardar")
 def guardar_carga_academica(matricula: str, request: GuardarCargaRequest, db: Session = Depends(get_db)):
     grupos_seleccionados = [m.group_id for m in request.materias]
@@ -137,7 +148,6 @@ def guardar_carga_academica(matricula: str, request: GuardarCargaRequest, db: Se
             StudentEnrollment.period_name == "2026-1"
         ).count()
         
-        # Verificamos si el alumno ya estaba en este grupo para no contar su propio lugar
         ya_estaba_inscrito = db.query(StudentEnrollment).filter(
             StudentEnrollment.academic_group_id == grupo.id,
             StudentEnrollment.student_matricula == matricula
@@ -146,7 +156,6 @@ def guardar_carga_academica(matricula: str, request: GuardarCargaRequest, db: Se
         if not ya_estaba_inscrito and inscritos >= grupo.cupo_maximo:
             raise HTTPException(status_code=400, detail=f"El grupo '{grupo.identificador_grupo}' ya está lleno.")
 
-    
     # VALIDACIÓN DE CHOQUE DE HORARIOS
     horarios_ocupados = [] 
     for grupo in grupos_a_inscribir:
@@ -155,12 +164,10 @@ def guardar_carga_academica(matricula: str, request: GuardarCargaRequest, db: Se
             if isinstance(h_data, str): h_data = json.loads(h_data)
             nombre_materia_actual = grupo.subject.nombre if grupo.subject else f"Grupo {grupo.identificador_grupo}"
 
-            # NORMALIZACION DE FORMATOS JSON DE LOS HORARIOS 
             sesiones = []
             if isinstance(h_data, list):
                 sesiones = h_data # Formato nuevo del Mock API
             elif isinstance(h_data, dict):
-                # Formato viejo manual {"lunes": "08:00-10:00"}
                 for dia, horas in h_data.items():
                     try:
                         inicio, fin = horas.split('-')
@@ -168,19 +175,16 @@ def guardar_carga_academica(matricula: str, request: GuardarCargaRequest, db: Se
                     except:
                         pass
 
-            # Ahora hacemos la matemática usando nuestra lista limpia
             for h in sesiones:
                 dia_actual = h.get('dia', '').strip()
                 ini_a = time_to_minutes(h.get('inicio', '00:00'))
                 fin_a = time_to_minutes(h.get('fin', '00:00'))
 
                 for o in horarios_ocupados:
-                    # Comparar todo en minúsculas para que "Lunes" choque con "lunes"
                     if o['dia'].lower() == dia_actual.lower():
                         ini_b = o['inicio_min']
                         fin_b = o['fin_min']
                         
-                        # Cruce matemático usando minutos (17:00 vs 18:00)
                         if not (fin_a <= ini_b or ini_a >= fin_b):
                             mensaje_error = (
                                 f"Cruce de horarios el {dia_actual.capitalize()}: "
@@ -189,7 +193,6 @@ def guardar_carga_academica(matricula: str, request: GuardarCargaRequest, db: Se
                             )
                             raise HTTPException(status_code=400, detail=mensaje_error)
                 
-                # Si pasa la prueba, lo anotamos como ocupado
                 horarios_ocupados.append({
                     'dia': dia_actual, 
                     'inicio_min': ini_a, 'fin_min': fin_a, 
@@ -201,7 +204,7 @@ def guardar_carga_academica(matricula: str, request: GuardarCargaRequest, db: Se
         except Exception as e: 
             print(f"Error procesando el horario del grupo {grupo.identificador_grupo}: {e}")
 
-    #  GUARDADO REAL EN LA BASE DE DATOS 
+    # GUARDADO REAL EN LA BASE DE DATOS 
     try:
         db.query(StudentEnrollment).filter(
             StudentEnrollment.student_matricula == matricula,
@@ -227,7 +230,7 @@ def guardar_carga_academica(matricula: str, request: GuardarCargaRequest, db: Se
         "materias_inscritas": len(request.materias)
     }
 
-# Endpoint para buscar predictivamente al alumno
+
 @router.get("/buscar-alumno")
 def buscar_alumno_autocomplete(q: str, db: Session = Depends(get_db)):
     if not q or len(q) < 3: 
@@ -243,12 +246,10 @@ def buscar_alumno_autocomplete(q: str, db: Session = Depends(get_db)):
         })
     return resultados
 
-# endpoint para obtener el horario real del alumno
 @router.get("/{matricula}/horario")
 def obtener_horario_real(matricula: str, db: Session = Depends(get_db)):
-    
     query = text("""
-        SELECT ag.horario_json, m.nombre AS materia, m.tipo AS tipo_materia, CONCAT(t.nombre, ' ', t.apellido_paterno) AS profe
+        SELECT ag.horario_json, m.nombre AS materia, m.career_id, CONCAT(t.nombre, ' ', t.apellido_paterno) AS profe
         FROM student_enrollments se
         JOIN academic_groups ag ON se.academic_group_id = ag.id
         JOIN subjects m ON ag.subject_id = m.id
@@ -258,9 +259,8 @@ def obtener_horario_real(matricula: str, db: Session = Depends(get_db)):
     resultados = db.execute(query, {"matricula": matricula}).mappings().all()
     horario_formateado = []
     
-    
-    colores_carrera = ['#3b82f6', '#22c55e', '#f97316', '#ef4444', '#14b8a6', '#ec4899'] # Colores vivos
-    color_tronco_comun = '#475569' # Color Gris Pizarra para Tronco Común (destaca pero es neutro)
+    colores_carrera = ['#3b82f6', '#22c55e', '#f97316', '#ef4444', '#14b8a6', '#ec4899'] 
+    color_tronco_comun = '#475569' 
     
     mapa_colores = {}
     idx_color = 0
@@ -269,12 +269,11 @@ def obtener_horario_real(matricula: str, db: Session = Depends(get_db)):
         materia = row["materia"]
         profe = row["profe"] or "S/A"
         h_json = row["horario_json"]
-        tipo_mat = str(row.get("tipo_materia", "")).lower()
         
-        # Validamos si es tronco común
-        es_tronco_comun = 'tronco' in tipo_mat or 'común' in tipo_mat or 'comun' in tipo_mat
+        # Validamos si es tronco común 
+        es_tronco_comun = row["career_id"] is None
         
-        #  Asignación de color
+        # Asignación de color
         if materia not in mapa_colores:
             if es_tronco_comun:
                 mapa_colores[materia] = color_tronco_comun
@@ -307,7 +306,7 @@ def obtener_horario_real(matricula: str, db: Session = Depends(get_db)):
                             horario_formateado.append({
                                 "dia": dia, "hora_inicio": h_i, "duracion": duracion,
                                 "hora": f"{h_i}:00 - {h_f}:00", "materia": materia, 
-                                "profe": profe, "aula": "Por Asignar", "color": color_final # Usamos el color calculado
+                                "profe": profe, "aula": "Por Asignar", "color": color_final 
                             })
                     except ValueError: pass
                     
