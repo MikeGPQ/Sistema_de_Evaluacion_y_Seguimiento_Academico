@@ -1,32 +1,16 @@
-from sqlalchemy import Column, Integer, String, Date, ForeignKey, Enum, text, TIMESTAMP
+from sqlalchemy import Column, BigInteger, Integer, Date, Enum, TIMESTAMP, text, ForeignKey
 from sqlalchemy.orm import relationship
-import enum
 from app.db.database import Base
 
-class TipoAsistencia(str, enum.Enum):
-    presente = "presente"
-    ausente = "ausente"
-    retardo = "retardo"
-    justificado = "justificado"
+class AttendanceRecord(Base):
+    __tablename__ = "attendance_records"
 
-class Attendance(Base):
-    __tablename__ = "attendances"
+    id = Column(BigInteger, primary_key=True, autoincrement=True)
+    enrollment_id = Column(Integer, ForeignKey("student_enrollments.id", ondelete="CASCADE"), nullable=False)
+    fecha_clase = Column(Date, nullable=False)
+    estado = Column(Enum('asistencia', 'falta', 'justificado', 'retardo'), nullable=False)
+    
+    created_at = Column(TIMESTAMP, server_default=text("CURRENT_TIMESTAMP"))
+    updated_at = Column(TIMESTAMP, nullable=True, server_default=text("NULL ON UPDATE CURRENT_TIMESTAMP"))
 
-    id = Column(Integer, primary_key=True, autoincrement=True)
-    student_matricula = Column(String(20), ForeignKey("students.matricula", ondelete="CASCADE"), nullable=False)
-    academic_group_id = Column(Integer, ForeignKey("academic_groups.id", ondelete="CASCADE"), nullable=False)
-    
-    # La fecha exacta del pase de lista
-    fecha = Column(Date, nullable=False)
-    
-    # El estado (presente, ausente, etc)
-    estatus = Column(Enum(TipoAsistencia), nullable=False)
-    
-    # Observaciones opcionales (ej. "Trajo justificante médico")
-    observaciones = Column(String(255), nullable=True)
-    
-    updated_at = Column(TIMESTAMP, server_default=text("CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP"))
-
-    # Relaciones para poder acceder a los datos del alumno y del grupo fácilmente
-    student = relationship("Student")
-    academic_group = relationship("AcademicGroup")
+    enrollment = relationship("StudentEnrollment")

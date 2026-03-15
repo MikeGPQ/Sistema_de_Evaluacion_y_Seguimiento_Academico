@@ -1,17 +1,22 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Download, Save, Search, MessageSquareText, Users, CalendarDays, CheckCircle, XCircle, BookOpen, ChevronDown } from 'lucide-react';
+import { Download, Save, Search, MessageSquareText, Users, CalendarDays, CheckCircle, XCircle, BookOpen, ChevronDown, Loader2 } from 'lucide-react';
 import Swal from 'sweetalert2';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import client from '../../lib/axios'; // 🌟 IMPORTANTE: Conexión al Backend
 
-const FECHAS_CLASE = ['01', '02', '03', '04', '05', '08', '09', '10', '11', '12', '15', '16'];
+// Fechas reales en formato BD
+const FECHAS_CLASE = [
+  '2026-09-01', '2026-09-02', '2026-09-03', '2026-09-04', '2026-09-05', 
+  '2026-09-08', '2026-09-09', '2026-09-10', '2026-09-11', '2026-09-12', 
+  '2026-09-15', '2026-09-16'
+];
 
 const materiasOptions = [
   { id: '1', label: '11607 - Ingeniería de Software II (8vo A)' },
   { id: '2', label: '11608 - Desarrollo de Aplicaciones (8vo B)' }
 ];
 
-// Opciones de asistencia para iterar con clics
 const ESTADOS = {
   P: { label: '✓', color: 'text-green-600', bg: 'bg-green-50 hover:bg-green-100 border-green-200' },
   F: { label: 'X', color: 'text-red-600', bg: 'bg-red-50 hover:bg-red-100 border-red-200' },
@@ -25,16 +30,29 @@ const AsistenciaDocente = () => {
   const [busqueda, setBusqueda] = useState('');
   const dropdownRef = useRef(null);
   
-  // Datos MOCK actualizados para manejar 4 estados ('P', 'F', 'R', 'J')
-  const [alumnos, setAlumnos] = useState([
-    { id: 1, matricula: '00349120', nombre: 'ALVARADO PÉREZ, SOFÍA', programa: 'Ing. Software', asistencias: { '01': 'P', '02': 'P', '03': 'P', '04': 'P', '05': 'P', '08': 'F', '09': 'P', '10': 'P', '11': 'P', '12': 'P', '15': 'P', '16': 'P' }, observaciones: '' },
-    { id: 2, matricula: '00349125', nombre: 'BENÍTEZ LÓPEZ, CARLOS', programa: 'Ing. Software', asistencias: { '01': 'P', '02': 'P', '03': 'P', '04': 'P', '05': 'P', '08': 'P', '09': 'P', '10': 'P', '11': 'P', '12': 'P', '15': 'P', '16': 'P' }, observaciones: '' },
-    { id: 3, matricula: '00349132', nombre: 'CASTILLO MENDOZA, ANA', programa: 'Ing. Software', asistencias: { '01': 'P', '02': 'F', '03': 'P', '04': 'P', '05': 'F', '08': 'P', '09': 'R', '10': 'P', '11': 'P', '12': 'P', '15': 'P', '16': 'J' }, observaciones: 'Justificante médico el 16' },
-    { id: 4, matricula: '00349140', nombre: 'DÍAZ RAMÍREZ, JORGE', programa: 'Ing. Software', asistencias: { '01': 'P', '02': 'R', '03': 'P', '04': 'P', '05': 'P', '08': 'P', '09': 'P', '10': 'P', '11': 'P', '12': 'P', '15': 'P', '16': 'P' }, observaciones: '' },
-    { id: 5, matricula: '00349145', nombre: 'ESTRADA RUIZ, MARÍA', programa: 'Ing. Software', asistencias: { '01': 'P', '02': 'P', '03': 'P', '04': 'P', '05': 'P', '08': 'P', '09': 'P', '10': 'P', '11': 'P', '12': 'P', '15': 'P', '16': 'P' }, observaciones: '' },
-    { id: 6, matricula: '00349150', nombre: 'FERNÁNDEZ GÓMEZ, LUIS', programa: 'Ing. Software', asistencias: { '01': 'F', '02': 'F', '03': 'P', '04': 'P', '05': 'P', '08': 'P', '09': 'P', '10': 'P', '11': 'J', '12': 'P', '15': 'P', '16': 'P' }, observaciones: '' },
-    { id: 7, matricula: '00349158', nombre: 'GARCÍA TORRES, PEDRO', programa: 'Ing. Software', asistencias: { '01': 'P', '02': 'P', '03': 'P', '04': 'P', '05': 'P', '08': 'P', '09': 'P', '10': 'P', '11': 'P', '12': 'P', '15': 'P', '16': 'P' }, observaciones: '' },
-  ]);
+  // 🌟 ESTADOS REALES
+  const [alumnos, setAlumnos] = useState([]);
+  const [cargando, setCargando] = useState(true);
+  const [guardando, setGuardando] = useState(false);
+  const [cambiosPendientes, setCambiosPendientes] = useState({});
+
+  // 🌟 EFECTO PARA TRAER DATOS DE LA BD
+  useEffect(() => {
+    const fetchAlumnos = async () => {
+      setCargando(true);
+      try {
+        const response = await client.get(`/asistencia/grupo/${materiaSeleccionada}?periodo=2026-1`);
+        setAlumnos(response.data);
+        setCambiosPendientes({}); // Limpiamos carrito al cambiar de materia
+      } catch (error) {
+        console.error("Error cargando alumnos:", error);
+        Swal.fire('Error', 'No se pudieron cargar los alumnos del grupo.', 'error');
+      } finally {
+        setCargando(false);
+      }
+    };
+    fetchAlumnos();
+  }, [materiaSeleccionada]);
 
   useEffect(() => {
     const handleClickOutside = (event) => {
@@ -47,7 +65,6 @@ const AsistenciaDocente = () => {
   const alumnosFiltrados = alumnos.filter(a => a.nombre.toLowerCase().includes(busqueda.toLowerCase()) || a.matricula.includes(busqueda));
 
   // --- LÓGICA DE INTERACCIÓN ---
-  // Solo consideramos como "Falta" (para restar del total) cuando el estado es estrictamente 'F'
   const calcularFaltas = (asistencias) => FECHAS_CLASE.filter(fecha => asistencias[fecha] === 'F').length;
 
   const totalAlumnos = alumnosFiltrados.length;
@@ -60,7 +77,6 @@ const AsistenciaDocente = () => {
     asistenciasGlobales += (totalClases - faltas);
   });
 
-  // Función para rotar entre los 4 estados al hacer clic
   const cicloAsistencia = (estadoActual) => {
     if (estadoActual === 'P') return 'F';
     if (estadoActual === 'F') return 'R';
@@ -68,19 +84,33 @@ const AsistenciaDocente = () => {
     return 'P';
   };
 
+  const registrarCambio = (matricula, fecha, nuevoEstado) => {
+    setCambiosPendientes(prev => ({
+      ...prev,
+      [`${matricula}_${fecha}`]: { matricula, fecha, estado: nuevoEstado }
+    }));
+  };
+
   const handleToggleCell = (idAlumno, fecha) => {
     setAlumnos(prev => prev.map(a => {
       if (a.id === idAlumno) {
         const estadoActual = a.asistencias[fecha] || 'P';
-        return { ...a, asistencias: { ...a.asistencias, [fecha]: cicloAsistencia(estadoActual) } };
+        const nuevoEstado = cicloAsistencia(estadoActual);
+        registrarCambio(a.matricula, fecha, nuevoEstado);
+        return { ...a, asistencias: { ...a.asistencias, [fecha]: nuevoEstado } };
       }
       return a;
     }));
   };
 
   const toggleColumnaDia = (fecha) => {
-    const todosPresentes = alumnosFiltrados.every(a => a.asistencias[fecha] === 'P');
-    setAlumnos(prev => prev.map(a => ({ ...a, asistencias: { ...a.asistencias, [fecha]: todosPresentes ? 'F' : 'P' } })));
+    const todosPresentes = alumnosFiltrados.every(a => (a.asistencias[fecha] || 'P') === 'P');
+    const nuevoEstadoMasi = todosPresentes ? 'F' : 'P';
+    
+    setAlumnos(prev => prev.map(a => {
+      registrarCambio(a.matricula, fecha, nuevoEstadoMasi);
+      return { ...a, asistencias: { ...a.asistencias, [fecha]: nuevoEstadoMasi } };
+    }));
   };
 
   const mostrarObservaciones = (alumno) => {
@@ -100,8 +130,35 @@ const AsistenciaDocente = () => {
     });
   };
 
-  const handleGuardar = () => {
-    Swal.fire({ icon: 'success', title: 'Guardado', text: 'La lista de asistencia se ha sincronizado correctamente.', confirmButtonColor: '#1A237E' });
+  // 🌟 ENVIAR A LA BASE DE DATOS (OPCIÓN LIGERA)
+  const handleGuardar = async () => {
+    const payloadLigero = Object.values(cambiosPendientes);
+    
+    if (payloadLigero.length === 0) {
+      return Swal.fire('Sin cambios', 'No has modificado ninguna asistencia.', 'info');
+    }
+
+    setGuardando(true);
+    try {
+      const response = await client.post('/asistencia/guardar', {
+        academic_group_id: parseInt(materiaSeleccionada),
+        periodo: "2026-1",
+        cambios: payloadLigero
+      });
+      
+      Swal.fire({ 
+        icon: 'success', 
+        title: 'Guardado', 
+        text: `Se registraron ${response.data.total_cambios} cambios en el sistema.`, 
+        confirmButtonColor: '#1A237E' 
+      });
+      setCambiosPendientes({}); 
+    } catch (error) {
+      console.error("Error al guardar:", error);
+      Swal.fire('Error', 'Hubo un problema al guardar la asistencia.', 'error');
+    } finally {
+      setGuardando(false);
+    }
   };
 
   // --- PDF CLON EXACTO DEL DISEÑO HU-15 ---
@@ -111,12 +168,12 @@ const AsistenciaDocente = () => {
       const pageWidth = doc.internal.pageSize.getWidth();
       const pageHeight = doc.internal.pageSize.getHeight();
       
-      doc.setFillColor(11, 23, 42); 
+    doc.setFillColor(11, 23, 42); 
       doc.rect(14, 15, 10, 10, 'F');
       doc.setTextColor(255, 255, 255);
       doc.setFontSize(12);
       doc.setFont("helvetica", "bold");
-      doc.text("U", 16.5, 22);
+      doc.text("U", 19, 21.5, { align: "center" }); 
 
       doc.setTextColor(26, 35, 126);
       doc.setFontSize(16);
@@ -162,14 +219,15 @@ const AsistenciaDocente = () => {
       doc.setTextColor(180);
       doc.text("REP-2026-8921", 180, 50);
 
-      const tableColumn = ["MATRÍCULA", "NOMBRE DEL ALUMNO", ...FECHAS_CLASE, "ASIST.", "FALTAS"];
+      // Convertimos YYYY-MM-DD a solo DD para la cabecera del PDF
+      const headersDias = FECHAS_CLASE.map(f => f.split('-')[2]);
+      const tableColumn = ["MATRÍCULA", "NOMBRE DEL ALUMNO", ...headersDias, "ASIST.", "FALTAS"];
       const tableRows = alumnosFiltrados.map(a => {
-        // Mapeamos el estado del objeto al símbolo para el PDF
         const asistenciasFila = FECHAS_CLASE.map(fecha => {
           const estado = a.asistencias[fecha] || 'P';
           if (estado === 'P') return '✓';
           if (estado === 'F') return 'X';
-          return estado; // 'R' o 'J'
+          return estado; 
         });
         
         const faltas = calcularFaltas(a.asistencias);
@@ -192,22 +250,24 @@ const AsistenciaDocente = () => {
         },
         didParseCell: function (data) {
           if (data.section === 'head' && data.column.index >= 2) data.cell.styles.halign = 'center';
-          if (data.section === 'head' && data.column.index === tableColumn.length - 1) data.cell.styles.textColor = [220, 38, 38];
+          if(data.section === 'head' && data.column.index === tableColumn.length - 1) data.cell.styles.textColor = [220, 38, 38];
           
           if (data.section === 'body') {
-            if (data.column.index >= 2 && data.column.index <= tableColumn.length - 3) {
-               data.cell.styles.halign = 'center';
-               // Asignar colores según letra en el PDF
-               if (data.cell.raw === '✓') { 
-                 data.cell.styles.textColor = [34, 197, 94]; 
-               } else if (data.cell.raw === 'X') { 
-                 data.cell.styles.textColor = [239, 68, 68]; 
-               } else if (data.cell.raw === 'R' || data.cell.raw === 'J') {
-                 data.cell.styles.textColor = [100, 100, 100];
-                 data.cell.styles.fillColor = [235, 235, 235];
-                 data.cell.styles.fontStyle = 'bold';
-               }
+            if (data.cell.raw === '✓') { 
+              data.cell.styles.textColor = [34, 197, 94]; 
+              data.cell.styles.halign = 'center'; 
+            } 
+            else if (data.cell.raw === 'X') { 
+              data.cell.styles.textColor = [239, 68, 68]; 
+              data.cell.styles.halign = 'center'; 
             }
+            else if (data.cell.raw === 'R' || data.cell.raw === 'J') {
+              data.cell.styles.textColor = [100, 100, 100];
+              data.cell.styles.fillColor = [235, 235, 235];
+              data.cell.styles.fontStyle = 'bold';
+              data.cell.styles.halign = 'center';
+            }
+            if (data.column.index >= 2 && data.column.index <= tableColumn.length - 3) data.cell.styles.halign = 'center';
           }
         }
       });
@@ -320,9 +380,42 @@ const AsistenciaDocente = () => {
             <button onClick={handleExportPDF} className="flex items-center px-4 py-2 bg-white border border-gray-300 text-gray-700 rounded-lg text-sm font-bold hover:bg-gray-50 hover:text-[#1A237E] hover:border-[#1A237E] transition-all shadow-sm">
               <Download className="w-4 h-4 mr-2" /> Exportar PDF
             </button>
-            <button onClick={handleGuardar} className="flex items-center px-5 py-2 bg-[#1A237E] text-white rounded-lg text-sm font-bold hover:bg-[#283593] transition-colors shadow-sm">
-              <Save className="w-4 h-4 mr-2" /> Guardar Lista
+            <button onClick={handleGuardar} disabled={guardando} className="flex items-center px-5 py-2 bg-[#1A237E] text-white rounded-lg text-sm font-bold hover:bg-[#283593] transition-colors shadow-sm disabled:opacity-70">
+              {guardando ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Save className="w-4 h-4 mr-2" />}
+              {guardando ? 'Guardando...' : 'Guardar Lista'}
             </button>
+          </div>
+        </div>
+
+        {/* Tarjetas de Resumen Global */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+          <div className="bg-white border border-gray-200 p-4 rounded-xl flex justify-between items-center shadow-sm hover:shadow-md transition-shadow">
+            <div>
+              <p className="text-xs text-gray-500 font-bold uppercase tracking-wider mb-1">Alumnos Inscritos</p>
+              <p className="text-2xl font-black text-gray-800">{totalAlumnos}</p>
+            </div>
+            <div className="bg-blue-50 p-3 rounded-xl text-[#1A237E]"><Users className="w-6 h-6" /></div>
+          </div>
+          <div className="bg-white border border-gray-200 p-4 rounded-xl flex justify-between items-center shadow-sm hover:shadow-md transition-shadow">
+            <div>
+              <p className="text-xs text-gray-500 font-bold uppercase tracking-wider mb-1">Sesiones Totales</p>
+              <p className="text-2xl font-black text-gray-800">{totalClases}</p>
+            </div>
+            <div className="bg-indigo-50 p-3 rounded-xl text-indigo-600"><CalendarDays className="w-6 h-6" /></div>
+          </div>
+          <div className="bg-white border border-green-100 p-4 rounded-xl flex justify-between items-center shadow-sm hover:shadow-md transition-shadow">
+            <div>
+              <p className="text-xs text-green-600/70 font-bold uppercase tracking-wider mb-1">Asistencias Globales</p>
+              <p className="text-2xl font-black text-green-600">{asistenciasGlobales}</p>
+            </div>
+            <div className="bg-green-50 p-3 rounded-xl text-green-500"><CheckCircle className="w-6 h-6" /></div>
+          </div>
+          <div className="bg-white border border-red-100 p-4 rounded-xl flex justify-between items-center shadow-sm hover:shadow-md transition-shadow">
+            <div>
+              <p className="text-xs text-red-600/70 font-bold uppercase tracking-wider mb-1">Faltas Globales</p>
+              <p className="text-2xl font-black text-red-600">{faltasGlobales}</p>
+            </div>
+            <div className="bg-red-50 p-3 rounded-xl text-red-500"><XCircle className="w-6 h-6" /></div>
           </div>
         </div>
 
@@ -346,95 +439,101 @@ const AsistenciaDocente = () => {
           </div>
         </div>
 
-        {/* TABLA SÁBANA (DISEÑO MODERNO) */}
-        <div className="overflow-x-auto border border-gray-200 rounded-xl shadow-sm custom-scrollbar z-10 relative">
-          <table className="w-full text-sm text-left">
-            <thead className="bg-gray-50 text-gray-500 text-[11px] uppercase font-bold border-b border-gray-200">
-              <tr>
-                <th className="py-4 px-4 text-center border-r border-gray-200 w-12">No.</th>
-                <th className="py-4 px-4 border-r border-gray-200 w-24 tracking-wider">Matrícula</th>
-                <th className="py-4 px-4 border-r border-gray-200 min-w-[250px] tracking-wider">Nombre del Alumno</th>
-                <th className="py-4 px-3 border-r border-gray-200 text-center w-20 leading-tight">Faltas<br/>Totales</th>
-                <th className="py-4 px-3 border-r border-gray-200 text-center w-16">Notas</th>
-                
-                {/* Columnas Dinámicas de Fechas */}
-                {FECHAS_CLASE.map(fecha => (
-                  <th key={fecha} className="py-2 px-2 border-r border-gray-200 text-center min-w-[50px] group bg-white/50 hover:bg-gray-100 transition-colors cursor-pointer select-none" onClick={() => toggleColumnaDia(fecha)} title="Haz clic para marcar/desmarcar toda la columna">
-                    <div className="flex flex-col items-center justify-center">
-                      <span className="text-[10px] tracking-widest text-[#1A237E] font-black">{fecha}</span>
-                      <span className="text-[8px] text-gray-400 mt-1 opacity-0 group-hover:opacity-100 transition-opacity">Alternar</span>
-                    </div>
-                  </th>
-                ))}
-              </tr>
-            </thead>
-
-            <tbody className="divide-y divide-gray-100 text-gray-700 bg-white">
-              {alumnosFiltrados.length > 0 ? (
-                alumnosFiltrados.map((alumno, idx) => {
-                  const faltasTotales = calcularFaltas(alumno.asistencias);
-
-                  return (
-                    <tr key={alumno.id} className="hover:bg-blue-50/30 transition-colors">
-                      <td className="py-3 px-4 text-center border-r border-gray-100 text-gray-400 font-bold">{idx + 1}</td>
-                      <td className="py-3 px-4 border-r border-gray-100 font-mono text-gray-500">{alumno.matricula}</td>
-                      <td className="py-3 px-4 border-r border-gray-100 font-bold text-gray-800 flex items-center gap-3">
-                        <div className="w-7 h-7 rounded-full bg-[#1A237E]/10 flex items-center justify-center text-[#1A237E] font-black text-xs">
-                          {alumno.nombre.charAt(0)}
-                        </div>
-                        <div className="flex flex-col">
-                          <span>{alumno.nombre}</span>
-                          <span className="text-[9px] text-gray-400 font-medium uppercase tracking-widest mt-0.5">{alumno.programa}</span>
-                        </div>
-                      </td>
-                      <td className="py-3 px-3 border-r border-gray-100 text-center">
-                        <span className={`inline-flex items-center justify-center w-7 h-7 rounded-lg font-bold text-sm ${faltasTotales > 0 ? 'bg-red-100 text-red-700' : 'bg-gray-100 text-gray-600'}`}>
-                          {faltasTotales}
-                        </span>
-                      </td>
-                      <td className="py-3 px-3 border-r border-gray-100 text-center">
-                        <button 
-                          onClick={() => mostrarObservaciones(alumno)}
-                          className={`p-2 rounded-lg transition-colors ${alumno.observaciones ? 'bg-amber-100 text-amber-700 hover:bg-amber-200' : 'text-gray-400 hover:bg-gray-100 hover:text-[#1A237E]'}`}
-                          title={alumno.observaciones || "Añadir observación"}
-                        >
-                          <MessageSquareText className="w-4 h-4" />
-                        </button>
-                      </td>
-
-                      {/* Renderizado Dinámico de las celdas (Ruta entre P, F, R, J) */}
-                      {FECHAS_CLASE.map(fecha => {
-                        const estadoActual = alumno.asistencias[fecha] || 'P';
-                        const estilo = ESTADOS[estadoActual];
-
-                        return (
-                          <td key={fecha} className="p-1 border-r border-gray-100 text-center align-middle">
-                            <button
-                              onClick={() => handleToggleCell(alumno.id, fecha)}
-                              className={`w-full h-10 flex items-center justify-center font-bold text-sm rounded border transition-colors ${estilo.bg} ${estilo.color}`}
-                              title={`Clic para cambiar estado (Actual: ${estilo.label})`}
-                            >
-                              {estilo.label}
-                            </button>
-                          </td>
-                        );
-                      })}
-                    </tr>
-                  );
-                })
-              ) : (
+        {/* TABLA SÁBANA */}
+        <div className="overflow-x-auto border border-gray-200 rounded-xl shadow-sm custom-scrollbar z-10 relative max-h-[600px]">
+          {cargando ? (
+            <div className="flex flex-col items-center justify-center py-20 text-[#1A237E]">
+              <Loader2 className="w-10 h-10 animate-spin mb-4" />
+              <p className="font-bold">Cargando alumnos de la base de datos...</p>
+            </div>
+          ) : (
+            <table className="w-full text-sm text-left">
+              <thead className="bg-gray-50 text-gray-500 text-[11px] uppercase font-bold border-b border-gray-200 sticky top-0 z-20 shadow-sm">
                 <tr>
-                  <td colSpan={5 + FECHAS_CLASE.length} className="py-16 text-center">
-                    <div className="flex flex-col items-center justify-center text-gray-400">
-                      <Search className="w-10 h-10 mb-3 opacity-50" />
-                      <p className="font-semibold text-gray-600">No se encontraron alumnos.</p>
-                      <p className="text-sm mt-1">Verifica los filtros de búsqueda.</p>
-                    </div>
-                  </td>
+                  <th className="py-4 px-4 text-center border-r border-gray-200 w-12 bg-gray-50">No.</th>
+                  <th className="py-4 px-4 border-r border-gray-200 w-24 tracking-wider bg-gray-50">Matrícula</th>
+                  <th className="py-4 px-4 border-r border-gray-200 min-w-[250px] tracking-wider bg-gray-50">Nombre del Alumno</th>
+                  <th className="py-4 px-3 border-r border-gray-200 text-center w-20 leading-tight bg-gray-50">Faltas<br/>Totales</th>
+                  <th className="py-4 px-3 border-r border-gray-200 text-center w-16 bg-gray-50">Notas</th>
+                  
+                  {/* Renderizar solo el DÍA en la cabecera */}
+                  {FECHAS_CLASE.map(fecha => (
+                    <th key={fecha} className="py-2 px-2 border-r border-gray-200 text-center min-w-[50px] group bg-white/50 hover:bg-gray-100 transition-colors cursor-pointer select-none bg-gray-50" onClick={() => toggleColumnaDia(fecha)} title="Haz clic para marcar/desmarcar toda la columna">
+                      <div className="flex flex-col items-center justify-center">
+                        <span className="text-[10px] tracking-widest text-[#1A237E] font-black">{fecha.split('-')[2]}</span>
+                        <span className="text-[8px] text-gray-400 mt-1 opacity-0 group-hover:opacity-100 transition-opacity">Alternar</span>
+                      </div>
+                    </th>
+                  ))}
                 </tr>
-              )}
-            </tbody>
-          </table>
+              </thead>
+
+              <tbody className="divide-y divide-gray-100 text-gray-700 bg-white">
+                {alumnosFiltrados.length > 0 ? (
+                  alumnosFiltrados.map((alumno, idx) => {
+                    const faltasTotales = calcularFaltas(alumno.asistencias);
+
+                    return (
+                      <tr key={alumno.id} className="hover:bg-blue-50/30 transition-colors">
+                        <td className="py-3 px-4 text-center border-r border-gray-100 text-gray-400 font-bold">{idx + 1}</td>
+                        <td className="py-3 px-4 border-r border-gray-100 font-mono text-gray-500">{alumno.matricula}</td>
+                        <td className="py-3 px-4 border-r border-gray-100 font-bold text-gray-800 flex items-center gap-3">
+                          <div className="w-7 h-7 rounded-full bg-[#1A237E]/10 flex items-center justify-center text-[#1A237E] font-black text-xs">
+                            {alumno.nombre.charAt(0)}
+                          </div>
+                          <div className="flex flex-col">
+                            <span>{alumno.nombre}</span>
+                            <span className="text-[9px] text-gray-400 font-medium uppercase tracking-widest mt-0.5">{alumno.programa}</span>
+                          </div>
+                        </td>
+                        <td className="py-3 px-3 border-r border-gray-100 text-center">
+                          <span className={`inline-flex items-center justify-center w-7 h-7 rounded-lg font-bold text-sm ${faltasTotales > 0 ? 'bg-red-100 text-red-700' : 'bg-gray-100 text-gray-600'}`}>
+                            {faltasTotales}
+                          </span>
+                        </td>
+                        <td className="py-3 px-3 border-r border-gray-100 text-center">
+                          <button 
+                            onClick={() => mostrarObservaciones(alumno)}
+                            className={`p-2 rounded-lg transition-colors ${alumno.observaciones ? 'bg-amber-100 text-amber-700 hover:bg-amber-200' : 'text-gray-400 hover:bg-gray-100 hover:text-[#1A237E]'}`}
+                            title={alumno.observaciones || "Añadir observación"}
+                          >
+                            <MessageSquareText className="w-4 h-4" />
+                          </button>
+                        </td>
+
+                        {FECHAS_CLASE.map(fecha => {
+                          const estadoActual = alumno.asistencias[fecha] || 'P';
+                          const estilo = ESTADOS[estadoActual];
+
+                          return (
+                            <td key={fecha} className="p-1 border-r border-gray-100 text-center align-middle">
+                              <button
+                                onClick={() => handleToggleCell(alumno.id, fecha)}
+                                className={`w-full h-10 flex items-center justify-center font-bold text-sm rounded border transition-colors ${estilo.bg} ${estilo.color}`}
+                                title={`Clic para cambiar estado (Actual: ${estilo.label})`}
+                              >
+                                {estilo.label}
+                              </button>
+                            </td>
+                          );
+                        })}
+                      </tr>
+                    );
+                  })
+                ) : (
+                  <tr>
+                    <td colSpan={5 + FECHAS_CLASE.length} className="py-16 text-center">
+                      <div className="flex flex-col items-center justify-center text-gray-400">
+                        <Search className="w-10 h-10 mb-3 opacity-50" />
+                        <p className="font-semibold text-gray-600">No se encontraron alumnos.</p>
+                        <p className="text-sm mt-1">Verifica los filtros de búsqueda.</p>
+                      </div>
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          )}
         </div>
 
       </div>
