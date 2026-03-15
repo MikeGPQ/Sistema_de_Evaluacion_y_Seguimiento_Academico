@@ -3,18 +3,13 @@ import { Download, Save, Search, MessageSquareText, Users, CalendarDays, CheckCi
 import Swal from 'sweetalert2';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
-import client from '../../lib/axios'; // 🌟 IMPORTANTE: Conexión al Backend
+import client from '../../lib/axios'; 
 
-// Fechas reales en formato BD
+// Las fechas siguen fijas por ahora (en el futuro se calcularán según el mes actual)
 const FECHAS_CLASE = [
   '2026-09-01', '2026-09-02', '2026-09-03', '2026-09-04', '2026-09-05', 
   '2026-09-08', '2026-09-09', '2026-09-10', '2026-09-11', '2026-09-12', 
   '2026-09-15', '2026-09-16'
-];
-
-const materiasOptions = [
-  { id: '1', label: '11607 - Ingeniería de Software II (8vo A)' },
-  { id: '2', label: '11608 - Desarrollo de Aplicaciones (8vo B)' }
 ];
 
 const ESTADOS = {
@@ -25,25 +20,43 @@ const ESTADOS = {
 };
 
 const AsistenciaDocente = () => {
-  const [materiaSeleccionada, setMateriaSeleccionada] = useState('1');
+  const [materiasOptions, setMateriasOptions] = useState([]); // 🌟 AHORA ESTÁ VACÍO INICIALMENTE
+  const [materiaSeleccionada, setMateriaSeleccionada] = useState('');
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [busqueda, setBusqueda] = useState('');
   const dropdownRef = useRef(null);
   
-  // 🌟 ESTADOS REALES
   const [alumnos, setAlumnos] = useState([]);
   const [cargando, setCargando] = useState(true);
   const [guardando, setGuardando] = useState(false);
   const [cambiosPendientes, setCambiosPendientes] = useState({});
 
-  // 🌟 EFECTO PARA TRAER DATOS DE LA BD
+  // 🌟 EFECTO 1: TRAER LAS MATERIAS DEL MAESTRO
+  useEffect(() => {
+    const fetchMaterias = async () => {
+      try {
+        const res = await client.get('/asistencia/mis-grupos?periodo=2026-1');
+        setMateriasOptions(res.data);
+        if (res.data.length > 0) {
+          setMateriaSeleccionada(res.data[0].id); // Selecciona la primera por defecto
+        }
+      } catch (error) {
+        console.error("Error al cargar grupos", error);
+      }
+    };
+    fetchMaterias();
+  }, []);
+
+  // 🌟 EFECTO 2: TRAER ALUMNOS CUANDO CAMBIA LA MATERIA
   useEffect(() => {
     const fetchAlumnos = async () => {
+      if (!materiaSeleccionada) return; // Si no hay materia, no busca alumnos
+      
       setCargando(true);
       try {
         const response = await client.get(`/asistencia/grupo/${materiaSeleccionada}?periodo=2026-1`);
         setAlumnos(response.data);
-        setCambiosPendientes({}); // Limpiamos carrito al cambiar de materia
+        setCambiosPendientes({});
       } catch (error) {
         console.error("Error cargando alumnos:", error);
         Swal.fire('Error', 'No se pudieron cargar los alumnos del grupo.', 'error');
@@ -54,6 +67,7 @@ const AsistenciaDocente = () => {
     fetchAlumnos();
   }, [materiaSeleccionada]);
 
+  // Cierra el dropdown si haces click afuera
   useEffect(() => {
     const handleClickOutside = (event) => {
       if (dropdownRef.current && !dropdownRef.current.contains(event.target)) setIsDropdownOpen(false);
@@ -64,7 +78,6 @@ const AsistenciaDocente = () => {
 
   const alumnosFiltrados = alumnos.filter(a => a.nombre.toLowerCase().includes(busqueda.toLowerCase()) || a.matricula.includes(busqueda));
 
-  // --- LÓGICA DE INTERACCIÓN ---
   const calcularFaltas = (asistencias) => FECHAS_CLASE.filter(fecha => asistencias[fecha] === 'F').length;
 
   const totalAlumnos = alumnosFiltrados.length;
@@ -130,7 +143,6 @@ const AsistenciaDocente = () => {
     });
   };
 
-  // 🌟 ENVIAR A LA BASE DE DATOS (OPCIÓN LIGERA)
   const handleGuardar = async () => {
     const payloadLigero = Object.values(cambiosPendientes);
     
@@ -146,12 +158,7 @@ const AsistenciaDocente = () => {
         cambios: payloadLigero
       });
       
-      Swal.fire({ 
-        icon: 'success', 
-        title: 'Guardado', 
-        text: `Se registraron ${response.data.total_cambios} cambios en el sistema.`, 
-        confirmButtonColor: '#1A237E' 
-      });
+      Swal.fire({ icon: 'success', title: 'Guardado', text: `Se registraron ${response.data.total_cambios} cambios en el sistema.`, confirmButtonColor: '#1A237E' });
       setCambiosPendientes({}); 
     } catch (error) {
       console.error("Error al guardar:", error);
@@ -161,14 +168,13 @@ const AsistenciaDocente = () => {
     }
   };
 
-  // --- PDF CLON EXACTO DEL DISEÑO HU-15 ---
   const handleExportPDF = () => {
     try {
       const doc = new jsPDF('landscape'); 
       const pageWidth = doc.internal.pageSize.getWidth();
       const pageHeight = doc.internal.pageSize.getHeight();
       
-    doc.setFillColor(11, 23, 42); 
+      doc.setFillColor(11, 23, 42); 
       doc.rect(14, 15, 10, 10, 'F');
       doc.setTextColor(255, 255, 255);
       doc.setFontSize(12);
@@ -219,7 +225,6 @@ const AsistenciaDocente = () => {
       doc.setTextColor(180);
       doc.text("REP-2026-8921", 180, 50);
 
-      // Convertimos YYYY-MM-DD a solo DD para la cabecera del PDF
       const headersDias = FECHAS_CLASE.map(f => f.split('-')[2]);
       const tableColumn = ["MATRÍCULA", "NOMBRE DEL ALUMNO", ...headersDias, "ASIST.", "FALTAS"];
       const tableRows = alumnosFiltrados.map(a => {
@@ -322,7 +327,6 @@ const AsistenciaDocente = () => {
     <div className="min-h-screen bg-[#F8F9FA] p-6 font-sans">
       <div className="max-w-[1400px] mx-auto bg-white rounded-xl shadow-sm border border-gray-200 p-6">
         
-        {/* Controles Superiores Modernos */}
         <div className="flex flex-col md:flex-row justify-between items-center mb-8 gap-4 border-b pb-6">
           <div className="flex flex-wrap items-center gap-6 w-full md:w-auto">
             
@@ -342,7 +346,11 @@ const AsistenciaDocente = () => {
               >
                 <div className="flex items-center gap-2 truncate">
                   <BookOpen className={`w-4 h-4 flex-shrink-0 ${isDropdownOpen ? 'text-[#1A237E]' : 'text-gray-400'}`} />
-                  <span className="truncate">{materiasOptions.find(o => o.id === materiaSeleccionada)?.label}</span>
+                  <span className="truncate">
+                    {materiasOptions.length === 0 
+                      ? "Cargando grupos..." 
+                      : materiasOptions.find(o => o.id === materiaSeleccionada)?.label || "Seleccione un grupo"}
+                  </span>
                 </div>
                 <ChevronDown className={`w-4 h-4 text-gray-500 transition-transform duration-300 flex-shrink-0 ml-2 ${isDropdownOpen ? 'rotate-180 text-[#1A237E]' : ''}`} />
               </div>
@@ -377,17 +385,16 @@ const AsistenciaDocente = () => {
           </div>
           
           <div className="flex gap-3 shrink-0">
-            <button onClick={handleExportPDF} className="flex items-center px-4 py-2 bg-white border border-gray-300 text-gray-700 rounded-lg text-sm font-bold hover:bg-gray-50 hover:text-[#1A237E] hover:border-[#1A237E] transition-all shadow-sm">
+            <button onClick={handleExportPDF} disabled={!materiaSeleccionada || alumnos.length === 0} className="flex items-center px-4 py-2 bg-white border border-gray-300 text-gray-700 rounded-lg text-sm font-bold hover:bg-gray-50 hover:text-[#1A237E] hover:border-[#1A237E] transition-all shadow-sm disabled:opacity-50 disabled:cursor-not-allowed">
               <Download className="w-4 h-4 mr-2" /> Exportar PDF
             </button>
-            <button onClick={handleGuardar} disabled={guardando} className="flex items-center px-5 py-2 bg-[#1A237E] text-white rounded-lg text-sm font-bold hover:bg-[#283593] transition-colors shadow-sm disabled:opacity-70">
+            <button onClick={handleGuardar} disabled={guardando || !materiaSeleccionada} className="flex items-center px-5 py-2 bg-[#1A237E] text-white rounded-lg text-sm font-bold hover:bg-[#283593] transition-colors shadow-sm disabled:opacity-70 disabled:cursor-not-allowed">
               {guardando ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Save className="w-4 h-4 mr-2" />}
               {guardando ? 'Guardando...' : 'Guardar Lista'}
             </button>
           </div>
         </div>
 
-        {/* Tarjetas de Resumen Global */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
           <div className="bg-white border border-gray-200 p-4 rounded-xl flex justify-between items-center shadow-sm hover:shadow-md transition-shadow">
             <div>
@@ -419,7 +426,6 @@ const AsistenciaDocente = () => {
           </div>
         </div>
 
-        {/* Leyenda Visual Integrada */}
         <div className="flex items-center gap-6 mb-4 px-2">
           <div className="flex items-center gap-2">
             <span className="w-6 h-6 flex items-center justify-center rounded bg-green-50 text-green-600 font-bold text-xs border border-green-200">✓</span>
@@ -439,12 +445,11 @@ const AsistenciaDocente = () => {
           </div>
         </div>
 
-        {/* TABLA SÁBANA */}
         <div className="overflow-x-auto border border-gray-200 rounded-xl shadow-sm custom-scrollbar z-10 relative max-h-[600px]">
           {cargando ? (
             <div className="flex flex-col items-center justify-center py-20 text-[#1A237E]">
               <Loader2 className="w-10 h-10 animate-spin mb-4" />
-              <p className="font-bold">Cargando alumnos de la base de datos...</p>
+              <p className="font-bold">Cargando datos de la base de datos...</p>
             </div>
           ) : (
             <table className="w-full text-sm text-left">
@@ -456,7 +461,6 @@ const AsistenciaDocente = () => {
                   <th className="py-4 px-3 border-r border-gray-200 text-center w-20 leading-tight bg-gray-50">Faltas<br/>Totales</th>
                   <th className="py-4 px-3 border-r border-gray-200 text-center w-16 bg-gray-50">Notas</th>
                   
-                  {/* Renderizar solo el DÍA en la cabecera */}
                   {FECHAS_CLASE.map(fecha => (
                     <th key={fecha} className="py-2 px-2 border-r border-gray-200 text-center min-w-[50px] group bg-white/50 hover:bg-gray-100 transition-colors cursor-pointer select-none bg-gray-50" onClick={() => toggleColumnaDia(fecha)} title="Haz clic para marcar/desmarcar toda la columna">
                       <div className="flex flex-col items-center justify-center">
@@ -524,9 +528,19 @@ const AsistenciaDocente = () => {
                   <tr>
                     <td colSpan={5 + FECHAS_CLASE.length} className="py-16 text-center">
                       <div className="flex flex-col items-center justify-center text-gray-400">
-                        <Search className="w-10 h-10 mb-3 opacity-50" />
-                        <p className="font-semibold text-gray-600">No se encontraron alumnos.</p>
-                        <p className="text-sm mt-1">Verifica los filtros de búsqueda.</p>
+                        {materiaSeleccionada ? (
+                          <>
+                            <Search className="w-10 h-10 mb-3 opacity-50" />
+                            <p className="font-semibold text-gray-600">No se encontraron alumnos.</p>
+                            <p className="text-sm mt-1">Este grupo no tiene alumnos inscritos actualmente.</p>
+                          </>
+                        ) : (
+                          <>
+                            <BookOpen className="w-10 h-10 mb-3 opacity-50" />
+                            <p className="font-semibold text-gray-600">Ningún grupo seleccionado.</p>
+                            <p className="text-sm mt-1">Selecciona una materia para ver la lista de alumnos.</p>
+                          </>
+                        )}
                       </div>
                     </td>
                   </tr>

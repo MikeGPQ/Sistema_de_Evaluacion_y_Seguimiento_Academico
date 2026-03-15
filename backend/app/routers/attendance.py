@@ -10,6 +10,8 @@ from app.models.student import Student
 from app.models.career import Career
 from app.models.enrollment import StudentEnrollment
 from app.models.attendance import AttendanceRecord
+from app.models.academic_group import AcademicGroup
+from app.models.subject import Subject
 # from app.models.audit_log import AuditLog # Descomentar cuando el arquitecto la cree
 
 router = APIRouter(prefix="/asistencia", tags=["Asistencia Docente"])
@@ -25,7 +27,27 @@ class GuardarCambiosRequest(BaseModel):
     cambios: List[CambioAsistencia]
 
 ESTADOS_DB = { "P": "asistencia", "F": "falta", "R": "retardo", "J": "justificado" }
+@router.get("/mis-grupos")
+def obtener_grupos_docente(periodo: str = "2026-1", db: Session = Depends(get_db)):
+    # TODO: Cuando conectes la seguridad real, sacar el ID del token
+    # current_user = Depends(get_current_user)
+    teacher_id_simulado = 1 # Suponiendo que el maestro logueado tiene el ID 1 en 'teachers'
 
+    grupos = db.query(AcademicGroup, Subject).join(
+        Subject, AcademicGroup.subject_id == Subject.id
+    ).filter(
+        AcademicGroup.teacher_id == teacher_id_simulado,
+        AcademicGroup.periodo == periodo
+    ).all()
+
+    resultado = []
+    for grupo, materia in grupos:
+        resultado.append({
+            "id": str(grupo.id),
+            "label": f"{materia.external_id} - {materia.nombre} ({grupo.identificador_grupo})"
+        })
+    
+    return resultado
 # 🌟 NUEVO: Endpoint para traer a los alumnos de verdad desde la BD
 @router.get("/grupo/{group_id}")
 def obtener_sabana_asistencia(group_id: int, periodo: str = "2026-1", db: Session = Depends(get_db)):
