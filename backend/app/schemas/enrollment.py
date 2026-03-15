@@ -42,5 +42,5 @@ class StudentGradeUpdate(BaseModel):
     status_parcial_3: Optional[JustificationCode] = Field(None)
 
 class BulkGradeUpdateRequest(BaseModel):
-    docente_id: int 
+    docente_id: int
     students: List[StudentGradeUpdate]

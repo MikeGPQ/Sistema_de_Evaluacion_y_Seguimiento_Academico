@@ -4,6 +4,7 @@ from sqlalchemy.orm import Session
 
 from app.db.database import get_db
 from app.models.academic_group import AcademicGroup
+from app.models.academic_period import AcademicPeriod
 from app.models.enrollment import StudentEnrollment
 from app.models.teacher import Teacher
 from app.models.subject import Subject
@@ -11,6 +12,26 @@ from app.schemas.enrollment import BulkGradeUpdateRequest
 from app.services.audit_service import log_audit_event
 
 router = APIRouter(prefix="/docente", tags=["Docente - Calificaciones"])
+
+
+# ──────────────────────────────────────────────
+# GET  /docente/periodos
+# Devuelve todos los periodos académicos del catálogo
+# ──────────────────────────────────────────────
+@router.get("/periodos")
+def get_periods(db: Session = Depends(get_db)):
+    periods = (
+        db.query(AcademicPeriod)
+        .order_by(AcademicPeriod.fecha_inicio.asc())
+        .all()
+    )
+    return [
+        {
+            "period_name": p.period_name,
+            "is_active": p.is_active,
+        }
+        for p in periods
+    ]
 
 
 def _format_horario(horario_json) -> str:

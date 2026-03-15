@@ -56,9 +56,14 @@ const normalize = (v) => (v === null || v === undefined ? '' : v);
 const Calificaciones = () => {
   const { user } = useAuth();
 
+  // Periods
+  const [periods, setPeriods] = useState([]);
+  const [selectedPeriod, setSelectedPeriod] = useState(null);
+  const [loadingPeriods, setLoadingPeriods] = useState(true);
+
   // All groups for this teacher
   const [groups, setGroups] = useState([]);
-  const [loadingGroups, setLoadingGroups] = useState(true);
+  const [loadingGroups, setLoadingGroups] = useState(false);
 
   // Which group IDs are expanded
   const [expanded, setExpanded] = useState({});
@@ -75,12 +80,33 @@ const Calificaciones = () => {
   // Teacher internal ID (needed for audit log in save payload)
   const [teacherId, setTeacherId] = useState(null);
 
-  // ── Fetch teacher groups on mount ──────────────────────────
+  // ── Fetch periods on mount, default to active ──────────────
   useEffect(() => {
-    if (!user?.identifier) return;
+    const fetchPeriods = async () => {
+      try {
+        const res = await client.get('/docente/periodos');
+        setPeriods(res.data);
+        const active = res.data.find(p => p.is_active);
+        setSelectedPeriod(active ? active.period_name : res.data[0]?.period_name ?? null);
+      } catch (err) {
+        console.error('Error cargando periodos:', err);
+      } finally {
+        setLoadingPeriods(false);
+      }
+    };
+    fetchPeriods();
+  }, []);
+
+  // ── Fetch teacher groups when period or user changes ───────
+  useEffect(() => {
+    if (!user?.identifier || !selectedPeriod) return;
+    setLoadingGroups(true);
+    setGroups([]);
+    setExpanded({});
+    setGroupData({});
     const fetchGroups = async () => {
       try {
-        const res = await client.get(`/docente/${user.identifier}/grupos`);
+        const res = await client.get(`/docente/${user.identifier}/grupos?periodo=${selectedPeriod}`);
         setGroups(res.data);
         if (res.data.length > 0) setTeacherId(res.data[0].teacher_id);
       } catch (err) {
@@ -90,7 +116,7 @@ const Calificaciones = () => {
       }
     };
     fetchGroups();
-  }, [user]);
+  }, [user, selectedPeriod]);
 
   // ── Toggle expand / fetch students ────────────────────────
   const toggleGroup = async (groupId, actaStatus) => {
@@ -228,6 +254,9 @@ const Calificaciones = () => {
     }
   };
 
+  // ── Period active check ───────────────────────────────────
+  const isPeriodActive = periods.find(p => p.period_name === selectedPeriod)?.is_active ?? false;
+
   // ── Group groups by cuatrimestre ──────────────────────────
   const byCuatrimestre = groups.reduce((acc, g) => {
     const q = g.cuatrimestre;
@@ -266,18 +295,10 @@ const Calificaciones = () => {
   );
 
   // ── Main render ───────────────────────────────────────────
-  if (loadingGroups) {
+  if (loadingPeriods) {
     return (
       <div className="p-8 max-w-7xl mx-auto bg-gray-50 min-h-screen font-sans flex items-center justify-center">
-        <p className="text-gray-500">Cargando grupos...</p>
-      </div>
-    );
-  }
-
-  if (groups.length === 0) {
-    return (
-      <div className="p-8 max-w-7xl mx-auto bg-gray-50 min-h-screen font-sans">
-        <p className="text-gray-500">No tienes grupos asignados para este periodo.</p>
+        <p className="text-gray-500">Cargando periodos...</p>
       </div>
     );
   }
@@ -285,7 +306,34 @@ const Calificaciones = () => {
   return (
     <div className="p-8 max-w-7xl mx-auto bg-gray-50 min-h-screen font-sans">
 
-      {cuatrimestres.map(q => (
+      {/* Period selector */}
+      <div className="mb-8 flex items-center gap-4 flex-wrap">
+        <label className="text-sm font-semibold text-gray-700">Periodo:</label>
+        <select
+          value={selectedPeriod ?? ''}
+          onChange={e => setSelectedPeriod(e.target.value)}
+          className="px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm font-medium text-gray-800 focus:ring-2 focus:ring-[#1A237E] outline-none shadow-sm"
+        >
+          {periods.map(p => (
+            <option key={p.period_name} value={p.period_name}>{p.period_name}</option>
+          ))}
+        </select>
+        {periods.find(p => p.period_name === selectedPeriod)?.is_active && (
+          <span className="text-xs bg-green-100 text-green-700 font-semibold px-2 py-1 rounded-full border border-green-200">
+            Periodo actual
+          </span>
+        )}
+      </div>
+
+      {loadingGroups ? (
+        <div className="flex items-center justify-center py-20">
+          <p className="text-gray-500">Cargando grupos...</p>
+        </div>
+      ) : groups.length === 0 ? (
+        <p className="text-gray-500">No tienes grupos asignados para el periodo {selectedPeriod}.</p>
+      ) : (
+        <>
+          {cuatrimestres.map(q => (
         <div key={q} className="mb-8">
           <h1 className="text-xl font-bold text-[#0B172A] mb-6">
             {CUATRIMESTRE_LABEL[Number(q)] || q}° Cuatrimestre
@@ -294,8 +342,19 @@ const Calificaciones = () => {
           {byCuatrimestre[q].map(group => {
             const isOpen = !!expanded[group.group_id];
             const gd = groupData[group.group_id];
-            const isReadOnly = gd?.actaStatus === 'cerrada' || gd?.actaStatus === 'generada';
+            const isReadOnly = !isPeriodActive || gd?.actaStatus === 'cerrada' || gd?.actaStatus === 'generada';
             const isSaving = savingGroupId === group.group_id;
+            const hasChanges = gd?.students?.some(s => {
+              const orig = gd.originalStudents?.find(o => o.matricula === s.matricula);
+              return orig && (s.p1 !== orig.p1 || s.p2 !== orig.p2 || s.p3 !== orig.p3);
+            }) ?? false;
+            const hasInvalidClear = gd?.students?.some(s => {
+              const orig = gd.originalStudents?.find(o => o.matricula === s.matricula);
+              if (!orig) return false;
+              const cleared = (origVal, curVal) =>
+                origVal !== '' && origVal !== null && (curVal === '' || curVal === null);
+              return cleared(orig.p1, s.p1) || cleared(orig.p2, s.p2) || cleared(orig.p3, s.p3);
+            }) ?? false;
 
             return (
               <div key={group.group_id} className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden mb-4">
@@ -323,7 +382,10 @@ const Calificaciones = () => {
                       <div className="mx-4 mt-4 bg-red-50 border-l-4 border-red-600 p-4 rounded-r-lg flex gap-3 text-red-800">
                         <Info className="shrink-0" size={16} />
                         <p className="text-sm">
-                          <strong>Modo Solo Lectura:</strong> El acta de este grupo está en estado "{gd?.actaStatus}".
+                          <strong>Modo Solo Lectura:</strong>{' '}
+                          {!isPeriodActive
+                            ? 'El periodo seleccionado no es el activo. Solo puedes consultar las calificaciones.'
+                            : `El acta de este grupo está en estado "${gd?.actaStatus}".`}
                         </p>
                       </div>
                     )}
@@ -387,7 +449,7 @@ const Calificaciones = () => {
                           </span>
                           <button
                             onClick={() => handleSaveClick(group.group_id)}
-                            disabled={isReadOnly || isSaving}
+                            disabled={isReadOnly || isSaving || !hasChanges || hasInvalidClear}
                             className="px-6 py-2.5 bg-[#D99000] hover:bg-[#B37700] disabled:bg-gray-300 disabled:cursor-not-allowed text-white font-bold rounded shadow-sm flex items-center gap-2 transition-colors text-sm"
                           >
                             {isSaving ? 'Guardando...' : 'Guardar cambios'}
@@ -401,7 +463,9 @@ const Calificaciones = () => {
             );
           })}
         </div>
-      ))}
+          ))}
+        </>
+      )}
 
       {/* Notification modal */}
       {notification && (
