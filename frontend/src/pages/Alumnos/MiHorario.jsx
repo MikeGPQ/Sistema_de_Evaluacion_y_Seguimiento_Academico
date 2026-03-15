@@ -20,14 +20,12 @@ const DIAS_SEMANA = ["LUNES", "MARTES", "MIÉRCOLES", "JUEVES", "VIERNES", "SÁB
 
 const MiHorario = () => {
   const { user } = useAuth(); 
-  // Instanciacion del hook de enrutamiento para redireccion interna
   const navigate = useNavigate();
   
   const [clasesAsignadas, setClasesAsignadas] = useState([]);
   const [alumnoInfo, setAlumnoInfo] = useState(null);
   const [cargando, setCargando] = useState(true);
 
-  // Ciclo de vida: Recuperacion de datos iniciales
   useEffect(() => {
     const cargarDatosAcademicos = async () => {
       const matriculaActiva = user?.identifier || user?.matricula || '20240001';
@@ -50,7 +48,6 @@ const MiHorario = () => {
     if (user) cargarDatosAcademicos();
   }, [user]);
 
-  // Rasterizacion asincrona del nodo DOM a un buffer Blob para la conversion a PDF
   const handleDownloadPDF = async () => {
     const input = document.getElementById('horario-imprimible');
     if (!input || !alumnoInfo) return;
@@ -74,20 +71,17 @@ const MiHorario = () => {
     }
 
     try {
-      // Ajuste de PixelRatio a 4 para garantizar nitidez escalable en el documento generado
       const dataUrl = await toPng(input, { 
         quality: 1.0, 
         backgroundColor: '#ffffff', 
         pixelRatio: 4 
       });
 
-      // Calculo de proporciones relativas para el mapeo en formato mm
       const imgWidthPx = input.offsetWidth;
       const imgHeightPx = input.offsetHeight;
       const pdfWidth = 280; 
       const pdfHeight = (imgHeightPx * pdfWidth) / imgWidthPx;
 
-      // Inicializacion del documento PDF con formato de dimensiones dinamicas
       const pdf = new jsPDF({
         orientation: 'p',
         unit: 'mm',
@@ -101,7 +95,6 @@ const MiHorario = () => {
       pdf.text(`Alumno: ${alumnoInfo.nombre} | Matricula: ${alumnoInfo.matricula}`, 15, 30);
       pdf.text(`Carrera: ${alumnoInfo.carrera} | Periodo: 2026-1`, 15, 38);
 
-      // Insercion del buffer de imagen en las coordenadas del documento
       pdf.addImage(dataUrl, 'PNG', 10, 50, pdfWidth, pdfHeight);
       pdf.save(`Horario_${alumnoInfo.matricula}.pdf`);
       
@@ -118,8 +111,6 @@ const MiHorario = () => {
 
   const totalMaterias = new Set(clasesAsignadas.map(c => c.materia)).size;
   const totalHoras = clasesAsignadas.reduce((sum, clase) => sum + (clase.duracion || 0), 0);
-
-  if (cargando) return <div className="min-h-screen flex items-center justify-center">Cargando dependencias...</div>;
 
   return (
     <div className="min-h-screen flex flex-col bg-[#F8F9FA] font-sans">
@@ -140,14 +131,17 @@ const MiHorario = () => {
               <p className="text-gray-500 text-sm">Ciclo Escolar 2026-1</p>
             </div>
             
-            {/* Implementacion de contenedor para acciones primarias */}
             <div className="flex bg-gray-200 p-1 rounded-lg shadow-inner w-full md:w-auto overflow-x-auto">
-              <button
-                onClick={() => navigate('/alumno/carga-academica')} 
-                className="flex items-center px-4 py-2 rounded-md text-sm font-bold transition-all text-gray-500 hover:text-gray-700 whitespace-nowrap"
-              >
-                Gestionar Carga
-              </button>
+              
+              {/* RENDERIZADO CONDICIONAL: Solo si es cuatrimestre >= 2 se pinta el boton */}
+              {alumnoInfo && alumnoInfo.cuatrimestre >= 2 && (
+                <button
+                  onClick={() => navigate('/alumno/carga-academica')} 
+                  className="flex items-center px-4 py-2 rounded-md text-sm font-bold transition-all text-gray-500 hover:text-gray-700 whitespace-nowrap"
+                >
+                  Gestionar Carga
+                </button>
+              )}
               
               <button
                 onClick={handleDownloadPDF}
