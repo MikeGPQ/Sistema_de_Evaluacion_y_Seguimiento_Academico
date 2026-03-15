@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { ChevronUp, ChevronDown, Info } from 'lucide-react';
+import { ChevronUp, ChevronDown, Info, CheckCircle, XCircle } from 'lucide-react';
 import client from '../../lib/axios';
 import { useAuth } from '../../hooks/AuthContext';
 
@@ -70,6 +70,7 @@ const Calificaciones = () => {
   const [savingGroupId, setSavingGroupId] = useState(null);
   const [modalGroupId, setModalGroupId] = useState(null);
   const [pendingChanges, setPendingChanges] = useState([]);
+  const [notification, setNotification] = useState(null); // { type: 'success'|'error', message: string }
 
   // Teacher internal ID (needed for audit log in save payload)
   const [teacherId, setTeacherId] = useState(null);
@@ -217,10 +218,10 @@ const Calificaciones = () => {
         [groupId]: { ...prev[groupId], students: updated, originalStudents: updated },
       }));
 
-      alert(`¡Éxito! ${res.data.message}`);
+      setNotification({ type: 'success', message: res.data.message });
     } catch (error) {
       console.error('Error guardando calificaciones:', error);
-      alert(error.response?.data?.detail || 'Ocurrió un error al conectar con el servidor.');
+      setNotification({ type: 'error', message: error.response?.data?.detail || 'Ocurrió un error al conectar con el servidor.' });
     } finally {
       setSavingGroupId(null);
       setModalGroupId(null);
@@ -401,6 +402,36 @@ const Calificaciones = () => {
           })}
         </div>
       ))}
+
+      {/* Notification modal */}
+      {notification && (
+        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-xl shadow-2xl max-w-sm w-full overflow-hidden animate-in fade-in zoom-in duration-200">
+            <div className={`p-5 text-white ${notification.type === 'success' ? 'bg-[#0B172A]' : 'bg-red-700'}`}>
+              <div className="flex items-center gap-3">
+                {notification.type === 'success'
+                  ? <CheckCircle size={22} className="shrink-0 text-[#D99000]" />
+                  : <XCircle size={22} className="shrink-0 text-red-300" />
+                }
+                <h2 className="font-bold text-lg">
+                  {notification.type === 'success' ? '¡Operación exitosa!' : 'Ocurrió un error'}
+                </h2>
+              </div>
+            </div>
+            <div className="p-6">
+              <p className="text-sm text-gray-700">{notification.message}</p>
+            </div>
+            <div className="px-6 pb-5 flex justify-end">
+              <button
+                onClick={() => setNotification(null)}
+                className="px-6 py-2.5 bg-[#D99000] hover:bg-[#B37700] text-white font-bold rounded shadow-sm text-sm transition-colors"
+              >
+                Aceptar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Justification modal */}
       {modalGroupId && (
