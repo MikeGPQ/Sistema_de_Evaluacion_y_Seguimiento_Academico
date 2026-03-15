@@ -9,7 +9,6 @@ import Swal from 'sweetalert2';
 import jsPDF from 'jspdf';
 import { toPng } from 'html-to-image';
 
-// Constantes de renderizado de cuadricula de horarios
 const HORAS_CLASE = [
   "7:00 - 8:00", "8:00 - 9:00", "9:00 - 10:00", 
   "10:00 - 11:00", "11:00 - 12:00", "12:00 - 13:00", 
@@ -19,11 +18,17 @@ const HORAS_CLASE = [
 ];
 const DIAS_SEMANA = ["LUNES", "MARTES", "MIÉRCOLES", "JUEVES", "VIERNES", "SÁBADO"];
 
-// Funcion utilitaria para la conversion de formato de hora a minutos totales para el calculo de colisiones
 const timeToMinutes = (t) => {
   if (!t) return 0;
-  const [h, m] = t.split(':');
-  return parseInt(h) * 60 + parseInt(m);
+  const partes = t.toString().trim().split(':');
+  const h = parseInt(partes[0], 10) || 0;
+  const m = parseInt(partes[1], 10) || 0;
+  return h * 60 + m;
+};
+
+// Normaliza textos para evitar errores por "Miércoles" vs "Miercoles"
+const normalizarDia = (str) => {
+  return str ? str.toString().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim() : "";
 };
 
 const GruposYHorarios = () => {
@@ -46,12 +51,10 @@ const GruposYHorarios = () => {
   const [sugerencias, setSugerencias] = useState([]);
   const [mostrarSugerencias, setMostrarSugerencias] = useState(false);
 
- 
   const seleccionValues = Object.values(seleccion).map(s => s.group_id).sort().join(',');
   const originalValues = [...inscripcionesOriginales].sort().join(',');
   const hayCambios = seleccionValues !== originalValues;
 
-  // proteccion contra cierre o navegacion 
   useEffect(() => {
     const handleBeforeUnload = (evento) => {
       if (hayCambios) {
@@ -63,7 +66,7 @@ const GruposYHorarios = () => {
     return () => window.removeEventListener('beforeunload', handleBeforeUnload);
   }, [hayCambios]);
 
-  // funcion de proteccion de cambios para acciones que pueden tener perdidas de datos
+  // funcion para proteger acciones que pueden causar perdida de cambios guardados
   const ejecutarConProteccion = async (accionConfirmada) => {
     if (hayCambios) {
       const confirmacion = await Swal.fire({
@@ -86,7 +89,7 @@ const GruposYHorarios = () => {
     }
   };
 
-  
+  // funcion para buscar alumno y cargar su informacion y catalogo de materias disponibles
   const buscarAlumno = async (matriculaAUsar = matriculaBuscada) => {
     if (!matriculaAUsar) return;
     setCargando(true);
@@ -101,7 +104,6 @@ const GruposYHorarios = () => {
       const response = await client.get(`/asignacion/${matriculaAUsar}/disponibles`);
       const data = response.data;
       
-      // validaciones de bloqueos por cuatrimestre para acceso a modulo de asignacion de grupos y horarios
       if (data.alumno_cuatrimestre !== 1) {
         Swal.fire({
           icon: 'warning',
@@ -135,7 +137,6 @@ const GruposYHorarios = () => {
 
       const seleccionInicial = {};
       const gruposQueYaTenia = data.grupos_inscritos || [];
-
 
       const escanearCatalogo = (catalogo, isRetake) => {
         catalogo.forEach(mat => {
@@ -171,7 +172,7 @@ const GruposYHorarios = () => {
     }
   };
 
-  // logica de autocompletado de matricula con sugerencias
+  // funcion para manejar el cambio de input de matricula y mostrar surgerencias
   const handleCambioInput = async (e) => {
     const valor = e.target.value.replace(/\D/g, ''); 
     setMatriculaBuscada(valor);
@@ -189,6 +190,7 @@ const GruposYHorarios = () => {
     }
   };
 
+  // funcion para manejar la seleccion de sugerencia de alumno
   const handleSeleccionarSugerencia = (matriculaElegida) => {
     ejecutarConProteccion(() => {
       setMatriculaBuscada(matriculaElegida);
@@ -197,32 +199,46 @@ const GruposYHorarios = () => {
     });
   };
 
-  // logica de seleccion de grupos con validaciones de choque de horarios y confirmacion de bajas
+  //funcion para verificar choques de horario en el front antes de verificar en el backend
   const verificarChoquesFront = (grupoEvaluar, seleccionActual) => {
-    const sesionesEvaluar = grupoEvaluar.horario_raw || [];
-    const seleccionIds = Object.values(seleccionActual).map(s => s.group_id);
+    try {
+      const sesionesEvaluar = grupoEvaluar.horario_raw || [];
+      const seleccionIds = Object.values(seleccionActual).map(s => s.group_id);
 
-    for (const mat of [...materiasRegulares, ...materiasRecursamiento]) {
-      for (const g of mat.grupos_disponibles) {
-        if (seleccionIds.includes(g.group_id)) {
-           const sesionesSel = g.horario_raw || [];
-           for (const s1 of sesionesEvaluar) {
-             for (const s2 of sesionesSel) {
-               if (s1.dia.toLowerCase() === s2.dia.toLowerCase()) {
-                 const ini1 = timeToMinutes(s1.inicio); const fin1 = timeToMinutes(s1.fin);
-                 const ini2 = timeToMinutes(s2.inicio); const fin2 = timeToMinutes(s2.fin);
-                 if (!(fin1 <= ini2 || ini1 >= fin2)) {
-                   return { hayChoque: true, materiaChoque: mat.nombre, dia: s1.dia };
+      for (const mat of [...materiasRegulares, ...materiasRecursamiento]) {
+        for (const g of mat.grupos_disponibles) {
+          if (seleccionIds.includes(g.group_id)) {
+             const sesionesSel = g.horario_raw || [];
+             
+             for (const s1 of sesionesEvaluar) {
+               for (const s2 of sesionesSel) {
+                 const dia1 = normalizarDia(s1.dia);
+                 const dia2 = normalizarDia(s2.dia);
+                 
+                 if (dia1 && dia2 && dia1 === dia2) {
+                   const ini1 = timeToMinutes(s1.inicio); 
+                   const fin1 = timeToMinutes(s1.fin);
+                   const ini2 = timeToMinutes(s2.inicio); 
+                   const fin2 = timeToMinutes(s2.fin);
+                   
+                   // Traslape estricto
+                   if (ini1 < fin2 && fin1 > ini2) {
+                     return { hayChoque: true, materiaChoque: mat.nombre, dia: s1.dia };
+                   }
                  }
                }
              }
-           }
+          }
         }
       }
+      return { hayChoque: false };
+    } catch (error) {
+      return { hayChoque: false };
     }
-    return { hayChoque: false };
   };
 
+  // manejo de seleccion de grupo
+  //funcion que maneja la seleccion y deseleccion de grupos, con proteccion de cambios y validacion de choques
   const handleSeleccionGrupo = async (subjectId, groupId, isRetake) => {
     if (seleccion[subjectId]?.group_id === groupId) {
       if (inscripcionesOriginales.includes(groupId)) {
@@ -295,11 +311,11 @@ const GruposYHorarios = () => {
     }
   };
 
-  // asignacion automatica de grupos sin choque de horarios
+  // funcion para manejar la carga automatica de materias, priorizando tronco comun y validando choques 
   const handleCargaAutomatica = async () => {
     const confirmacion = await Swal.fire({
       title: 'Resolución Automática',
-      text: 'El sistema iterará sobre el catálogo disponible asignando grupos factibles. ¿Desea proceder?',
+      text: 'El sistema iterará sobre el catálogo priorizando las asignaturas de Tronco Común. ¿Desea proceder?',
       icon: 'question',
       showCancelButton: true,
       confirmButtonText: 'Aceptar',
@@ -311,7 +327,14 @@ const GruposYHorarios = () => {
 
     let nuevaSeleccion = { ...seleccion };
     
-    materiasRegulares.forEach(mat => {
+    // se ordena el catologo para que las materias de tronco comun se procesen primero
+    const materiasOrdenadas = [...materiasRegulares].sort((a, b) => {
+      if (a.tipo === 'Tronco Común' && b.tipo !== 'Tronco Común') return -1;
+      if (a.tipo !== 'Tronco Común' && b.tipo === 'Tronco Común') return 1;
+      return 0;
+    });
+
+    materiasOrdenadas.forEach(mat => {
       if (nuevaSeleccion[mat.subject_id]) return; 
 
       for (let i = 0; i < mat.grupos_disponibles.length; i++) {
@@ -329,11 +352,12 @@ const GruposYHorarios = () => {
     setSeleccion(nuevaSeleccion);
     Swal.fire({ 
       icon: 'success', title: 'Proceso Finalizado', 
-      text: 'Borrador generado con éxito. Verifique y ejecute la confirmación para persistir.', 
+      text: 'Carga académica generada. Verifique y ejecute la confirmación para persistir.', 
       timer: 3000, showConfirmButton: false 
     });
   };
 
+  // funcion para guardar la seleccion actual 
   const handleGuardarCarga = async () => {
     const materiasPayload = Object.entries(seleccion).map(([subjectId, data]) => ({
       subject_id: parseInt(subjectId),
@@ -376,7 +400,7 @@ const GruposYHorarios = () => {
     }
   };
 
-  // logica de renderizado de pdf
+  // funcion para descargar el horario en formato pdf
   const handleDownloadPDF = async () => {
     const input = document.getElementById('horario-imprimible');
     if (!input || !alumnoInfo) return;
@@ -412,7 +436,7 @@ const GruposYHorarios = () => {
     }
   };
 
-  // tarjeta de materia con colores diferentes segun tipo y estado 
+  // componente para mostrar cada materia con sus grupos disponibles, indicando si es recursamiento , tronco comun o carrera
   const TarjetaMateria = ({ materia, isRetake }) => {
     let colorEtiqueta = 'bg-blue-100 text-blue-800 border-blue-200'; 
     
@@ -476,7 +500,6 @@ const GruposYHorarios = () => {
     );
   };
 
-  // separamos las materias de tronco comun para mostrar en una parte distinta
   const materiasTronco = materiasRegulares.filter(m => m.tipo === 'Tronco Común');
   const materiasCarrera = materiasRegulares.filter(m => m.tipo !== 'Tronco Común');
 
@@ -578,12 +601,6 @@ const GruposYHorarios = () => {
                       </p>
                     </div>
                   </div>
-                  {alumnoInfo.bloqueado && (
-                    <div className="bg-white px-3 py-1.5 rounded border border-blue-100 text-xs font-bold text-blue-800 flex items-center gap-2">
-                      <AlertTriangle className="w-4 h-4 text-orange-500" />
-                      Grupo Base Bloqueado ({alumnoInfo.grupoBase})
-                    </div>
-                  )}
                 </div>
 
                 {materiasRecursamiento.length > 0 && (
