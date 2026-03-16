@@ -6,6 +6,7 @@ from app.db.database import get_db
 from app.models.academic_group import AcademicGroup
 from app.models.academic_period import AcademicPeriod
 from app.models.enrollment import StudentEnrollment
+from app.models.grade_status import GradeStatus
 from app.models.teacher import Teacher
 from app.models.subject import Subject
 from app.schemas.enrollment import BulkGradeUpdateRequest
@@ -32,6 +33,21 @@ def get_periods(db: Session = Depends(get_db)):
         }
         for p in periods
     ]
+
+
+# ──────────────────────────────────────────────
+# GET  /docente/grade-statuses
+# Devuelve los códigos de justificación disponibles para el docente
+# (solo los que tienen is_manual_justification = True)
+# ──────────────────────────────────────────────
+@router.get("/grade-statuses")
+def get_grade_statuses(db: Session = Depends(get_db)):
+    statuses = (
+        db.query(GradeStatus)
+        .filter(GradeStatus.is_manual_justification == True)
+        .all()
+    )
+    return [{"code": s.code, "label": s.description} for s in statuses]
 
 
 def _format_horario(horario_json) -> str:
@@ -173,7 +189,7 @@ def bulk_update_grades(group_id: int, data: BulkGradeUpdateRequest, db: Session 
                 old_values[attr_status] = current_status
 
                 setattr(enrollment, attr_score, new_score)
-                setattr(enrollment, attr_status, new_status.value if new_status else "OE")
+                setattr(enrollment, attr_status, new_status if new_status else "OE")
 
                 new_values[attr_score] = getattr(enrollment, attr_score)
                 new_values[attr_status] = getattr(enrollment, attr_status)

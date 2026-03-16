@@ -12,3 +12,4 @@ from .role import Role
 from .user import User
 from .administrator import Administrator
 from .academic_period import AcademicPeriod
+from .grade_status import GradeStatus

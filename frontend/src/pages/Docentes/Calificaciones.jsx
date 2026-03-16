@@ -3,19 +3,6 @@ import { ChevronUp, ChevronDown, Info, CheckCircle, XCircle } from 'lucide-react
 import client from '../../lib/axios';
 import { useAuth } from '../../hooks/AuthContext';
 
-const JUSTIFICACIONES = [
-  { code: 'CO', label: 'Corrección Por Omisión' },
-  { code: 'CP', label: 'Corrección Por el profesor' },
-  { code: 'CR', label: 'Corrección por error de captura' },
-  { code: 'DL', label: 'Calificación Extemporánea' },
-  { code: 'EC', label: 'Corrección por error en catálogo' },
-  { code: 'EI', label: 'Equivalencia Interna' },
-  { code: 'EQ', label: 'Equivalencia' },
-  { code: 'RC', label: 'Re-calculado' },
-  { code: 'RV', label: 'Revalidación' },
-  { code: 'SE', label: 'Corrección por error de seriado' },
-  { code: 'SG', label: 'Sustitución de calificación' },
-];
 
 const CUATRIMESTRE_LABEL = {
   1: '1er', 2: '2do', 3: '3er', 4: '4to', 5: '5to',
@@ -56,6 +43,9 @@ const normalize = (v) => (v === null || v === undefined ? '' : v);
 const Calificaciones = () => {
   const { user } = useAuth();
 
+  // Justification catalog (from DB)
+  const [justificaciones, setJustificaciones] = useState([]);
+
   // Periods
   const [periods, setPeriods] = useState([]);
   const [selectedPeriod, setSelectedPeriod] = useState(null);
@@ -80,21 +70,25 @@ const Calificaciones = () => {
   // Teacher internal ID (needed for audit log in save payload)
   const [teacherId, setTeacherId] = useState(null);
 
-  // ── Fetch periods on mount, default to active ──────────────
+  // ── Fetch periods + justification catalog on mount ─────────
   useEffect(() => {
-    const fetchPeriods = async () => {
+    const fetchInitialData = async () => {
       try {
-        const res = await client.get('/docente/periodos');
-        setPeriods(res.data);
-        const active = res.data.find(p => p.is_active);
-        setSelectedPeriod(active ? active.period_name : res.data[0]?.period_name ?? null);
+        const [periodRes, statusRes] = await Promise.all([
+          client.get('/docente/periodos'),
+          client.get('/docente/grade-statuses'),
+        ]);
+        setPeriods(periodRes.data);
+        const active = periodRes.data.find(p => p.is_active);
+        setSelectedPeriod(active ? active.period_name : periodRes.data[0]?.period_name ?? null);
+        setJustificaciones(statusRes.data);
       } catch (err) {
-        console.error('Error cargando periodos:', err);
+        console.error('Error cargando datos iniciales:', err);
       } finally {
         setLoadingPeriods(false);
       }
     };
-    fetchPeriods();
+    fetchInitialData();
   }, []);
 
   // ── Fetch teacher groups when period or user changes ───────
@@ -521,7 +515,7 @@ const Calificaciones = () => {
                     className="w-full p-2.5 bg-white border border-gray-300 rounded text-sm focus:ring-2 focus:ring-[#0B172A] outline-none"
                   >
                     <option value="" disabled>Selecciona un motivo...</option>
-                    {JUSTIFICACIONES.map(j => (
+                    {justificaciones.map(j => (
                       <option key={j.code} value={j.code}>{j.code} - {j.label}</option>
                     ))}
                   </select>
