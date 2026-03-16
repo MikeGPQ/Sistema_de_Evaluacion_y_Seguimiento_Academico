@@ -50,7 +50,7 @@ const AsistenciaDocente = () => {
   const tableContainerRef = useRef(null); 
   
   const [alumnos, setAlumnos] = useState([]);
-  const [alumnosOriginales, setAlumnosOriginales] = useState([]); // 🌟 PARA DETECTAR CAMBIOS EN NOTAS
+  const [alumnosOriginales, setAlumnosOriginales] = useState([]); 
   const [fechasClase, setFechasClase] = useState([]); 
   const [actaCerrada, setActaCerrada] = useState(false);
   const [periodoActivo, setPeriodoActivo] = useState(true); 
@@ -63,8 +63,17 @@ const AsistenciaDocente = () => {
   const [modoEdicion, setModoEdicion] = useState(false);
   const [celdaEditando, setCeldaEditando] = useState(null); 
   
-  const hoy = new Date().toISOString().split('T')[0]; 
+  // 🌟 ZONA HORARIA DE MÉRIDA PARA EVITAR BUGS DE FECHA
+  const hoy = new Intl.DateTimeFormat('en-CA', { 
+    timeZone: 'America/Merida', 
+    year: 'numeric', 
+    month: '2-digit', 
+    day: '2-digit' 
+  }).format(new Date());
+
   const isSoloLectura = actaCerrada || !periodoActivo;
+  // 🌟 VALIDACIÓN DE PERIODO FUTURO
+  const esPeriodoFuturo = fechasClase.length > 0 && fechasClase[0] > hoy;
 
   const handleBusquedaChange = (e) => {
     let val = e.target.value;
@@ -138,7 +147,7 @@ const AsistenciaDocente = () => {
         
         const alumnosBD = response.data.alumnos || [];
         setAlumnos(alumnosBD);
-        setAlumnosOriginales(JSON.parse(JSON.stringify(alumnosBD))); // Clonamos para comparar luego
+        setAlumnosOriginales(JSON.parse(JSON.stringify(alumnosBD))); 
         setCambiosPendientes({});
         setModoEdicion(false);
 
@@ -203,9 +212,7 @@ const AsistenciaDocente = () => {
     });
   });
 
-  // 🌟 LÓGICA PARA HABILITAR/DESHABILITAR EL BOTÓN DE GUARDAR
- // 🌟 LÓGICA PARA HABILITAR/DESHABILITAR EL BOTÓN DE GUARDAR
-// 🌟 LÓGICA MEJORADA PARA HABILITAR/DESHABILITAR EL BOTÓN DE GUARDAR
+  // 🌟 LÓGICA MEJORADA DE CAMBIOS PENDIENTES
   const tieneCambiosNotas = alumnos.some((a) => {
     const original = alumnosOriginales.find(orig => orig.id === a.id);
     return original && (original.observaciones || '') !== (a.observaciones || '');
@@ -214,13 +221,8 @@ const AsistenciaDocente = () => {
   const tieneCambiosAsistencias = Object.values(cambiosPendientes).some(cambio => {
     const alumno = alumnos.find(a => a.matricula === cambio.matricula);
     if (!alumno) return false;
-    
     const estadoBD = alumno.asistencias[cambio.fecha];
-    // Si ya existía en la base de datos, verificamos si es diferente al original
-    if (estadoBD) {
-      return estadoBD !== cambio.estado;
-    }
-    // Si estaba vacío y el maestro lo tocó, sí es un cambio real
+    if (estadoBD) return estadoBD !== cambio.estado;
     return true;
   });
 
@@ -234,19 +236,24 @@ const AsistenciaDocente = () => {
     }));
   };
 
+  // 🌟 ELIMINAR CAMBIO SI SE DESMARCA TODA LA COLUMNA
   const toggleColumna = (fecha, e) => {
     if (isSoloLectura) return;
-    const nuevoEstado = e.target.checked ? 'P' : 'F'; 
+    const isChecked = e.target.checked;
     const nuevosCambios = { ...cambiosPendientes };
     alumnosFiltrados.forEach(a => {
       if (!a.asistencias[fecha]) {
-        nuevosCambios[`${a.matricula}_${fecha}`] = { matricula: a.matricula, fecha: fecha, estado: nuevoEstado, notas_justificacion: null };
+        if (isChecked) {
+          nuevosCambios[`${a.matricula}_${fecha}`] = { matricula: a.matricula, fecha: fecha, estado: 'P', notas_justificacion: null };
+        } else {
+          delete nuevosCambios[`${a.matricula}_${fecha}`]; 
+        }
       }
     });
     setCambiosPendientes(nuevosCambios);
   };
 
-const manejarSeleccionEstado = async (alumno, fecha, estadoElegido) => {
+  const manejarSeleccionEstado = async (alumno, fecha, estadoElegido) => {
     setCeldaEditando(null); 
     if (estadoElegido === 'J') {
       const { value: motivo } = await Swal.fire({
@@ -261,7 +268,7 @@ const manejarSeleccionEstado = async (alumno, fecha, estadoElegido) => {
       });
       if (motivo) {
         registrarCambio(alumno.matricula, fecha, 'J', motivo);
-        // 🌟 NUEVO: Mensaje Toast de confirmación
+        // 🌟 MENSAJE DE CONFIRMACIÓN JUSTIFICANTE
         Swal.fire({
           toast: true, position: 'bottom-end', icon: 'info',
           title: 'Justificante agregado', text: 'Recuerda hacer clic en "Guardar Cambios".',
@@ -273,7 +280,19 @@ const manejarSeleccionEstado = async (alumno, fecha, estadoElegido) => {
     }
   };
 
+  // 🌟 BLOQUEO DE NOTAS EN MODO LECTURA
   const mostrarObservaciones = (alumno) => {
+    if (isSoloLectura) {
+      Swal.fire({
+        title: `Notas de ${alumno.nombre}`,
+        text: alumno.observaciones || "No hay observaciones registradas.",
+        icon: 'info',
+        confirmButtonColor: '#1A237E',
+        confirmButtonText: 'Cerrar'
+      });
+      return;
+    }
+
     Swal.fire({
       title: `Notas del Alumno`,
       html: `<b>${alumno.nombre}</b><br/><span style="font-size:12px; color:gray; margin-top:5px; display:block;">Agrega observaciones generales para el seguimiento.</span>`,
@@ -286,15 +305,9 @@ const manejarSeleccionEstado = async (alumno, fecha, estadoElegido) => {
     }).then((result) => {
       if (result.isConfirmed) {
         setAlumnos(prev => prev.map(a => a.id === alumno.id ? { ...a, observaciones: result.value } : a));
-        // 🌟 MENSAJE DE CONFIRMACIÓN TOAST
         Swal.fire({
-          toast: true,
-          position: 'bottom-end',
-          icon: 'info',
-          title: 'Nota agregada',
-          text: 'Recuerda hacer clic en "Guardar Cambios" para confirmar.',
-          showConfirmButton: false,
-          timer: 4500
+          toast: true, position: 'bottom-end', icon: 'info', title: 'Nota agregada', 
+          text: 'Recuerda hacer clic en "Guardar Cambios" para confirmar.', showConfirmButton: false, timer: 4500
         });
       }
     });
@@ -338,7 +351,6 @@ const manejarSeleccionEstado = async (alumno, fecha, estadoElegido) => {
       });
       
       Swal.fire({ icon: 'success', title: '¡Guardado Exitoso!', text: `Se registraron ${response.data.total_cambios} actualizaciones en la base de datos.`, confirmButtonColor: '#1A237E' });
-      // Truco limpio para recargar los datos
       setMateriaSeleccionada(prev => { const actual = prev; setMateriaSeleccionada(''); setTimeout(() => setMateriaSeleccionada(actual), 10); return prev; });
       
     } catch (error) {
@@ -350,15 +362,15 @@ const manejarSeleccionEstado = async (alumno, fecha, estadoElegido) => {
 
   const nombreDocentePDF = user?.full_name || user?.nombre_completo || user?.nombre || "DOCENTE TITULAR";
 
-  // 🌟 GENERACIÓN DE PDF MEJORADA (Idéntica a la Referencia)
+  // 🌟 PDF CON 'U' BLANCA Y FLECHITAS/X PERFECTAS DE COLORES
   const handleExportPDF = () => {
     try {
       const doc = new jsPDF('landscape'); 
       const pageWidth = doc.internal.pageSize.getWidth();
       
-      // Cuadro Logo "U"
+      // Cuadro Logo "U" y Letra Blanca
       doc.setFillColor(11, 23, 42); doc.rect(14, 15, 12, 12, 'F');
-      doc.setTextColor(255, 255, 255); doc.setFontSize(16); doc.setFont("helvetica", "bold"); doc.text("U", 20, 23.5, { align: "center" });
+      doc.setTextColor(255, 255, 255); doc.setFontSize(16); doc.setFont("helvetica", "bold"); doc.text("U", 20, 23.5, { align: "center" }); 
       
       // Títulos Izquierda
       doc.setTextColor(26, 35, 126); doc.setFontSize(16); doc.text("UNID", 30, 20);
@@ -368,7 +380,6 @@ const manejarSeleccionEstado = async (alumno, fecha, estadoElegido) => {
       doc.setTextColor(26, 35, 126); doc.setFontSize(12); doc.setFont("helvetica", "bold"); doc.text("REPORTE DE ASISTENCIA DOCENTE", pageWidth - 14, 20, { align: "right" });
       doc.setFontSize(9); doc.setTextColor(100); doc.setFont("helvetica", "normal"); doc.text("Documento Oficial", pageWidth - 14, 24, { align: "right" });
 
-      // Línea Naranja
       doc.setDrawColor(242, 169, 0); doc.setLineWidth(0.5); doc.line(14, 28, pageWidth - 14, 28);
       
       // Headers de Datos
@@ -388,22 +399,20 @@ const manejarSeleccionEstado = async (alumno, fecha, estadoElegido) => {
       doc.text(periodoSeleccionado || "S/A", 14, 50);
       doc.text(new Date().toLocaleDateString('es-ES', { day: 'numeric', month: 'long', year: 'numeric' }).toUpperCase(), 120, 50);
       
-      // 🌟 FORMATO DE ID CORREGIDO
       const reporteIDStr = `REPORTE-${periodoSeleccionado}-${codigoMateria}`;
       doc.setTextColor(100); doc.text(reporteIDStr, 200, 50);
 
-      // Preparación de Tabla
       const headersDias = fechasClase.map(f => formatearFechaMes(f));
       const tableColumn = ["MATRÍCULA", "NOMBRE DEL ALUMNO", ...headersDias, "ASIST.", "FALTAS"];
-
-    const tableRows = alumnosFiltrados.map(a => {
+      
+      const tableRows = alumnosFiltrados.map(a => {
         let clasesRegistradas = 0, faltasTotales = 0;
         const asistenciasFila = fechasClase.map(fecha => {
           const estadoBD = a.asistencias[fecha];
           if (!estadoBD) return '-'; 
           clasesRegistradas++;
           if (estadoBD === 'F') faltasTotales++;
-          // 🌟 MANDAMOS LA LETRA CRUDA A LA TABLA DEL PDF
+          // Mandamos la letra original para procesarla abajo
           return estadoBD; 
         });
         const asistenciasTotal = clasesRegistradas - faltasTotales;
@@ -413,7 +422,7 @@ const manejarSeleccionEstado = async (alumno, fecha, estadoElegido) => {
       autoTable(doc, {
         head: [tableColumn], body: tableRows, startY: 55, theme: 'plain',
         horizontalPageBreak: true, horizontalPageBreakRepeat: 0,
-        margin: { bottom: 25, top: 15, left: 14, right: 14 }, // Espacio para la leyenda
+        margin: { bottom: 25, top: 15, left: 14, right: 14 }, 
         styles: { fontSize: 7, cellPadding: 2, textColor: [80, 80, 80] },
         headStyles: { fillColor: [248, 249, 250], textColor: [26, 35, 126], fontStyle: 'bold', lineWidth: 0.1, lineColor: [230, 230, 230], halign: 'center', valign: 'middle' },
         bodyStyles: { lineWidth: 0.1, lineColor: [240, 240, 240] },
@@ -423,22 +432,20 @@ const manejarSeleccionEstado = async (alumno, fecha, estadoElegido) => {
           [tableColumn.length - 2]: { fontStyle: 'bold', textColor: [26, 35, 126], halign: 'center' }, 
           [tableColumn.length - 1]: { fontStyle: 'bold', textColor: [220, 38, 38], halign: 'center' } 
         },
-      // 🌟 CORRECCIÓN PARA FLECHITAS PERFECTAS (USANDO CORCHETES)
-       // 🌟 MAGIA PARA COLORES Y FLECHAS PERFECTAS
         didParseCell: function (data) {
           if (data.section === 'head' && data.column.index >= 2) data.cell.styles.halign = 'center';
           if (data.section === 'body') {
             const rawVal = data.cell.raw;
             if (rawVal === 'P') { 
-              data.cell.text = ['4']; // 4 en ZapfDingbats es ✔
+              data.cell.text = ['4']; // ✔
               data.cell.styles.font = 'zapfdingbats'; 
-              data.cell.styles.textColor = [34, 197, 94]; // Verde
+              data.cell.styles.textColor = [34, 197, 94]; 
               data.cell.styles.halign = 'center'; 
             } 
             else if (rawVal === 'F') { 
-              data.cell.text = ['8']; // 8 en ZapfDingbats es ✘
+              data.cell.text = ['8']; // ✘
               data.cell.styles.font = 'zapfdingbats'; 
-              data.cell.styles.textColor = [239, 68, 68]; // Rojo
+              data.cell.styles.textColor = [239, 68, 68]; 
               data.cell.styles.halign = 'center'; 
             }
             else if (rawVal === 'R' || rawVal === 'J') { 
@@ -454,15 +461,21 @@ const manejarSeleccionEstado = async (alumno, fecha, estadoElegido) => {
             if (data.column.index >= 2 && data.column.index <= tableColumn.length - 3) data.cell.styles.halign = 'center';
           }
         },
-        // 🌟 LEYENDAS INFERIORES
         didDrawPage: function (data) {
           const footerY = doc.internal.pageSize.getHeight() - 15;
-          doc.setFontSize(7); doc.setTextColor(150); doc.setFont("helvetica", "normal");
+          doc.setFontSize(8); 
           
-          doc.text("✓ Asistencia (Presente)", 14, footerY);
-          doc.text("X Falta (Ausencia Injustificada)", 55, footerY);
-          doc.text("R Retardo", 105, footerY);
-          doc.text("J Justificante", 130, footerY);
+          doc.setFont("zapfdingbats"); doc.setTextColor(34, 197, 94); doc.text("4", 14, footerY); // ✔
+          doc.setFont("helvetica", "normal"); doc.setTextColor(150); doc.text(" Asistencia (Presente)", 17, footerY);
+
+          doc.setFont("zapfdingbats"); doc.setTextColor(239, 68, 68); doc.text("8", 60, footerY); // ✘
+          doc.setFont("helvetica", "normal"); doc.setTextColor(150); doc.text(" Falta (Ausencia Injustificada)", 63, footerY);
+          
+          doc.setFont("helvetica", "bold"); doc.setTextColor(150); doc.text("R", 115, footerY);
+          doc.setFont("helvetica", "normal"); doc.text(" Retardo", 118, footerY);
+
+          doc.setFont("helvetica", "bold"); doc.text("J", 140, footerY);
+          doc.setFont("helvetica", "normal"); doc.text(" Justificante", 143, footerY);
 
           doc.setTextColor(100);
           doc.text("Documento generado por Sistema Académico SESA UNID", 14, footerY + 5);
@@ -506,10 +519,19 @@ const manejarSeleccionEstado = async (alumno, fecha, estadoElegido) => {
 
       <div className="max-w-[1400px] mx-auto bg-white rounded-xl shadow-sm border border-gray-200 p-6 relative z-10">
         
-        {!periodoActivo && !cargando && (
+        {/* 🌟 MENSAJE PERIODO PASADO */}
+        {!periodoActivo && !cargando && !esPeriodoFuturo && (
           <div className="mb-6 p-4 bg-amber-50 border border-amber-200 rounded-lg flex items-center text-amber-800 shadow-sm">
             <AlertTriangle className="w-5 h-5 mr-3 shrink-0" />
             <p className="text-sm font-bold">Este periodo académico ha finalizado. El módulo se encuentra en modo Solo Lectura histórico.</p>
+          </div>
+        )}
+
+        {/* 🌟 MENSAJE PERIODO FUTURO */}
+        {!periodoActivo && !cargando && esPeriodoFuturo && (
+          <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-lg flex items-center text-blue-800 shadow-sm">
+            <AlertTriangle className="w-5 h-5 mr-3 shrink-0" />
+            <p className="text-sm font-bold">Este periodo académico todavía no comienza. El módulo se encuentra en modo Solo Lectura.</p>
           </div>
         )}
 
@@ -600,7 +622,6 @@ const manejarSeleccionEstado = async (alumno, fecha, estadoElegido) => {
               <button onClick={handleExportPDF} disabled={!materiaSeleccionada || alumnos.length === 0} className="h-[38px] flex items-center px-4 py-2 bg-white border border-gray-300 text-gray-700 rounded-lg text-sm font-bold hover:bg-gray-50 hover:text-[#1A237E] hover:border-[#1A237E] transition-all shadow-sm disabled:opacity-50">
                 <Download className="w-4 h-4 mr-2" /> Exportar PDF
               </button>
-              {/* 🌟 BOTÓN DESHABILITADO SI NO HAY CAMBIOS */}
               <button onClick={handleGuardar} disabled={guardando || !materiaSeleccionada || isSoloLectura || !hayCambiosSinGuardar} className="h-[38px] flex items-center px-5 py-2 bg-[#1A237E] text-white rounded-lg text-sm font-bold hover:bg-[#283593] transition-colors shadow-sm disabled:opacity-50 disabled:cursor-not-allowed">
                 {guardando ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Save className="w-4 h-4 mr-2" />}
                 {guardando ? 'Guardando...' : 'Guardar Cambios'}
@@ -716,7 +737,23 @@ const manejarSeleccionEstado = async (alumno, fecha, estadoElegido) => {
                             const isChecked = cambioPendiente === 'P'; 
                             return (
                               <td key={fecha} className="p-1 border-r border-gray-100 text-center align-middle bg-blue-50/20">
-                                <input type="checkbox" checked={isChecked} onChange={(e) => registrarCambio(alumno.matricula, fecha, e.target.checked ? 'P' : 'F')} className="w-5 h-5 accent-green-600 text-green-600 rounded cursor-pointer shadow-sm" />
+                                {/* 🌟 ELIMINACIÓN DE CAMBIO AL DESMARCAR (UN SOLO ALUMNO) */}
+                                <input 
+                                  type="checkbox" 
+                                  checked={isChecked} 
+                                  onChange={(e) => {
+                                    if (e.target.checked) {
+                                      registrarCambio(alumno.matricula, fecha, 'P');
+                                    } else {
+                                      setCambiosPendientes(prev => {
+                                        const nuevos = { ...prev };
+                                        delete nuevos[`${alumno.matricula}_${fecha}`];
+                                        return nuevos;
+                                      });
+                                    }
+                                  }} 
+                                  className="w-5 h-5 accent-green-600 text-green-600 rounded cursor-pointer shadow-sm" 
+                                />
                               </td>
                             );
                           }
@@ -749,7 +786,6 @@ const manejarSeleccionEstado = async (alumno, fecha, estadoElegido) => {
                         })}
 
                         <td className="py-2 px-3 text-center align-middle min-w-[80px]">
-                          {/* 🌟 LA NOTA SE QUEDA PINTADA DE AZUL SI YA TIENE TEXTO */}
                           <button className={`transition-colors ${alumno.observaciones ? 'text-[#1A237E]' : 'text-gray-400 hover:text-[#1A237E]'}`} title="Notas Generales" onClick={() => mostrarObservaciones(alumno)}>
                             <MessageSquareText className="w-4 h-4" />
                           </button>
