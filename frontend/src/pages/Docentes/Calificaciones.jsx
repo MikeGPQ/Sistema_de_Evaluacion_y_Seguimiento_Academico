@@ -319,6 +319,16 @@ const Calificaciones = () => {
         )}
       </div>
 
+      {/* Periodo inactivo — banner global */}
+      {!loadingPeriods && selectedPeriod && !isPeriodActive && (
+        <div className="mb-6 bg-amber-50 border border-amber-300 rounded-lg px-4 py-3 flex items-center gap-3 text-amber-800">
+          <Info size={16} className="shrink-0" />
+          <p className="text-sm font-medium">
+            Estás viendo el periodo <strong>{selectedPeriod}</strong>, el cual no es el activo. Solo puedes consultar las calificaciones.
+          </p>
+        </div>
+      )}
+
       {loadingGroups ? (
         <div className="flex items-center justify-center py-20">
           <p className="text-gray-500">Cargando grupos...</p>
@@ -372,14 +382,12 @@ const Calificaciones = () => {
                 {/* Expanded content */}
                 {isOpen && (
                   <>
-                    {isReadOnly && (
+                    {isReadOnly && (gd?.actaStatus === 'cerrada' || gd?.actaStatus === 'generada') && (
                       <div className="mx-4 mt-4 bg-red-50 border-l-4 border-red-600 p-4 rounded-r-lg flex gap-3 text-red-800">
                         <Info className="shrink-0" size={16} />
                         <p className="text-sm">
                           <strong>Modo Solo Lectura:</strong>{' '}
-                          {!isPeriodActive
-                            ? 'El periodo seleccionado no es el activo. Solo puedes consultar las calificaciones.'
-                            : `El acta de este grupo está en estado "${gd?.actaStatus}".`}
+                          {`El acta de este grupo está en estado "${gd?.actaStatus}".`}
                         </p>
                       </div>
                     )}
