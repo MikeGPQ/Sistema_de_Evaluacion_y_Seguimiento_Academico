@@ -62,17 +62,26 @@ def login(data: LoginRequest, db: Session = Depends(get_db)):
     if not verify_password(data.password, user.password_hash):
 
         user.failed_login_attempts = (user.failed_login_attempts or 0) + 1
+        attempts = user.failed_login_attempts
 
-        if user.failed_login_attempts >= 5:
+        if attempts >= 5:
             user.is_locked = True
             user.locked_at = datetime.utcnow()
             db.commit()
             raise HTTPException(
                 status_code=403,
-                detail="Cuenta bloqueada por demasiados intentos fallidos."
+                detail="Tu cuenta ha sido bloqueada por demasiados intentos fallidos. Contacta al administrador."
             )
 
         db.commit()
+
+        remaining = 5 - attempts
+        if remaining <= 2:
+            raise HTTPException(
+                status_code=401,
+                detail=f"ID o contraseña incorrectos. Advertencia: te queda{'n' if remaining > 1 else ''} {remaining} intento{'s' if remaining > 1 else ''} antes de que tu cuenta sea bloqueada."
+            )
+
         raise HTTPException(status_code=401, detail=generic_error)
 
     # Login correcto

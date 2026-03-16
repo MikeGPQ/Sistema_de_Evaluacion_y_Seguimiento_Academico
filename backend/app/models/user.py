@@ -11,9 +11,6 @@ class User(Base):
     password_hash = Column(String(255), nullable=False)
     role_id = Column(Integer, ForeignKey("roles.id"), nullable=False)
 
-    # Estado de cuenta
-    is_active = Column(Boolean, server_default=text("TRUE"))
-
     # Contraseña temporal
     is_temp_password = Column(Boolean, server_default=text("TRUE"))
 
