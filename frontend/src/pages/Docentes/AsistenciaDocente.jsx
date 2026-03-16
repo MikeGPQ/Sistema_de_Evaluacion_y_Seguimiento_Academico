@@ -260,15 +260,31 @@ const AsistenciaDocente = () => {
         title: 'Falta Justificada',
         input: 'text',
         inputLabel: 'Escriba el motivo (Obligatorio)',
-        inputPlaceholder: 'Ej. Receta médica IMSS',
+        inputPlaceholder: 'Ej. Receta medica IMSS',
         showCancelButton: true,
         confirmButtonColor: '#1A237E',
         cancelButtonText: 'Cancelar',
-        inputValidator: (value) => { if (!value) return '¡Necesitas escribir un motivo para justificar!'; }
+        didOpen: () => {
+          const input = Swal.getInput();
+          input.addEventListener('input', () => {
+            let val = input.value;
+            // Solo alfanuméricos y espacios
+            val = val.replace(/[^a-zA-Z0-9áéíóúÁÉÍÓÚñÑüÜ\s]/g, '');
+            // No más de un espacio seguido
+            val = val.replace(/\s{2,}/g, ' ');
+            // No permite iniciar con espacio
+            if (val.startsWith(' ')) val = val.trimStart();
+            input.value = val;
+          });
+        },
+        inputValidator: (value) => { 
+          // Bloquea si son puros espacios o está vacío
+          if (!value || value.trim() === '') return '¡Necesitas escribir un motivo válido!'; 
+        }
       });
       if (motivo) {
-        registrarCambio(alumno.matricula, fecha, 'J', motivo);
-        // 🌟 MENSAJE DE CONFIRMACIÓN JUSTIFICANTE
+        // Guardamos con trim() para eliminar espacios sobrantes al final
+        registrarCambio(alumno.matricula, fecha, 'J', motivo.trim());
         Swal.fire({
           toast: true, position: 'bottom-end', icon: 'info',
           title: 'Justificante agregado', text: 'Recuerda hacer clic en "Guardar Cambios".',
@@ -281,7 +297,7 @@ const AsistenciaDocente = () => {
   };
 
   // 🌟 BLOQUEO DE NOTAS EN MODO LECTURA
-  const mostrarObservaciones = (alumno) => {
+ const mostrarObservaciones = (alumno) => {
     if (isSoloLectura) {
       Swal.fire({
         title: `Notas de ${alumno.nombre}`,
@@ -293,18 +309,56 @@ const AsistenciaDocente = () => {
       return;
     }
 
+    const notaOriginal = alumno.observaciones ? alumno.observaciones.trim() : '';
+
     Swal.fire({
       title: `Notas del Alumno`,
       html: `<b>${alumno.nombre}</b><br/><span style="font-size:12px; color:gray; margin-top:5px; display:block;">Agrega observaciones generales para el seguimiento.</span>`,
       input: 'textarea',
-      inputValue: alumno.observaciones,
+      inputValue: notaOriginal,
       showCancelButton: true,
       confirmButtonText: 'Confirmar Nota',
       cancelButtonText: 'Cancelar',
-      confirmButtonColor: '#1A237E'
+      confirmButtonColor: '#1A237E',
+      didOpen: () => {
+        const input = Swal.getInput();
+        const confirmButton = Swal.getConfirmButton();
+        
+        // 🌟 Nace apagado porque al abrirlo está igual que el original
+        confirmButton.disabled = true;
+
+        input.addEventListener('input', () => {
+          let val = input.value;
+          
+          // Solo alfanuméricos y espacios (incluye saltos de línea)
+          val = val.replace(/[^a-zA-Z0-9áéíóúÁÉÍÓÚñÑüÜ\s.,]/g, ''); 
+          // No más de un espacio seguido
+          val = val.replace(/ {2,}/g, ' '); 
+          // No permite iniciar con espacio
+          if (val.startsWith(' ')) val = val.trimStart();
+          
+          input.value = val;
+
+          // 🌟 VALIDACIONES EN TIEMPO REAL
+          const textoLimpio = val.trim();
+          const estaVacio = textoLimpio === '';
+          const esIgualAlOriginal = textoLimpio === notaOriginal;
+
+          // Si está vacío o no le cambió nada, el botón se bloquea
+          if (estaVacio || esIgualAlOriginal) {
+            confirmButton.disabled = true;
+          } else {
+            confirmButton.disabled = false;
+          }
+        });
+      },
+      preConfirm: (value) => {
+        return value ? value.trim() : '';
+      }
     }).then((result) => {
       if (result.isConfirmed) {
-        setAlumnos(prev => prev.map(a => a.id === alumno.id ? { ...a, observaciones: result.value } : a));
+        const notaLimpia = result.value;
+        setAlumnos(prev => prev.map(a => a.id === alumno.id ? { ...a, observaciones: notaLimpia } : a));
         Swal.fire({
           toast: true, position: 'bottom-end', icon: 'info', title: 'Nota agregada', 
           text: 'Recuerda hacer clic en "Guardar Cambios" para confirmar.', showConfirmButton: false, timer: 4500
