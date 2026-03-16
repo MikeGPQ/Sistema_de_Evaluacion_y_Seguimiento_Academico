@@ -419,31 +419,32 @@ const AsistenciaDocente = () => {
         return [a.matricula, a.nombre, ...asistenciasFila, asistenciasTotal.toString(), faltasTotales.toString()];
       });
 
-      autoTable(doc, {
+ autoTable(doc, {
         head: [tableColumn], body: tableRows, startY: 55, theme: 'plain',
-        horizontalPageBreak: true, horizontalPageBreakRepeat: 0,
-        margin: { bottom: 25, top: 15, left: 14, right: 14 }, 
-        styles: { fontSize: 7, cellPadding: 2, textColor: [80, 80, 80] },
+        horizontalPageBreak: true, 
+        horizontalPageBreakRepeat: 0, // 🌟 MAGIA: "0" significa amarrar solo la columna Matrícula
+        margin: { bottom: 25, top: 15, left: 10, right: 10 }, 
+        styles: { fontSize: 6.5, cellPadding: 1, textColor: [80, 80, 80] }, 
         headStyles: { fillColor: [248, 249, 250], textColor: [26, 35, 126], fontStyle: 'bold', lineWidth: 0.1, lineColor: [230, 230, 230], halign: 'center', valign: 'middle' },
         bodyStyles: { lineWidth: 0.1, lineColor: [240, 240, 240] },
         columnStyles: { 
-          0: { fontStyle: 'bold', cellWidth: 20, halign: 'center' }, 
-          1: { cellWidth: 55 },
-          [tableColumn.length - 2]: { fontStyle: 'bold', textColor: [26, 35, 126], halign: 'center' }, 
-          [tableColumn.length - 1]: { fontStyle: 'bold', textColor: [220, 38, 38], halign: 'center' } 
+          0: { fontStyle: 'bold', cellWidth: 18, halign: 'center' }, 
+          1: { cellWidth: 45 }, 
+          [tableColumn.length - 2]: { fontStyle: 'bold', textColor: [26, 35, 126], halign: 'center', cellWidth: 12 }, 
+          [tableColumn.length - 1]: { fontStyle: 'bold', textColor: [220, 38, 38], halign: 'center', cellWidth: 12 } 
         },
         didParseCell: function (data) {
           if (data.section === 'head' && data.column.index >= 2) data.cell.styles.halign = 'center';
           if (data.section === 'body') {
             const rawVal = data.cell.raw;
             if (rawVal === 'P') { 
-              data.cell.text = ['4']; // ✔
+              data.cell.text = ['4']; 
               data.cell.styles.font = 'zapfdingbats'; 
               data.cell.styles.textColor = [34, 197, 94]; 
               data.cell.styles.halign = 'center'; 
             } 
             else if (rawVal === 'F') { 
-              data.cell.text = ['8']; // ✘
+              data.cell.text = ['8']; 
               data.cell.styles.font = 'zapfdingbats'; 
               data.cell.styles.textColor = [239, 68, 68]; 
               data.cell.styles.halign = 'center'; 
@@ -465,10 +466,10 @@ const AsistenciaDocente = () => {
           const footerY = doc.internal.pageSize.getHeight() - 15;
           doc.setFontSize(8); 
           
-          doc.setFont("zapfdingbats"); doc.setTextColor(34, 197, 94); doc.text("4", 14, footerY); // ✔
+          doc.setFont("zapfdingbats"); doc.setTextColor(34, 197, 94); doc.text("4", 14, footerY); 
           doc.setFont("helvetica", "normal"); doc.setTextColor(150); doc.text(" Asistencia (Presente)", 17, footerY);
 
-          doc.setFont("zapfdingbats"); doc.setTextColor(239, 68, 68); doc.text("8", 60, footerY); // ✘
+          doc.setFont("zapfdingbats"); doc.setTextColor(239, 68, 68); doc.text("8", 60, footerY); 
           doc.setFont("helvetica", "normal"); doc.setTextColor(150); doc.text(" Falta (Ausencia Injustificada)", 63, footerY);
           
           doc.setFont("helvetica", "bold"); doc.setTextColor(150); doc.text("R", 115, footerY);
@@ -479,7 +480,7 @@ const AsistenciaDocente = () => {
 
           doc.setTextColor(100);
           doc.text("Documento generado por Sistema Académico SESA UNID", 14, footerY + 5);
-          doc.text(`Página ${data.pageNumber}`, pageWidth - 20, footerY + 5, { align: 'right' });
+          doc.text(`Página ${data.pageNumber}`, doc.internal.pageSize.getWidth() - 20, footerY + 5, { align: 'right' });
         }
       });
       doc.save(`Lista_Asistencia_${codigoMateria}.pdf`);
