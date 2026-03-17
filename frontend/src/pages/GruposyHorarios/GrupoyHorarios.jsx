@@ -400,38 +400,89 @@ const GruposYHorarios = () => {
     }
   };
 
-  // funcion para descargar el horario en formato pdf
-  const handleDownloadPDF = async () => {
-    const input = document.getElementById('horario-imprimible');
-    if (!input || !alumnoInfo) return;
+    const handleDownloadPDF = async () => {
+      const input = document.getElementById('horario-imprimible');
+      if (!input || !alumnoInfo) return;
 
-    Swal.fire({ title: 'Procesando Archivo', text: 'Optimizando resolución espacial...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+      Swal.fire({ 
+        title: 'Generando PDF', 
+        text: 'Optimizando resolución...', 
+        allowOutsideClick: false, 
+        didOpen: () => Swal.showLoading() 
+    });
+    
     window.scrollTo(0, 0);
 
     const scrollableDiv = input.querySelector('.overflow-x-auto');
     const originalOverflowX = scrollableDiv ? scrollableDiv.style.overflowX : '';
     const originalOverflowY = scrollableDiv ? scrollableDiv.style.overflowY : '';
-    if (scrollableDiv) { scrollableDiv.style.overflowX = 'hidden'; scrollableDiv.style.overflowY = 'hidden'; }
+    if (scrollableDiv) { 
+      scrollableDiv.style.overflowX = 'hidden'; 
+      scrollableDiv.style.overflowY = 'hidden'; 
+    }
 
     try {
       await new Promise(resolve => setTimeout(resolve, 100));
-      const dataUrl = await toPng(input, { quality: 1.0, backgroundColor: '#ffffff', pixelRatio: 4 });
+      const dataUrl = await toPng(input, { 
+        quality: 1.0, 
+        backgroundColor: '#ffffff', 
+        pixelRatio: 2 
+      });
+      
       const imgWidthPx = input.offsetWidth;
       const imgHeightPx = input.offsetHeight;
       const pdfWidth = 280; 
       const pdfHeight = (imgHeightPx * pdfWidth) / imgWidthPx;
 
-      const pdf = new jsPDF({ orientation: 'p', unit: 'mm', format: [pdfWidth + 20, pdfHeight + 60] });
-      pdf.setFontSize(22); pdf.setTextColor(26, 35, 126); pdf.text(`SESA - HORARIO ESCOLAR`, 15, 20);
-      pdf.setFontSize(12); pdf.setTextColor(100);
-      pdf.text(`Alumno: ${alumnoInfo.nombre} | Matrícula: ${alumnoInfo.matricula}`, 15, 30);
-      pdf.text(`Carrera: ${alumnoInfo.carrera} | Periodo: 2026-1`, 15, 38);
-      pdf.addImage(dataUrl, 'PNG', 10, 50, pdfWidth, pdfHeight);
+      const pdf = new jsPDF({ 
+        orientation: 'p', 
+        unit: 'mm', 
+        format: [pdfWidth + 20, pdfHeight + 70] 
+      });
+
+      pdf.setFillColor(15, 23, 42);
+      pdf.roundedRect(15, 15, 14, 14, 2, 2, 'F');
+      pdf.setTextColor(255, 255, 255);
+      pdf.setFont("helvetica", "bold");
+      pdf.setFontSize(16);
+      pdf.text("U", 22, 24.5, { align: "center" });
+
+      pdf.setTextColor(15, 23, 42);
+      pdf.setFontSize(22);
+      pdf.text("UNID", 33, 22);
+
+      pdf.setTextColor(100, 116, 139);
+      pdf.setFontSize(10);
+      pdf.setFont("helvetica", "normal");
+      pdf.text("Universidad Interamericana para el", 33, 27);
+      pdf.text("Desarrollo", 33, 31.5);
+
+      pdf.setTextColor(15, 23, 42);
+      pdf.setFontSize(15);
+      pdf.setFont("helvetica", "bold");
+      pdf.text("HORARIO ESCOLAR OFICIAL", pdfWidth + 5, 25, { align: "right" });
+
+      pdf.setDrawColor(242, 169, 0);
+      pdf.setLineWidth(1.5);
+      pdf.line(15, 36, pdfWidth + 5, 36);
+
+      // --- DATOS DEL ALUMNO ---
+      pdf.setFontSize(11);
+      pdf.setTextColor(100, 100, 100);
+      pdf.setFont("helvetica", "normal");
+      pdf.text(`Alumno: ${alumnoInfo.nombre} | Matrícula: ${alumnoInfo.matricula}`, 15, 45);
+
+      // --- RENDERIZADO DE TABLA ---
+      pdf.addImage(dataUrl, 'PNG', 10, 58, pdfWidth, pdfHeight);
       pdf.save(`Horario_${alumnoInfo.matricula}.pdf`);
+      
     } catch (error) { 
       Swal.fire('Falla de Procesamiento', 'Incapacidad de renderizar el blob de imagen.', 'error'); 
     } finally {
-      if (scrollableDiv) { scrollableDiv.style.overflowX = originalOverflowX; scrollableDiv.style.overflowY = originalOverflowY; }
+      if (scrollableDiv) { 
+        scrollableDiv.style.overflowX = originalOverflowX; 
+        scrollableDiv.style.overflowY = originalOverflowY; 
+      }
       Swal.close();
     }
   };

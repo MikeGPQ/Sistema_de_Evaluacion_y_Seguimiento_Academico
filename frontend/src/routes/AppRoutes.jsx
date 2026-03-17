@@ -6,7 +6,6 @@ import { Hammer } from "lucide-react";
 import LoginPage from "../pages/LoginPage";
 import ChangePassword from "../pages/ChangePassword";
 import RecoverPassword from "../pages/RecoverPassword";
-import Profile from "../pages/Profile";
 
 // Admin
 import ImportarAlumnos from "../pages/Alumnos/ImportarAlumnos";
@@ -104,15 +103,6 @@ const AppRoutes = () => {
         <Route
           path="/change-password"
           element={<ChangePassword />}
-        />
-
-        <Route
-          path="/profile"
-          element={
-            <ProtectedRoute>
-              <Profile />
-            </ProtectedRoute>
-          }
         />
 
         {/* ADMIN & SUPER ADMIN */}
