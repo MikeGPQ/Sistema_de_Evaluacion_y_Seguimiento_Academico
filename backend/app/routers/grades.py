@@ -41,12 +41,11 @@ def get_periods(db: Session = Depends(get_db)):
 # (solo los que tienen is_manual_justification = True)
 # ──────────────────────────────────────────────
 @router.get("/grade-statuses")
-def get_grade_statuses(db: Session = Depends(get_db)):
-    statuses = (
-        db.query(GradeStatus)
-        .filter(GradeStatus.is_manual_justification == True)
-        .all()
-    )
+def get_grade_statuses(all: bool = False, db: Session = Depends(get_db)):
+    query = db.query(GradeStatus)
+    if not all:
+        query = query.filter(GradeStatus.is_manual_justification == True)
+    statuses = query.all()
     return [{"code": s.code, "label": s.description} for s in statuses]
 
 

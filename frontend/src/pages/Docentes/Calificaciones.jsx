@@ -43,8 +43,9 @@ const normalize = (v) => (v === null || v === undefined ? '' : v);
 const Calificaciones = () => {
   const { user } = useAuth();
 
-  // Justification catalog (from DB)
+  // Justification catalog (from DB) — filtered (for dropdown) and all (for tooltips)
   const [justificaciones, setJustificaciones] = useState([]);
+  const [allStatuses, setAllStatuses] = useState([]);
 
   // Periods
   const [periods, setPeriods] = useState([]);
@@ -74,14 +75,16 @@ const Calificaciones = () => {
   useEffect(() => {
     const fetchInitialData = async () => {
       try {
-        const [periodRes, statusRes] = await Promise.all([
+        const [periodRes, statusRes, allStatusRes] = await Promise.all([
           client.get('/docente/periodos'),
           client.get('/docente/grade-statuses'),
+          client.get('/docente/grade-statuses?all=true'),
         ]);
         setPeriods(periodRes.data);
         const active = periodRes.data.find(p => p.is_active);
         setSelectedPeriod(active ? active.period_name : periodRes.data[0]?.period_name ?? null);
         setJustificaciones(statusRes.data);
+        setAllStatuses(allStatusRes.data);
       } catch (err) {
         console.error('Error cargando datos iniciales:', err);
       } finally {
@@ -261,14 +264,24 @@ const Calificaciones = () => {
   const cuatrimestres = Object.keys(byCuatrimestre).sort((a, b) => a - b);
 
   // ── Render helpers ────────────────────────────────────────
-  const renderBadge = (status) =>
-    status ? (
-      <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${status === 'OE' ? 'bg-blue-50 text-blue-600 border-blue-200' : 'bg-yellow-50 text-yellow-700 border-yellow-200'}`}>
-        {status}
-      </span>
-    ) : (
+  const renderBadge = (status) => {
+    if (!status) return (
       <span className="text-[10px] text-gray-300 border border-dashed border-gray-300 px-2 py-0.5 rounded-full">Sin captura</span>
     );
+    const label = allStatuses.find(j => j.code === status)?.label;
+    return (
+      <span className="relative group inline-flex">
+        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border cursor-help ${status === 'OE' ? 'bg-blue-50 text-blue-600 border-blue-200' : 'bg-yellow-50 text-yellow-700 border-yellow-200'}`}>
+          {status}
+        </span>
+        {label && (
+          <span className="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 whitespace-nowrap rounded bg-gray-800 px-2 py-1 text-[10px] text-white opacity-0 group-hover:opacity-100 transition-none z-10">
+            {status} – {label}
+          </span>
+        )}
+      </span>
+    );
+  };
 
   const renderPartialCell = (groupId, student, pKey, sKey, isReadOnly) => (
     <td className="py-4 px-2 border-l border-gray-100">

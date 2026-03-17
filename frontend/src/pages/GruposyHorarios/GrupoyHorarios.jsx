@@ -766,11 +766,18 @@ const GruposYHorarios = () => {
                     <div className="bg-green-100 p-3 rounded-lg text-green-600"><Clock className="w-6 h-6" /></div>
                   </div>
                 </div>
-                <button onClick={handleDownloadPDF} className="flex items-center px-5 py-2.5 bg-blue-600 text-white rounded-md text-sm font-bold hover:bg-blue-700 transition-colors shadow-sm w-full md:w-auto justify-center"><Download className="w-4 h-4 mr-2" /> Descargar PDF</button>
+                <button onClick={handleDownloadPDF} disabled={horarioReal.length === 0} className="flex items-center px-5 py-2.5 bg-blue-600 text-white rounded-md text-sm font-bold hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors shadow-sm w-full md:w-auto justify-center"><Download className="w-4 h-4 mr-2" /> Descargar PDF</button>
               </div>
 
               <div id="horario-imprimible" className="bg-white border border-gray-200 rounded-lg shadow-sm overflow-hidden p-6">
                 <div className="mb-6 border-b pb-4"><h2 className="text-2xl font-bold text-[#1A237E]">Horario de Clases - {alumnoInfo.nombre}</h2><p className="text-gray-500 text-sm">Periodo 2026-1 | {alumnoInfo.carrera}</p></div>
+                {horarioReal.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center py-20 text-gray-400">
+                    <Calendar className="w-12 h-12 mb-4 opacity-30" />
+                    <p className="text-base font-semibold">No hay materias asignadas</p>
+                    <p className="text-sm mt-1">Regresa a la pestaña de asignación para inscribir materias.</p>
+                  </div>
+                ) : (
                 <div className="overflow-x-auto">
                   <table className="w-full text-sm text-left border-collapse min-w-[1000px] table-fixed">
                     <thead className="bg-gray-50 text-gray-600 text-xs uppercase font-bold text-center">
@@ -807,6 +814,7 @@ const GruposYHorarios = () => {
                     </tbody>
                   </table>
                 </div>
+                )}
               </div>
             </div>
           )}

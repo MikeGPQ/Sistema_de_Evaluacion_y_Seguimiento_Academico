@@ -82,7 +82,7 @@ const MiHorario = () => {
       const dataUrl = await toPng(input, {
         quality: 1.0,
         backgroundColor: '#ffffff',
-        pixelRatio: 4
+        pixelRatio: 2
       });
 
       const imgWidthPx = input.offsetWidth;

@@ -49,9 +49,10 @@ def login(data: LoginRequest, db: Session = Depends(get_db)):
 
     # Verificar contraseña temporal vencida (15 días)
     if user.is_temp_password and user.created_at:
-        if datetime.utcnow() - user.created_at > timedelta(days=15):
+        ahora_merida = datetime.now(ZoneInfo("America/Merida")).replace(tzinfo=None)
+        if ahora_merida - user.created_at > timedelta(days=15):
             user.is_locked = True
-            user.locked_at = datetime.utcnow()
+            user.locked_at = ahora_merida
             db.commit()
             raise HTTPException(
                 status_code=403,
@@ -66,7 +67,7 @@ def login(data: LoginRequest, db: Session = Depends(get_db)):
 
         if attempts >= 5:
             user.is_locked = True
-            user.locked_at = datetime.utcnow()
+            user.locked_at = datetime.now(ZoneInfo("America/Merida")).replace(tzinfo=None)
             db.commit()
             raise HTTPException(
                 status_code=403,
@@ -86,7 +87,7 @@ def login(data: LoginRequest, db: Session = Depends(get_db)):
 
     # Login correcto
     user.failed_login_attempts = 0
-    user.last_login = datetime.utcnow()
+    user.last_login = datetime.now(ZoneInfo("America/Merida")).replace(tzinfo=None)
 
     db.commit()
     db.refresh(user)

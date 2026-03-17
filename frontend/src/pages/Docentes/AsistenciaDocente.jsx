@@ -823,7 +823,7 @@ const AsistenciaDocente = () => {
                                   {estilo.label}
                                 </button>
                               ) : (
-                                <div 
+                                <div
                                   onClick={() => {
                                     if (estadoVisual === 'J') {
                                       const motivo = alumno.justificaciones?.[fecha] || "Sin motivo registrado en el sistema.";
