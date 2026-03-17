@@ -13,3 +13,7 @@ from .user import User
 from .administrator import Administrator
 from .academic_period import AcademicPeriod
 from .grade_status import GradeStatus
+from .enrollment import StudentEnrollment
+from .attendance import AttendanceRecord
+from .audit_log import AuditLog
+from .password_reset_code import PasswordResetCode

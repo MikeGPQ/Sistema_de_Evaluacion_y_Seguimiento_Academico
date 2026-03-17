@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { BookOpen, Clock, Download, User as UserIcon } from 'lucide-react';
 import jsPDF from 'jspdf';
 import { toPng } from 'html-to-image';
@@ -6,6 +7,7 @@ import Swal from 'sweetalert2';
 import client from '../../lib/axios';
 import { useAuth } from '../../hooks/AuthContext'; 
 
+// Constantes de renderizado para la cuadricula de horarios
 const HORAS_CLASE = [
   "7:00 - 8:00", "8:00 - 9:00", "9:00 - 10:00", 
   "10:00 - 11:00", "11:00 - 12:00", "12:00 - 13:00", 
@@ -18,6 +20,8 @@ const DIAS_SEMANA = ["LUNES", "MARTES", "MIÉRCOLES", "JUEVES", "VIERNES", "SÁB
 
 const MiHorario = () => {
   const { user } = useAuth(); 
+  const navigate = useNavigate();
+  
   const [clasesAsignadas, setClasesAsignadas] = useState([]);
   const [alumnoInfo, setAlumnoInfo] = useState(null);
   const [cargando, setCargando] = useState(true);
@@ -36,7 +40,7 @@ const MiHorario = () => {
         const resHorario = await client.get(`/asignacion/${matriculaActiva}/horario`);
         setClasesAsignadas(resHorario.data);
       } catch (error) {
-        console.error("Error al cargar datos:", error);
+        console.error("Error en la resolucion de la peticion de datos:", error);
       } finally {
         setCargando(false);
       }
@@ -50,7 +54,7 @@ const MiHorario = () => {
 
     Swal.fire({ 
       title: 'Generando PDF', 
-      text: 'Optimizando tamaño y resolución...', 
+      text: 'Optimizando dimensiones y resolucion espacial...', 
       allowOutsideClick: false, 
       didOpen: () => Swal.showLoading() 
     });
@@ -67,20 +71,17 @@ const MiHorario = () => {
     }
 
     try {
-      // 🌟 PixelRatio 4: Nitidez absoluta incluso con zoom
       const dataUrl = await toPng(input, { 
         quality: 1.0, 
         backgroundColor: '#ffffff', 
         pixelRatio: 4 
       });
 
-      // Calculamos dimensiones reales del elemento en mm (aprox)
       const imgWidthPx = input.offsetWidth;
       const imgHeightPx = input.offsetHeight;
-      const pdfWidth = 280; // Ancho fijo para mantener consistencia
+      const pdfWidth = 280; 
       const pdfHeight = (imgHeightPx * pdfWidth) / imgWidthPx;
 
-      // 🌟 PDF de tamaño personalizado para que NO se vea lejos
       const pdf = new jsPDF({
         orientation: 'p',
         unit: 'mm',
@@ -91,15 +92,14 @@ const MiHorario = () => {
       pdf.text(`SESA - HORARIO ESCOLAR`, 15, 20);
       
       pdf.setFontSize(12); pdf.setTextColor(100);
-      pdf.text(`Alumno: ${alumnoInfo.nombre} | Matrícula: ${alumnoInfo.matricula}`, 15, 30);
+      pdf.text(`Alumno: ${alumnoInfo.nombre} | Matricula: ${alumnoInfo.matricula}`, 15, 30);
       pdf.text(`Carrera: ${alumnoInfo.carrera} | Periodo: 2026-1`, 15, 38);
 
-      // Pegamos la imagen a tamaño completo
       pdf.addImage(dataUrl, 'PNG', 10, 50, pdfWidth, pdfHeight);
       pdf.save(`Horario_${alumnoInfo.matricula}.pdf`);
       
     } catch (error) {
-      Swal.fire('Error', 'Fallo al generar el PDF.', 'error');
+      Swal.fire('Fallo de Procesamiento', 'Incapacidad de renderizar el archivo PDF.', 'error');
     } finally {
       if (scrollableDiv) {
         scrollableDiv.style.overflowX = originalOverflowX;
@@ -111,8 +111,6 @@ const MiHorario = () => {
 
   const totalMaterias = new Set(clasesAsignadas.map(c => c.materia)).size;
   const totalHoras = clasesAsignadas.reduce((sum, clase) => sum + (clase.duracion || 0), 0);
-
-  if (cargando) return <div className="min-h-screen flex items-center justify-center">Cargando...</div>;
 
   return (
     <div className="min-h-screen flex flex-col bg-[#F8F9FA] font-sans">
@@ -132,19 +130,33 @@ const MiHorario = () => {
               </h1>
               <p className="text-gray-500 text-sm">Ciclo Escolar 2026-1</p>
             </div>
-            <button
-              onClick={handleDownloadPDF}
-              disabled={clasesAsignadas.length === 0}
-              className="flex items-center px-5 py-2.5 bg-[#1A237E] text-white rounded-md text-sm font-bold hover:bg-[#283593] transition-colors shadow-sm justify-center disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-[#1A237E]"
-            >
-              <Download className="w-4 h-4 mr-2" /> Descargar Horario (PDF)
-            </button>
+            
+            <div className="flex bg-gray-200 p-1 rounded-lg shadow-inner w-full md:w-auto overflow-x-auto">
+              
+              {/* RENDERIZADO CONDICIONAL: Solo si es cuatrimestre >= 2 se pinta el boton */}
+              {alumnoInfo && alumnoInfo.cuatrimestre >= 2 && (
+                <button
+                  onClick={() => navigate('/alumno/carga-academica')} 
+                  className="flex items-center px-4 py-2 rounded-md text-sm font-bold transition-all text-gray-500 hover:text-gray-700 whitespace-nowrap"
+                >
+                  Gestionar Carga
+                </button>
+              )}
+              
+              <button
+                onClick={handleDownloadPDF}
+                disabled={clasesAsignadas.length === 0}
+                className="flex items-center px-4 py-2 rounded-md text-sm font-bold transition-all bg-white shadow text-[#1A237E] disabled:opacity-50 disabled:shadow-none whitespace-nowrap"
+              >
+                <Download className="w-4 h-4 mr-1.5" /> Descargar PDF
+              </button>
+            </div>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
             <div className="bg-white border border-gray-200 rounded-lg p-4 flex items-center shadow-sm">
                <div className="bg-blue-50 p-3 rounded-lg text-blue-600 mr-4"><UserIcon className="w-6 h-6" /></div>
-               <div><p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest">Matrícula</p><p className="text-lg font-bold text-gray-700 font-mono">{alumnoInfo?.matricula}</p></div>
+               <div><p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest">Matricula</p><p className="text-lg font-bold text-gray-700 font-mono">{alumnoInfo?.matricula}</p></div>
             </div>
             <div className="bg-white border border-gray-200 rounded-lg p-4 flex items-center shadow-sm">
                <div className="bg-indigo-50 p-3 rounded-lg text-indigo-600 mr-4"><BookOpen className="w-6 h-6" /></div>
@@ -173,7 +185,7 @@ const MiHorario = () => {
               <div className="flex flex-col items-center justify-center py-16 text-gray-400">
                 <BookOpen className="w-12 h-12 mb-4 opacity-30" />
                 <p className="text-base font-semibold">Sin materias asignadas</p>
-                <p className="text-sm mt-1">Aún no tienes materias registradas para este periodo.</p>
+                <p className="text-sm mt-1">Aun no existen dependencias curriculares registradas en este periodo.</p>
               </div>
             ) : (
             <div className="overflow-x-auto">
