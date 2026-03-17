@@ -24,6 +24,9 @@ import AdminLayout from "../layouts/AdminLayout";
 import AlumnoLayout from "../layouts/AlumnoLayout";
 import DocenteLayout from "../layouts/DocenteLayout";
 
+// Docente
+import AsistenciaDocente from "../pages/Docentes/AsistenciaDocente";
+
 // ==========================================
 // COMPONENTES REUTILIZABLES
 // ==========================================
@@ -112,21 +115,19 @@ const AppRoutes = () => {
 
         {/* ADMIN & SUPER ADMIN */}
         <Route element={<ProtectedRoute allowedRoles={["admin", "super_admin"]}><AdminLayout /></ProtectedRoute>}>
-
           <Route path="/administradores/listado" element={<ListadoAdministradores />} />
-
           <Route path="/alumnos/listado" element={<ListadoAlumnos />} />
           <Route path="/alumnos/importar" element={<ImportarAlumnos />} />
           <Route path="/alumnos/cambiar-estatus" element={<CambiarEstatusAlumno />} />
-
           <Route path="/docentes" element={<EnConstruccion modulo="Sincronización Docente" />} />
           <Route path="/horarios" element={<GruposYHorarios />} />
-          <Route path="/reportes" element={<EnConstruccion modulo="Boletas y Listas" />} />
+          <Route path="/reportes" element={<AsistenciaDocente />} />
         </Route>
-
+        
         {/* DOCENTE */}
         <Route path="/docente" element={<ProtectedRoute allowedRoles={["docente"]}><DocenteLayout /></ProtectedRoute>}>
-          <Route path="pase-lista" element={<EnConstruccion modulo="Pase de Lista Digital" />} />
+          {/* RUTA CORREGIDA: AsistenciaDocente sin el comentario rompiendo JSX */}
+          <Route path="pase-lista" element={<AsistenciaDocente />} />
           <Route path="calificaciones" element={<EnConstruccion modulo="Captura de Calificaciones" />} />
           <Route path="actas" element={<EnConstruccion modulo="Generación de Actas Oficiales" />} />
         </Route>
