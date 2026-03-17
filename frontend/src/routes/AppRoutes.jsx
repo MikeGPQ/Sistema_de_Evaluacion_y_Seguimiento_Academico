@@ -19,6 +19,8 @@ import MiCargaAcademica from "../pages/GruposyHorarios/MiCargaAcademica";
 // Super Admin
 import ListadoAdministradores from "../pages/Administradores/ListadoAdministradores";
 
+// Docentes (NUEVA IMPORTACIÓN)
+import Calificaciones from "../pages/Docentes/Calificaciones";
 // Layouts
 import AdminLayout from "../layouts/AdminLayout";
 import AlumnoLayout from "../layouts/AlumnoLayout";
@@ -126,9 +128,8 @@ const AppRoutes = () => {
         
         {/* DOCENTE */}
         <Route path="/docente" element={<ProtectedRoute allowedRoles={["docente"]}><DocenteLayout /></ProtectedRoute>}>
-          {/* RUTA CORREGIDA: AsistenciaDocente sin el comentario rompiendo JSX */}
           <Route path="pase-lista" element={<AsistenciaDocente />} />
-          <Route path="calificaciones" element={<EnConstruccion modulo="Captura de Calificaciones" />} />
+          <Route path="calificaciones" element={<Calificaciones />} />
           <Route path="actas" element={<EnConstruccion modulo="Generación de Actas Oficiales" />} />
         </Route>
 
