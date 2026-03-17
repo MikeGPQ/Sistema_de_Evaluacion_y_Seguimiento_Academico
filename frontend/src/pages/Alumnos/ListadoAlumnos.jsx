@@ -481,7 +481,21 @@ const ListadoAlumnos = () => {
                     {logEvidencia?.evidence_file_id && <span className="text-gray-400 font-normal normal-case ml-1">(opcional)</span>}
                   </p>
                   <label className={`relative flex items-center justify-center w-full h-20 border-2 rounded-lg cursor-pointer transition overflow-hidden ${archivoBaja ? 'border-green-500 bg-green-50 shadow-inner' : 'border-dashed border-gray-300 bg-gray-50 hover:bg-gray-100'}`}>
-                    <input type="file" className="hidden" onChange={(e) => setArchivoBaja(e.target.files[0])} accept=".pdf, image/*" />
+                    <input type="file" className="hidden" onChange={(e) => {
+                      const file = e.target.files[0];
+                      if (!file) return;
+                      if (file.type !== 'application/pdf') {
+                        Swal.fire('Formato inválido', 'Solo se permiten archivos PDF como carta de no adeudo.', 'error');
+                        e.target.value = '';
+                        return;
+                      }
+                      if (file.size > 2 * 1024 * 1024) {
+                        Swal.fire('Archivo muy pesado', 'La carta de no adeudo no debe superar los 2MB.', 'error');
+                        e.target.value = '';
+                        return;
+                      }
+                      setArchivoBaja(file);
+                    }} accept="application/pdf" />
                     {archivoBaja ? (
                       <div className="flex items-center justify-between w-full px-4 animate-in zoom-in-95 duration-200">
                         <div className="flex items-center gap-3 overflow-hidden">

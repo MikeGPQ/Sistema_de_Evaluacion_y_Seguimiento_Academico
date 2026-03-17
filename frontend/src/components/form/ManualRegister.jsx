@@ -434,9 +434,16 @@ const handleFileChange = (e) => {
       };
       
       img.src = objectUrl;
-      return; 
+      return;
     }
 
+    if (name === 'certificado') {
+      if (file.size > 2 * 1024 * 1024) {
+        Swal.fire('Archivo muy pesado', 'El certificado no debe superar los 2MB.', 'error');
+        e.target.value = '';
+        return;
+      }
+    }
 
     setFiles(prev => ({ ...prev, [name]: file }));
   };

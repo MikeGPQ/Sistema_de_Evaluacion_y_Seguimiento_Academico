@@ -4,11 +4,13 @@ from typing import List, Optional
 # ==========================================
 # MÓDULO DE CARGA ACADÉMICA (No tocar)
 # ==========================================
-class GuardarCargaRequest(BaseModel):
-    student_matricula: str
-    academic_group_id: int
-    period_name: str
+class MateriaSeleccionada(BaseModel):
+    subject_id: int
+    group_id: int
     is_retake: Optional[bool] = False
+
+class GuardarCargaRequest(BaseModel):
+    materias: List[MateriaSeleccionada]
 
 # ==========================================
 # MÓDULO DE CALIFICACIONES (Nuevos Esquemas)
