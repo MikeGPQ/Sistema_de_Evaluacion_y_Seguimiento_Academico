@@ -11,11 +11,13 @@ const LoginPage = () => {
   const [showPassword, setShowPassword] = useState(false);
   const [credentials, setCredentials] = useState({ identifier: '', password: '' });
   const [error, setError] = useState('');
+  const [errorType, setErrorType] = useState('error'); // 'error' | 'warning'
   const [isLoading, setIsLoading] = useState(false);
 
   const handleLogin = async (e) => {
     e.preventDefault();
     setError('');
+    setErrorType('error');
 
     const cleanIdentifier = credentials.identifier;
 
@@ -61,7 +63,10 @@ const LoginPage = () => {
       }
 
     } catch (err) {
-      setError('ID o contraseña incorrectos');
+      const detail = err.response?.data?.detail || 'ID o contraseña incorrectos';
+      const isWarning = detail.includes('Advertencia');
+      setErrorType(isWarning ? 'warning' : 'error');
+      setError(detail);
       console.error("Detalle técnico del error:", err.response?.data || err.message);
     } finally {
       setIsLoading(false);
@@ -181,8 +186,14 @@ const LoginPage = () => {
               </div>
 
               {error && (
-                <div className="bg-red-50 border border-red-100 p-2.5 rounded-lg text-center animate-in fade-in">
-                  <p className="text-red-600 text-xs font-bold">{error}</p>
+                <div className={`p-2.5 rounded-lg text-center animate-in fade-in border ${
+                  errorType === 'warning'
+                    ? 'bg-amber-50 border-amber-200'
+                    : 'bg-red-50 border-red-100'
+                }`}>
+                  <p className={`text-xs font-bold ${errorType === 'warning' ? 'text-amber-700' : 'text-red-600'}`}>
+                    {error}
+                  </p>
                 </div>
               )}
 
