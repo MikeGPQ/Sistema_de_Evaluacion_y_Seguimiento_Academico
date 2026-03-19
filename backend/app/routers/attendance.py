@@ -14,6 +14,7 @@ from app.models.academic_group import AcademicGroup
 from app.models.subject import Subject
 from app.models.academic_period import AcademicPeriod
 from app.models.teacher import Teacher 
+from app.services.audit_service import log_audit_event
 
 router = APIRouter(prefix="/asistencia", tags=["Asistencia Docente"])
 
@@ -33,6 +34,7 @@ class GuardarCambiosRequest(BaseModel):
     periodo: str = "2026-1"
     cambios: List[CambioAsistencia]
     observaciones_alumnos: List[ObservacionAlumno] = [] # 🌟 RECIBIMOS LAS NOTAS
+    usuario_id: Optional[str] = "Sistema"
 
 ESTADOS_DB = { "P": "asistencia", "F": "falta", "R": "retardo", "J": "justificado" }
 MAPA_DIAS = { "Lunes": 0, "Martes": 1, "Miércoles": 2, "Miercoles": 2, "Jueves": 3, "Viernes": 4, "Sábado": 5, "Sabado": 5, "Domingo": 6 }
@@ -191,12 +193,49 @@ def guardar_cambios_asistencia(datos: GuardarCambiosRequest, request: Request, d
 
             if registro_existente:
                 if registro_existente.estado != estado_bd or registro_existente.notas_justificacion != cambio.notas_justificacion:
+                    old_vals = {
+                        "estado": registro_existente.estado, 
+                        "notas_justificacion": registro_existente.notas_justificacion
+                    }
+                    
                     registro_existente.estado = estado_bd
                     registro_existente.notas_justificacion = cambio.notas_justificacion
+
+                    log_audit_event(
+                        db=db,
+                        user_identifier=datos.usuario_id,
+                        action="UPDATE",
+                        entity_name="attendance_records",
+                        entity_id=str(registro_existente.id),
+                        old_values=old_vals,
+                        new_values={"estado": estado_bd, "notas_justificacion": cambio.notas_justificacion}
+                    )
+
                     registros_actualizados += 1
             else:
-                db.add(AttendanceRecord(enrollment_id=enroll_id, fecha_clase=cambio.fecha, estado=estado_bd, notas_justificacion=cambio.notas_justificacion))
+                nuevo_registro = AttendanceRecord(
+                    enrollment_id=enroll_id, 
+                    fecha_clase=cambio.fecha, 
+                    estado=estado_bd, 
+                    notas_justificacion=cambio.notas_justificacion
+                )
+                db.add(nuevo_registro)
                 db.flush() 
+                
+                log_audit_event(
+                    db=db,
+                    user_identifier=datos.usuario_id,
+                    action="CREATE",
+                    entity_name="attendance_records",
+                    entity_id=str(nuevo_registro.id),
+                    old_values=None,
+                    new_values={
+                        "enrollment_id": enroll_id,
+                        "fecha_clase": str(cambio.fecha),
+                        "estado": estado_bd,
+                        "notas_justificacion": cambio.notas_justificacion
+                    }
+                )
                 registros_actualizados += 1
 
         # 🌟 NUEVO: GUARDAR LAS NOTAS GENERALES
@@ -207,7 +246,18 @@ def guardar_cambios_asistencia(datos: GuardarCambiosRequest, request: Request, d
                     insc_record = db.query(StudentEnrollment).filter(StudentEnrollment.id == enroll_id).first()
                     # Solo actualizamos si la nota cambió
                     if insc_record and insc_record.observaciones != obs.observaciones:
+                        old_obs = {"observaciones": insc_record.observaciones}
                         insc_record.observaciones = obs.observaciones
+                        
+                        log_audit_event(
+                            db=db,
+                            user_identifier=datos.usuario_id,
+                            action="UPDATE",
+                            entity_name="student_enrollments",
+                            entity_id=str(insc_record.id),
+                            old_values=old_obs,
+                            new_values={"observaciones": obs.observaciones}
+                        )
                         registros_actualizados += 1
         
         db.commit()

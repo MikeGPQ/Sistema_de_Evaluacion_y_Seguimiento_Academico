@@ -22,6 +22,7 @@ from app.core.security import verify_password, get_password_hash
 from app.models.administrator import Administrator
 from app.models.teacher import Teacher
 from app.models.student import Student
+from app.services.audit_service import log_audit_event
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -53,6 +54,17 @@ def login(data: LoginRequest, db: Session = Depends(get_db)):
         if ahora_merida - user.created_at > timedelta(days=15):
             user.is_locked = True
             user.locked_at = ahora_merida
+
+            log_audit_event(
+                db=db,
+                user_identifier=user.identifier,
+                action="UPDATE",
+                entity_name="users",
+                entity_id=user.identifier,
+                old_values={"is_locked": False},
+                new_values={"is_locked": True, "motivo": "Contraseña temporal vencida"}
+            )
+
             db.commit()
             raise HTTPException(
                 status_code=403,
@@ -68,6 +80,17 @@ def login(data: LoginRequest, db: Session = Depends(get_db)):
         if attempts >= 5:
             user.is_locked = True
             user.locked_at = datetime.now(ZoneInfo("America/Merida")).replace(tzinfo=None)
+
+            log_audit_event(
+                db=db,
+                user_identifier=data.identifier,
+                action="UPDATE",
+                entity_name="users",
+                entity_id=user.identifier,
+                old_values={"is_locked": False, "failed_login_attempts": attempts - 1},
+                new_values={"is_locked": True, "failed_login_attempts": attempts, "motivo": "Exceso de intentos fallidos"}
+            )
+
             db.commit()
             raise HTTPException(
                 status_code=403,
@@ -88,6 +111,16 @@ def login(data: LoginRequest, db: Session = Depends(get_db)):
     # Login correcto
     user.failed_login_attempts = 0
     user.last_login = datetime.now(ZoneInfo("America/Merida")).replace(tzinfo=None)
+
+    log_audit_event(
+        db=db,
+        user_identifier=user.identifier,
+        action="LOGIN",
+        entity_name="users",
+        entity_id=user.identifier,
+        old_values=None,
+        new_values=None
+    )
 
     db.commit()
     db.refresh(user)
@@ -152,6 +185,16 @@ def change_password(data: PasswordChangeRequest, db: Session = Depends(get_db)):
 
     user.password_hash = get_password_hash(data.new_password)
     user.is_temp_password = False
+
+    log_audit_event(
+        db=db,
+        user_identifier=data.identifier,
+        action="UPDATE",
+        entity_name="users",
+        entity_id=data.identifier,
+        old_values={"is_temp_password": user.is_temp_password},
+        new_values={"is_temp_password": False, "evento": "Cambio de contraseña desde perfil"}
+    )
 
     db.commit()
 
@@ -269,6 +312,16 @@ def reset_password(data: ResetPasswordRequest, db: Session = Depends(get_db)):
 
     user.password_hash = get_password_hash(data.new_password)
     user.is_temp_password = False
+
+    log_audit_event(
+        db=db,
+        user_identifier=data.identifier,
+        action="UPDATE",
+        entity_name="users",
+        entity_id=data.identifier,
+        old_values={"is_temp_password": user.is_temp_password},
+        new_values={"is_temp_password": False, "evento": "Recuperación de contraseña mediante código"}
+    )
 
     db.commit()
 

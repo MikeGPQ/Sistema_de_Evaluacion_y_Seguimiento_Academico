@@ -16,6 +16,7 @@ from app.models.user import User
 from app.models.role import Role
 from app.core.security import get_password_hash
 from app.models.student import Student
+from app.services.audit_service import log_audit_event
 
 router = APIRouter(prefix="/administradores", tags=["Administradores"])
 
@@ -39,6 +40,7 @@ class AdminCreate(BaseModel):
     apellido_materno: str
     email_personal: EmailStr
     email_institucional: Optional[str] = None
+    usuario_id: Optional[str] = "Sistema"
 
 class AdminUpdate(BaseModel):
     nombre: str
@@ -47,6 +49,7 @@ class AdminUpdate(BaseModel):
     email_personal: EmailStr
     email_institucional: Optional[str] = None
     is_active: bool 
+    usuario_id: Optional[str] = "Sistema"
 
 @router.put("/actualizar/{numero_empleado}", status_code=status.HTTP_200_OK)
 def update_admin(numero_empleado: str, admin_data: AdminUpdate, db: Session = Depends(get_db)):
@@ -54,6 +57,15 @@ def update_admin(numero_empleado: str, admin_data: AdminUpdate, db: Session = De
     admin = db.query(Administrator).filter(Administrator.numero_empleado == numero_empleado).first()
     if not admin:
         raise HTTPException(status_code=404, detail="Administrador no encontrado.")
+
+    old_values = {
+        "nombre": admin.nombre,
+        "apellido_paterno": admin.apellido_paterno,
+        "apellido_materno": admin.apellido_materno,
+        "email_personal": admin.email_personal,
+        "email_institucional": admin.email_institucional,
+        "is_active": admin.is_active
+    }
 
     # 2. Validar que el nuevo correo personal no pertenezca a otro usuario
     if admin_data.email_personal != admin.email_personal:
@@ -81,6 +93,25 @@ def update_admin(numero_empleado: str, admin_data: AdminUpdate, db: Session = De
         user = db.query(User).filter(User.identifier == numero_empleado).first()
         if user:
             user.email = admin_data.email_institucional if admin_data.email_institucional else admin_data.email_personal
+
+        new_values = {
+            "nombre": admin.nombre,
+            "apellido_paterno": admin.apellido_paterno,
+            "apellido_materno": admin.apellido_materno,
+            "email_personal": admin.email_personal,
+            "email_institucional": admin.email_institucional,
+            "is_active": admin.is_active
+        }
+
+        log_audit_event(
+            db=db,
+            user_identifier=admin_data.usuario_id,
+            action="UPDATE",
+            entity_name="administrators",
+            entity_id=numero_empleado,
+            old_values=old_values,
+            new_values=new_values
+        )
 
         db.commit()
         return {
@@ -205,6 +236,24 @@ def register_admin(admin_data: AdminCreate, db: Session = Depends(get_db)):
             is_active=True 
         )
         db.add(new_admin)
+
+        log_audit_event(
+            db=db,
+            user_identifier=admin_data.usuario_id,
+            action="CREATE",
+            entity_name="administrators",
+            entity_id=nuevo_numero_empleado,
+            old_values=None,
+            new_values={
+                "numero_empleado": nuevo_numero_empleado,
+                "nombre": admin_data.nombre,
+                "apellido_paterno": admin_data.apellido_paterno,
+                "apellido_materno": admin_data.apellido_materno,
+                "email_personal": admin_data.email_personal,
+                "email_institucional": admin_data.email_institucional,
+                "is_active": True
+            }
+        )
 
         db.commit()
 

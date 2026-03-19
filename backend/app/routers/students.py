@@ -26,6 +26,7 @@ from app.models.user import User
 from app.models.role import Role
 from app.schemas.student import StudentCreate, OptionsResponse
 from app.core.security import get_password_hash
+from app.services.audit_service import log_audit_event
 
 pwd_context = CryptContext(
     schemes=["bcrypt"],
@@ -230,6 +231,24 @@ def register_student(
             is_temp_password=True
         )
         db.add(new_user)
+
+        log_audit_event(
+            db=db,
+            user_identifier=data_dict.get('usuario_id', 'Sistema'),
+            action="CREATE",
+            entity_name="students",
+            entity_id=final_matricula,
+            old_values=None,
+            new_values={
+                "matricula": final_matricula,
+                "nombre": student_in.nombre,
+                "apellido_paterno": student_in.apellido_paterno,
+                "curp": student_in.curp,
+                "email_personal": student_in.email_personal,
+                "career_id": student_in.career_id
+            }
+        )
+
         db.commit()
 
         try:
@@ -283,7 +302,7 @@ def register_student(
 # ENDPOINT: IMPORTACIÓN MASIVA MEJORADA
 
 @router.post("/importar")
-async def importar_alumnos(file: UploadFile = File(...), db: Session = Depends(get_db)):
+async def importar_alumnos(file: UploadFile = File(...), usuario_id: str = Form("Sistema"), db: Session = Depends(get_db)):
     if not file.filename.endswith('.xlsx'):
         raise HTTPException(status_code=400, detail="Error: Solo se permiten archivos .xlsx")
 
@@ -544,6 +563,22 @@ async def importar_alumnos(file: UploadFile = File(...), db: Session = Depends(g
             db.flush()
             registros_nuevos += 1
 
+            log_audit_event(
+                db=db,
+                user_identifier=usuario_id,
+                action="CREATE",
+                entity_name="students",
+                entity_id=matricula_str,
+                old_values=None,
+                new_values={
+                    "matricula": matricula_str,
+                    "nombre": nombre,
+                    "apellido_paterno": ap_pat_limpio,
+                    "curp": curp_str,
+                    "email_personal": email_pers
+                }
+            )
+
         except Exception as e:
             db.rollback()
             errores_validacion.append({
@@ -631,6 +666,17 @@ def update_student(
     student = db.query(Student).filter(Student.matricula == matricula).first()
     if not student:
         raise HTTPException(status_code=404, detail="Alumno no encontrado")
+    
+    old_values = {
+        "nombre": student.nombre,
+        "apellido_paterno": student.apellido_paterno,
+        "apellido_materno": student.apellido_materno,
+        "curp": student.curp,
+        "email_personal": student.email_personal,
+        "email_institucional": student.email_institucional,
+        "career_id": student.career_id,
+        "origin_school_id": student.origin_school_id
+    }
 
     address = db.query(StudentAddress).filter(StudentAddress.student_matricula == matricula).first()
 
@@ -694,6 +740,26 @@ def update_student(
 
     # Guardamos los cambios
     try:
+        new_values = {
+            "nombre": student.nombre,
+            "apellido_paterno": student.apellido_paterno,
+            "apellido_materno": student.apellido_materno,
+            "curp": student.curp,
+            "email_personal": student.email_personal,
+            "email_institucional": student.email_institucional,
+            "career_id": student.career_id,
+            "origin_school_id": student.origin_school_id
+        }
+        
+        log_audit_event(
+            db=db,
+            user_identifier=data_dict.get('usuario_id', 'Sistema'),
+            action="UPDATE",
+            entity_name="students",
+            entity_id=matricula,
+            old_values=old_values,
+            new_values=new_values
+        )
         db.commit()
         return {"status": "success", "message": "Alumno actualizado correctamente"}
     except Exception as e:

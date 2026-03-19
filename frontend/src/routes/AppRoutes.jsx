@@ -17,6 +17,7 @@ import MiCargaAcademica from "../pages/GruposyHorarios/MiCargaAcademica";
 
 // Super Admin
 import ListadoAdministradores from "../pages/Administradores/ListadoAdministradores";
+import AuditLogs from "../pages/Administradores/AuditLogs";
 
 // Docentes (NUEVA IMPORTACIÓN)
 import Calificaciones from "../pages/Docentes/Calificaciones";
@@ -107,13 +108,18 @@ const AppRoutes = () => {
 
         {/* ADMIN & SUPER ADMIN */}
         <Route element={<ProtectedRoute allowedRoles={["admin", "super_admin"]}><AdminLayout /></ProtectedRoute>}>
-          <Route path="/administradores/listado" element={<ListadoAdministradores />} />
           <Route path="/alumnos/listado" element={<ListadoAlumnos />} />
           <Route path="/alumnos/importar" element={<ImportarAlumnos />} />
           <Route path="/alumnos/cambiar-estatus" element={<CambiarEstatusAlumno />} />
           <Route path="/docentes" element={<EnConstruccion modulo="Sincronización Docente" />} />
           <Route path="/horarios" element={<GruposYHorarios />} />
           <Route path="/reportes" element={<AsistenciaDocente />} />
+        </Route>
+
+        {/* SUPER ADMIN */}
+        <Route element={<ProtectedRoute allowedRoles={["super_admin"]}><AdminLayout /></ProtectedRoute>}>
+          <Route path="/administradores/listado" element={<ListadoAdministradores />} />
+          <Route path="/admin/audit-logs" element={<AuditLogs />} /> 
         </Route>
         
         {/* DOCENTE */}

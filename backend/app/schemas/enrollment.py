@@ -11,6 +11,7 @@ class MateriaSeleccionada(BaseModel):
 
 class GuardarCargaRequest(BaseModel):
     materias: List[MateriaSeleccionada]
+    usuario_id: Optional[str] = "Sistema"
 
 # ==========================================
 # MÓDULO DE CALIFICACIONES (Nuevos Esquemas)

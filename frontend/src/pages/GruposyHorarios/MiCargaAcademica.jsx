@@ -187,7 +187,10 @@ const MiCargaAcademica = () => {
         }));
         
         try {
-          await client.post(`/asignacion/${alumnoInfo.matricula}/guardar`, { materias: materiasPayload });
+          await client.post(`/asignacion/${alumnoInfo.matricula}/guardar`, { 
+              materias: materiasPayload,
+              usuario_id: user?.identifier || user?.email || "Autoservicio Alumno"
+          });
           
           setSeleccion(nuevaSeleccion);
           setSeleccionOriginal(nuevaSeleccion); 
@@ -254,7 +257,8 @@ const MiCargaAcademica = () => {
     setGuardando(true);
     try {
       const response = await client.post(`/asignacion/${alumnoInfo.matricula}/guardar`, {
-        materias: materiasPayload
+        materias: materiasPayload,
+        usuario_id: user?.identifier || user?.email || "Autoservicio Alumno"
       });
       
       // sincronizacion de dependencias para actualizar cupos y horarios

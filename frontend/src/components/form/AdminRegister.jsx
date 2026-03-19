@@ -2,8 +2,10 @@ import { useState, useEffect } from 'react';
 import client from '../../lib/axios';
 import Modal from '../ui/Modal';
 import Swal from 'sweetalert2';
+import { useAuth } from '../../hooks/AuthContext';
 
 export default function AdminRegister({ isOpen, onClose, adminAEditar }) {
+  const { user } = useAuth();
   const [isLoading, setIsLoading] = useState(false);
   const [erroresEnVivo, setErroresEnVivo] = useState({ email_personal: '' });
   const [validacionExitosa, setValidacionExitosa] = useState({ email_personal: false });
@@ -125,7 +127,8 @@ useEffect(() => {
       
       const payload = {
           ...restoDatos,
-          email_institucional: finalEmailInstitucional
+          email_institucional: finalEmailInstitucional,
+          usuario_id: user?.identifier || user?.email || "Admin Local"
       };
 
       if (adminAEditar) {

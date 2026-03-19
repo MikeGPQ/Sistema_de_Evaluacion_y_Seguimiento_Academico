@@ -10,7 +10,8 @@ import {
   X,
   ChevronLeft,
   ChevronRight,
-  Shield 
+  Shield,
+  ShieldAlert
 } from 'lucide-react';
 import { useAuth } from '../hooks/AuthContext';
 import Profile from '../pages/Profile';
@@ -147,6 +148,17 @@ const AdminLayout = () => {
               <Link to="/administradores/listado" title="Gestión de Administradores" className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-colors ${effectivelyCollapsed ? 'justify-center' : ''} ${isActive('/administradores') ? 'bg-[#1A237E] text-white font-semibold shadow-md' : 'text-slate-300 hover:bg-slate-800 hover:text-white'}`}>
                 <Shield className="w-[18px] h-[18px] shrink-0" />
                 {!effectivelyCollapsed && <span>Administradores</span>}
+              </Link>
+            )}
+
+            {isSuperAdmin && (
+              <Link 
+                to="/admin/audit-logs" 
+                title="Logs de Auditoría" 
+                className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-colors ${effectivelyCollapsed ? 'justify-center' : ''} ${isActive('/admin/audit-logs') ? 'bg-[#1A237E] text-white font-semibold shadow-md' : 'text-slate-300 hover:bg-slate-800 hover:text-white'}`}
+              >
+                <ShieldAlert className="w-[18px] h-[18px] shrink-0" /> 
+                {!effectivelyCollapsed && <span>Logs de Auditoría</span>}
               </Link>
             )}
 

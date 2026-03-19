@@ -3,6 +3,7 @@ import client from '../../lib/axios';
 import Modal from '../ui/Modal';
 import Swal from 'sweetalert2';
 import Select from 'react-select'; 
+import { useAuth } from '../../hooks/AuthContext';
 
 // =========================================================================
 // 🌟 ALGORITMO: VALIDADOR DE PREFIJO Y CONSONANTES CURP (REGLAS RENAPO)
@@ -65,6 +66,7 @@ const calcularLetrasCURP = (nombre, paterno, materno) => {
 };
 
 export default function ManualRegister({ isOpen, onClose, alumnoAEditar }) {
+  const { user } = useAuth();
   const [careers, setCareers] = useState([]);
   const [schools, setSchools] = useState([]);
   const [coloniasAPI, setColoniasAPI] = useState([]);
@@ -542,6 +544,7 @@ const handleFileChange = (e) => {
     const { status, foto_id, foto_nombre, certificado_id, certificado_nombre, ...restFormData } = formData;
     const dataPayload = {
       ...restFormData,
+      usuario_id: user?.identifier || user?.email || "Admin Local",
       career_id: parseInt(formData.career_id),
       origin_school_id: parseInt(formData.origin_school_id),
       promedio_procedencia: parseInt(formData.promedio_procedencia, 10),

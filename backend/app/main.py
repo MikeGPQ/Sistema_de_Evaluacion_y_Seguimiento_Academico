@@ -20,6 +20,7 @@ from app.routers.sync import tarea_automatica_sincronizacion
 from app.routers import grades
 from app.routers import enrollments
 from app.routers import attendance
+from app.routers import logs
 
 load_dotenv()
 
@@ -80,6 +81,7 @@ app.include_router(files_router.router)
 app.include_router(enrollments.router)
 app.include_router(grades.router)
 app.include_router(attendance.router) 
+app.include_router(logs.router)
 
 @app.get("/")
 def read_root():

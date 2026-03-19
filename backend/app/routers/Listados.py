@@ -10,6 +10,7 @@ from app.models.career import Career
 from app.models.student_status_log import StudentStatusLog
 from app.models.file import File as FileModel
 from app.models.enrollment import StudentEnrollment
+from app.services.audit_service import log_audit_event
 
 router = APIRouter(prefix="/alumnos", tags=["Alumnos"])
 
@@ -89,6 +90,15 @@ def cambiar_estatus(
             db.flush()
             evidence_file_id = file_record.id
 
+        old_status_values = {"status_id": alumno.status_id}
+        
+        inscripciones_borradas = []
+        if nuevo_estatus.name in ('baja', 'baja_temporal', 'egresado'):
+            inscripciones_viejas = db.query(StudentEnrollment).filter(
+                StudentEnrollment.student_matricula == matricula
+            ).all()
+            inscripciones_borradas = [insc.academic_group_id for insc in inscripciones_viejas]
+
         status_id_anterior = alumno.status_id
         alumno.status_id = status_id
 
@@ -100,6 +110,17 @@ def cambiar_estatus(
             db.query(StudentEnrollment).filter(
                 StudentEnrollment.student_matricula == matricula
             ).delete()
+
+            if inscripciones_borradas:
+                log_audit_event(
+                    db=db,
+                    user_identifier=usuario_id,
+                    action="DELETE",
+                    entity_name="student_enrollments",
+                    entity_id=matricula,
+                    old_values={"grupos_inscritos": inscripciones_borradas},
+                    new_values=None
+                )
        
 
         if status_id_anterior != status_id or evidence_file_id is not None:
@@ -111,6 +132,16 @@ def cambiar_estatus(
                 evidence_file_id=evidence_file_id
             )
             db.add(nuevo_log)
+
+            log_audit_event(
+                db=db,
+                user_identifier=usuario_id,
+                action="UPDATE",
+                entity_name="students",
+                entity_id=matricula,
+                old_values=old_status_values,
+                new_values={"status_id": status_id, "estatus_nombre": nuevo_estatus.name}
+            )
 
         db.commit()
         return {"message": "Estatus y Log actualizados correctamente. Si aplicaba, se liberaron sus materias.", "nuevo_estatus": nuevo_estatus.name}
