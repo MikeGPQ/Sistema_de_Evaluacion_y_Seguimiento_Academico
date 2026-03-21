@@ -380,7 +380,10 @@ def obtener_horario_real(matricula: str, db: Session = Depends(get_db)):
     resultados = db.execute(query, {"matricula": matricula}).mappings().all()
     horario_formateado = []
     
-    colores_carrera = ['#3b82f6', '#22c55e', '#f97316', '#ef4444', '#14b8a6', '#ec4899'] 
+    colores_carrera = [
+    '#2563EB', '#DC2626', '#16A34A', '#D97706', '#9333EA', 
+    '#0891B2', '#EA580C', '#4F46E5', '#C026D3', '#4D7C0F'
+    ]   
     color_tronco_comun = '#475569' 
     
     mapa_colores = {}
