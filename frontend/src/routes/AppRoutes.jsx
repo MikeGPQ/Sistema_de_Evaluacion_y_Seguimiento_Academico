@@ -25,6 +25,9 @@ import AdminLayout from "../layouts/AdminLayout";
 import AlumnoLayout from "../layouts/AlumnoLayout";
 import DocenteLayout from "../layouts/DocenteLayout";
 
+
+import MisCalificaciones from "../pages/Alumnos/MisCalificaciones";
+
 // ==========================================
 // COMPONENTES REUTILIZABLES
 // ==========================================
@@ -136,7 +139,7 @@ const AppRoutes = () => {
         <Route path="/alumno" element={<ProtectedRoute allowedRoles={["alumno"]}><AlumnoLayout /></ProtectedRoute>}>
           <Route path="horario" element={<MiHorario />} />
           <Route path="asistencias" element={<EnConstruccion modulo="Mis Asistencias" />} />
-          <Route path="calificaciones" element={<EnConstruccion modulo="Mis Calificaciones" />} />
+          <Route path="calificaciones" element={<MisCalificaciones />} />
         </Route>
 
         {/* ROOT */}

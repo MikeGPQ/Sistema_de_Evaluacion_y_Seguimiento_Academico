@@ -1,9 +1,12 @@
 import React from 'react';
 import { HardHat, LogOut } from 'lucide-react';
 import { useAuth } from '../../hooks/AuthContext';
+import MisCalificaciones from './MisCalificaciones';
 
 const PortalAlumno = () => {
   const { logout, user } = useAuth();
+
+const [activeTab, setActiveTab] = useState('calificaciones');
 
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center p-4">
