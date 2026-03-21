@@ -1,14 +1,17 @@
 import React, { useState, useEffect } from 'react';
 import { 
   ShieldAlert, Download, Calendar, 
-  Database, UserCheck, UserX, FileJson, ChevronLeft, ChevronRight 
+  Database, UserCheck, UserX, FileJson, ChevronLeft, ChevronRight, Unlock 
 } from 'lucide-react';
 import client from '../../lib/axios';
 import Swal from 'sweetalert2';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import { useNavigate } from 'react-router-dom';
 
 const AuditLogs = () => {
+  // 1. Estados Generales
+  const navigate = useNavigate();
   const [logs, setLogs] = useState([]);
   const [kpis, setKpis] = useState({ activos: 0, inactivos: 0 });
   const [total, setTotal] = useState(0);
@@ -23,6 +26,11 @@ const AuditLogs = () => {
 
   const [paginacion, setPaginacion] = useState({ skip: 0, limit: 15 });
 
+  // 2. Estados del Modal de Locked Users
+  const [showLockedUsersModal, setShowLockedUsersModal] = useState(false);
+  const [lockedUsers, setLockedUsers] = useState([]);
+  const [searchLockedUser, setSearchLockedUser] = useState('');
+
   const modulosDisponibles = [
     { id: 'students', label: 'Alumnos' },
     { id: 'administrators', label: 'Administradores' },
@@ -31,6 +39,7 @@ const AuditLogs = () => {
     { id: 'attendance_records', label: 'Asistencia' }
   ];
 
+  // 3. Funciones Principales
   const fetchLogs = async () => {
     setCargando(true);
     try {
@@ -50,6 +59,7 @@ const AuditLogs = () => {
         activos: response.data.kpis?.activos || 0,
         inactivos: response.data.kpis?.inactivos || 0
       });
+      setLockedUsers(response.data.locked_users || []); 
     } catch (error) {
       console.error("Error al obtener logs:", error);
     } finally {
@@ -76,7 +86,73 @@ const AuditLogs = () => {
     setPaginacion(prev => ({ ...prev, skip: 0 }));
   };
 
-const verDetalleJson = (oldValues, newValues) => {
+  // 4. Funciones del Modal
+  const fetchLockedUsers = async () => {
+    setLoadingLockedUsers(true);
+    try {
+      const response = await client.get('/logs/locked-users');
+      setLockedUsers(response.data.data || []);
+    } catch (error) {
+      console.error("Error fetching locked users:", error);
+    } finally {
+      setLoadingLockedUsers(false);
+    }
+  };
+
+  const handleOpenLockedUsers = () => {
+    setShowLockedUsersModal(true);
+  };
+
+const handleUnlockUser = async (identifier) => {
+    const result = await Swal.fire({
+      title: 'Unlock User?',
+      text: `ID: ${identifier} will regain access to the system.`,
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonColor: '#1A237E',
+      cancelButtonColor: '#d33',
+      confirmButtonText: 'Yes, unlock'
+    });
+
+    if (result.isConfirmed) {
+      try {
+        const userStorage = localStorage.getItem('user');
+        const currentAdminId = userStorage ? JSON.parse(userStorage).identifier : 'Sistema';
+
+        await client.put(`/logs/unlock-user/${identifier}`, {
+          usuario_id: currentAdminId
+        });
+        
+        setShowLockedUsersModal(false);
+        
+        await Swal.fire({
+          title: 'Unlocked!',
+          text: 'Redirigiendo para asignar nueva contraseña...',
+          icon: 'success',
+          timer: 1500,
+          showConfirmButton: false
+        });
+
+        navigate('/change-password', { 
+          state: { 
+            isAdminUnlock: true, 
+            targetUser: identifier 
+          } 
+        });
+
+      } catch (error) {
+        Swal.fire('Error', 'There was a problem unlocking the user.', 'error');
+      }
+    }
+  };
+
+  const filteredLockedUsers = lockedUsers.filter(user => 
+    (user.identifier && user.identifier.toLowerCase().includes(searchLockedUser.toLowerCase())) || 
+    (user.email && user.email.toLowerCase().includes(searchLockedUser.toLowerCase()))
+  );
+
+  // 5. Visualización y PDF
+  const verDetalleJson = (oldValues, newValues) => {
     let htmlContent = '';
     const safeOld = typeof oldValues === 'object' && oldValues !== null ? oldValues : {};
     const safeNew = typeof newValues === 'object' && newValues !== null ? newValues : {};
@@ -133,7 +209,7 @@ const verDetalleJson = (oldValues, newValues) => {
     });
   };
 
-const formatPdfDetails = (oldValues, newValues) => {
+  const formatPdfDetails = (oldValues, newValues) => {
     const safeOld = typeof oldValues === 'object' && oldValues !== null ? oldValues : {};
     const safeNew = typeof newValues === 'object' && newValues !== null ? newValues : {};
     const allKeys = Array.from(new Set([...Object.keys(safeOld), ...Object.keys(safeNew)]));
@@ -167,7 +243,7 @@ const formatPdfDetails = (oldValues, newValues) => {
     return changes.length > 0 ? changes.join('\n') : 'Sin cambios';
   };
 
-const exportarPDF = () => {
+  const exportarPDF = () => {
     const doc = new jsPDF('landscape');
     const pageWidth = doc.internal.pageSize.width;
 
@@ -209,14 +285,14 @@ const exportarPDF = () => {
     doc.line(14, 34, pageWidth - 14, 34);
 
     // 5. Generación de Tabla
-    const tableColumn = ["Fecha/Hora", "ID Autor", "Rol", "Acción", "Entidad", "Registro ID", "Detalles del Cambio"];
+    const tableColumn = ["Fecha/Hora", "ID Autor", "Rol", "Acción", "Entidad", "Detalles del Cambio"];
+    
     const tableRows = logs.map(log => [
       new Date(log.created_at).toLocaleString(),
       log.user_identifier,
       log.user_role || 'SISTEMA',
       log.action,
       log.entity_name,
-      log.entity_id,
       formatPdfDetails(log.old_values, log.new_values)
     ]);
 
@@ -246,8 +322,7 @@ const exportarPDF = () => {
         2: { cellWidth: 22 }, 
         3: { cellWidth: 20 },
         4: { cellWidth: 32 }, 
-        5: { cellWidth: 20 }, 
-        6: { cellWidth: 137 } 
+        5: { cellWidth: 157 } 
       }
     });
 
@@ -275,7 +350,12 @@ const exportarPDF = () => {
             </div>
             <div className="bg-blue-50 p-3 rounded-xl"><UserCheck className="w-8 h-8 text-blue-600" /></div>
           </div>
-          <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm flex items-center justify-between">
+          
+          {/* KPI Corregido */}
+          <div 
+            onClick={handleOpenLockedUsers}
+            className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm flex items-center justify-between cursor-pointer hover:border-red-300 transition-colors"
+          >
             <div>
               <p className="text-xs font-bold text-gray-500 uppercase tracking-wider">Usuarios Inactivos / Bloqueados</p>
               <p className="text-3xl font-black text-red-600">{kpis.inactivos}</p>
@@ -332,16 +412,15 @@ const exportarPDF = () => {
                   <th className="p-3">Rol</th>
                   <th className="p-3">Acción</th>
                   <th className="p-3">Entidad</th>
-                  <th className="p-3">ID Registro</th>
                   <th className="p-3 text-center">Detalle</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
                 {cargando ? (
-                  <tr><td colSpan="7" className="text-center py-10 text-gray-500 font-bold">Cargando registros...</td></tr>
+                  <tr><td colSpan="6" className="text-center py-10 text-gray-500 font-bold">Cargando registros...</td></tr>
                 ) : logs.length === 0 ? (
                   <tr>
-                    <td colSpan="7" className="text-center py-16">
+                    <td colSpan="6" className="text-center py-16">
                       <Database className="w-10 h-10 mx-auto text-gray-300 mb-3" />
                       <p className="text-gray-500 font-bold">No se encontraron logs con los filtros aplicados.</p>
                     </td>
@@ -362,7 +441,6 @@ const exportarPDF = () => {
                         </span>
                       </td>
                       <td className="p-3 font-mono text-gray-600 text-xs">{log.entity_name}</td>
-                      <td className="p-3 font-bold text-gray-700">{log.entity_id}</td>
                       <td className="p-3 text-center">
                         <button 
                           onClick={() => verDetalleJson(log.old_values, log.new_values)}
@@ -378,6 +456,70 @@ const exportarPDF = () => {
               </tbody>
             </table>
           </div>
+
+          {/* Modal: Locked Users */}
+          {showLockedUsersModal && (
+            <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+              <div className="bg-white rounded-xl shadow-lg w-full max-w-2xl overflow-hidden flex flex-col max-h-[80vh]">
+                
+                <div className="p-4 border-b border-gray-200 flex justify-between items-center bg-gray-50">
+                  <h2 className="text-lg font-bold text-[#1A237E] flex items-center gap-2">
+                    <UserX className="w-5 h-5 text-red-500" />
+                    Locked Users Directory
+                  </h2>
+                  <button 
+                    onClick={() => setShowLockedUsersModal(false)} 
+                    className="text-gray-400 hover:text-gray-600 text-xl font-bold"
+                  >
+                    ✕
+                  </button>
+                </div>
+
+                <div className="p-4 border-b border-gray-200">
+                  <input 
+                    type="text" 
+                    placeholder="Search by ID or Email..." 
+                    value={searchLockedUser}
+                    onChange={(e) => setSearchLockedUser(e.target.value)}
+                    className="w-full px-3 py-2 border rounded-lg text-sm outline-none focus:ring-2 focus:ring-[#1A237E]"
+                  />
+                </div>
+
+                <div className="p-4 overflow-y-auto flex-1 bg-gray-50">
+                  {filteredLockedUsers.length === 0 ? (
+                    <p className="text-center text-gray-500 font-bold py-8">No locked users found.</p>
+                  ) : (
+                    <div className="space-y-3">
+                      {filteredLockedUsers.map(user => (
+                        <div key={user.identifier} className="bg-white p-4 rounded-lg border border-gray-200 flex justify-between items-center shadow-sm">
+                          <div>
+                            <p className="font-bold text-[#1A237E] font-mono text-lg">{user.identifier}</p>
+                            <p className="text-xs text-gray-500">{user.email || 'No email registered'}</p>
+                          </div>
+                          <div className="text-right flex items-center gap-4">
+                            <div>
+                              <p className="text-[10px] uppercase font-bold text-gray-400 tracking-wider">Locked At</p>
+                              <p className="text-sm font-medium text-gray-700">
+                                {user.locked_at ? new Date(user.locked_at).toLocaleString() : 'Unknown'}
+                              </p>
+                            </div>
+                            <button
+                              onClick={() => handleUnlockUser(user.identifier)}
+                              className="bg-green-100 hover:bg-green-200 text-green-700 p-2 rounded-lg transition-colors"
+                              title="Unlock User"
+                            >
+                              <Unlock className="w-5 h-5" />
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+              </div>
+            </div>
+          )}
           
           {/* Paginación */}
           {!cargando && total > 0 && (

@@ -5,6 +5,7 @@ from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
+from pydantic import BaseModel
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
@@ -26,7 +27,13 @@ from app.services.audit_service import log_audit_event
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
+# --- ESQUEMAS ADICIONALES ---
+class AdminForcePasswordRequest(BaseModel):
+    identifier: str
+    new_password: str
+    admin_id: str = "Sistema"
 
+# --- RUTAS ---
 @router.post("/login", response_model=UserResponse)
 def login(data: LoginRequest, db: Session = Depends(get_db)):
     generic_error = "ID o contraseña incorrectos"
@@ -326,3 +333,31 @@ def reset_password(data: ResetPasswordRequest, db: Session = Depends(get_db)):
     db.commit()
 
     return {"message": "Contraseña recuperada exitosamente"}
+
+@router.put("/admin-force-password")
+def admin_force_password(data: AdminForcePasswordRequest, db: Session = Depends(get_db)):
+    user = db.query(User).filter(User.identifier == data.identifier).first()
+
+    if not user:
+        raise HTTPException(status_code=404, detail="Usuario no encontrado")
+
+    user.password_hash = get_password_hash(data.new_password)
+    user.is_temp_password = True
+
+    user.is_locked = False
+    user.locked_at = None
+    user.failed_login_attempts = 0
+
+    log_audit_event(
+        db=db,
+        user_identifier=data.admin_id, 
+        action="UPDATE",
+        entity_name="users",
+        entity_id=data.identifier,
+        old_values=None,
+        new_values={"evento": "Contraseña forzada por administrador", "is_temp_password": True}
+    )
+
+    db.commit()
+
+    return {"message": "Contraseña forzada exitosamente"}
