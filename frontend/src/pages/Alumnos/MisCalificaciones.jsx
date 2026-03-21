@@ -6,16 +6,14 @@ import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 
 const MisCalificaciones = () => {
-  const { user } = useAuth(); // Obtenemos el usuario autenticado para sacar la matrícula
+  const { user } = useAuth();
 
-  // Estados para manejar los datos y el estado de carga/error
   const [calificaciones, setCalificaciones] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [periodos, setPeriodos] = useState([]);
   const [periodoSeleccionado, setPeriodoSeleccionado] = useState('');
 
-  // Carga los periodos al montar y establece el activo por defecto
   useEffect(() => {
     client.get('/alumnos/periodos').then(res => {
       setPeriodos(res.data);
@@ -43,110 +41,222 @@ const MisCalificaciones = () => {
   }, [user, periodoSeleccionado]);
   
   const calcularPromedioPeriodo = () => {
-    if (calificaciones.length === 0) return "0.0";
-    const sum = calificaciones.reduce((acc, curr) => acc + (curr.calificacion_final || 0), 0);
-    return (sum / calificaciones.length).toFixed(1);
+    const conFinal = calificaciones.filter(c => c.calificacion_final !== null && c.calificacion_final !== undefined);
+    if (conFinal.length === 0) return "N/A";
+    const sum = conFinal.reduce((acc, curr) => acc + curr.calificacion_final, 0);
+    return (sum / conFinal.length).toFixed(1);
   };
+
+  const capitalizarNombre = (nombreCrudo) => {
+    if (!nombreCrudo) return 'N/A';
+    return nombreCrudo
+      .toLowerCase()
+      .split(' ')
+      .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+      .join(' ');
+  };
+
+  // --- GENERACIÓN DEL PDF ---
   const handleDownloadPDF = () => {
-  try {
-    console.log("Iniciando generación de PDF..."); // Para que veas que sí reacciona
-    const doc = new jsPDF();
-    const pageWidth = doc.internal.pageSize.getWidth();
-    const margin = 20;
+    try {
+      const doc = new jsPDF();
+      const pageWidth = doc.internal.pageSize.getWidth();
+      const margin = 15;
+      const primary = [11, 23, 42];
+      const gold = [217, 144, 0];
 
-    // --- 1. ENCABEZADO ---
-    doc.setFontSize(18);
-    doc.setTextColor(11, 23, 42); 
-    doc.text("UNID", margin, 20); // [cite: 2]
-    doc.setFontSize(10);
-    doc.text("UNIVERSIDAD INTERAMERICANA PARA EL DESARROLLO", margin, 25); // [cite: 2]
-    
-    doc.setFontSize(8);
-    doc.text(`Fecha de Emisión: ${new Date().toLocaleDateString()}`, pageWidth - margin, 20, { align: 'right' }); // [cite: 27, 28]
-
-    doc.setLineWidth(0.5);
-    doc.line(margin, 30, pageWidth - margin, 30);
-
-    // --- 2. DATOS DEL ALUMNO --- [cite: 3, 6, 8, 12]
-    doc.setFont(undefined, 'bold');
-    doc.text("NOMBRE DEL ALUMNO:", margin, 40);
-    doc.text("MATRÍCULA:", margin + 100, 40);
-    
-    doc.setFont(undefined, 'normal');
-    const nombreFormateado = (user?.nombre_completo || 'N/A')
-  .toLowerCase()
-  .split(' ')
-  .map(word => word.charAt(0).toUpperCase() + word.slice(1))
-  .join(' ');
-
-doc.text(nombreFormateado, margin, 45);
-    doc.text(`${user?.identifier || 'N/A'}`, margin + 100, 45); // [cite: 6]
-
-    doc.setFont(undefined, 'bold');
-    doc.text("CARRERA:", margin, 55);
-    doc.text("PERIODO ACADÉMICO:", margin + 100, 55);
-
-    doc.setFont(undefined, 'normal');
-    doc.text(`${calificaciones[0]?.carrera || 'N/A'}`, margin, 60);
-    doc.text(`${periodoSeleccionado || 'N/A'}`, margin + 100, 60);
-
-    doc.setFont(undefined, 'bold');
-    doc.text("CAMPUS:", margin, 68);
-    doc.setFont(undefined, 'normal');
-    doc.text("San Francisco de Campeche", margin, 73);
-
-    // --- 3. TABLAS POR MATERIA --- [cite: 16]
-    let currentY = 85;
-
-    calificaciones.forEach((materia) => {
-      // Si la tabla se va a salir de la página, agrega una nueva
-      if (currentY > 240) {
-        doc.addPage();
-        currentY = 20;
-      }
-
+      // ── 1. ENCABEZADO ──────────────────────────────────────
+      // Icono cuadrado "U"
+      doc.setFillColor(primary[0], primary[1], primary[2]);
+      doc.roundedRect(margin, 12, 13, 13, 2, 2, 'F');
+      doc.setTextColor(255, 255, 255);
+      doc.setFontSize(9);
       doc.setFont(undefined, 'bold');
-      doc.setFillColor(243, 244, 246);
-      doc.rect(margin, currentY, pageWidth - (margin * 2), 7, 'F');
-      doc.text(materia.materia.toUpperCase(), margin + 2, currentY + 5); // [cite: 17, 18, 19]
+      doc.text("U", margin + 6.5, 20.5, { align: 'center' });
 
-      autoTable(doc, {
-        startY: currentY + 7,
-        margin: { left: margin, right: margin },
-        head: [['PRIMER PARCIAL', 'SEGUNDO PARCIAL', 'FINAL', 'PROMEDIO FINAL']], // [cite: 17, 20]
-        body: [[
-          materia.parcial_1 ?? '-', 
-          materia.parcial_2 ?? '-', 
-          materia.parcial_3 ?? '-', 
-          materia.calificacion_final ?? '-'
-        ]],
-        theme: 'grid',
-        headStyles: { fillColor: [11, 23, 42], fontSize: 8, halign: 'center' },
-        styles: { fontSize: 9, halign: 'center' },
+      // UNID + subtítulo
+      doc.setTextColor(primary[0], primary[1], primary[2]);
+      doc.setFontSize(15);
+      doc.setFont(undefined, 'bold');
+      doc.text("UNID", margin + 17, 20);
+      doc.setFontSize(6.5);
+      doc.setFont(undefined, 'normal');
+      doc.text("UNIVERSIDAD INTERAMERICANA", margin + 17, 24.5);
+      doc.text("PARA EL DESARROLLO", margin + 17, 28.5);
+
+      // Derecha: título del reporte
+      doc.setFontSize(13);
+      doc.setFont(undefined, 'bold');
+      doc.setTextColor(primary[0], primary[1], primary[2]);
+      doc.text("REPORTE DE CALIFICACIONES", pageWidth - margin, 20, { align: 'right' });
+      doc.setFontSize(8);
+      doc.setFont(undefined, 'normal');
+      doc.setTextColor(120, 120, 120);
+      doc.text("DOCUMENTO OFICIAL", pageWidth - margin, 25.5, { align: 'right' });
+
+      // Línea separadora dorada
+      doc.setDrawColor(gold[0], gold[1], gold[2]);
+      doc.setLineWidth(1.5);
+      doc.line(margin, 34, pageWidth - margin, 34);
+
+      // ── 2. CAJA DE DATOS DEL ALUMNO ────────────────────────
+      const boxX = margin;
+      const boxY = 40;
+      const boxW = pageWidth - margin * 2;
+      const boxH = 60;
+      doc.setDrawColor(210, 210, 210);
+      doc.setLineWidth(0.3);
+      doc.roundedRect(boxX, boxY, boxW, boxH, 3, 3, 'S');
+
+      const col1 = boxX + 6;
+      const col2 = boxX + boxW / 2 + 3;
+
+      const drawField = (label, value, x, y) => {
+        doc.setFontSize(6.5);
+        doc.setFont(undefined, 'normal');
+        doc.setTextColor(140, 140, 140);
+        doc.text(label, x, y);
+        doc.setFontSize(9);
+        doc.setFont(undefined, 'bold');
+        doc.setTextColor(primary[0], primary[1], primary[2]);
+        const lines = doc.splitTextToSize(value, boxW / 2 - 10);
+        doc.text(lines, x, y + 5);
+      };
+
+      let infoY = boxY + 10;
+      drawField("NOMBRE DEL ALUMNO", capitalizarNombre(user?.nombre_completo), col1, infoY);
+      drawField("MATRÍCULA", `${user?.identifier || 'N/A'}`, col2, infoY);
+      infoY += 18;
+      drawField("CARRERA", `${calificaciones[0]?.carrera || 'N/A'}`, col1, infoY);
+      drawField("PERIODO ACADÉMICO", `${periodoSeleccionado || 'N/A'}`, col2, infoY);
+      infoY += 18;
+      drawField("CUATRIMESTRE", `${calificaciones[0]?.cuatrimestre || '4'}° Cuatrimestre`, col1, infoY);
+      drawField("CAMPUS", "San Francisco de Campeche", col2, infoY);
+
+      // ── 3. TÍTULO MATERIAS INSCRITAS ───────────────────────
+      let currentY = boxY + boxH + 10;
+      doc.setFillColor(primary[0], primary[1], primary[2]);
+      doc.rect(margin,       currentY - 4, 3, 3, 'F');
+      doc.rect(margin + 4.5, currentY - 4, 3, 3, 'F');
+      doc.setFontSize(8.5);
+      doc.setFont(undefined, 'bold');
+      doc.setTextColor(primary[0], primary[1], primary[2]);
+      doc.text("MATERIAS INSCRITAS", margin + 10, currentY - 1);
+      currentY += 5;
+
+      // ── 4. TARJETA POR MATERIA ─────────────────────────────
+      calificaciones.forEach((materia) => {
+        if (currentY > 240) {
+          doc.addPage();
+          currentY = 20;
+        }
+
+        // Nombre de la materia
+        doc.setFontSize(10);
+        doc.setFont(undefined, 'bold');
+        doc.setTextColor(primary[0], primary[1], primary[2]);
+        doc.text(materia.materia, margin + 4, currentY + 7);
+
+        autoTable(doc, {
+          startY: currentY + 10,
+          margin: { left: margin, right: margin },
+          head: [['PRIMER PARCIAL', 'SEGUNDO PARCIAL', 'EXAMEN FINAL', 'PROMEDIO FINAL']],
+          body: [[
+            materia.parcial_1 ?? '-',
+            materia.parcial_2 ?? '-',
+            materia.parcial_3 ?? '-',
+            materia.calificacion_final ?? '-',
+          ]],
+          theme: 'plain',
+          headStyles: {
+            textColor: [160, 160, 160],
+            fontSize: 7,
+            halign: 'center',
+            fontStyle: 'bold',
+            cellPadding: { top: 2, bottom: 2, left: 1, right: 1 },
+          },
+          bodyStyles: {
+            textColor: primary,
+            fontSize: 15,
+            fontStyle: 'bold',
+            halign: 'center',
+            cellPadding: { top: 3, bottom: 5, left: 1, right: 1 },
+          },
+          columnStyles: {
+            0: { lineColor: [220, 220, 220], lineWidth: { right: 0.2 } },
+            1: { lineColor: [220, 220, 220], lineWidth: { right: 0.2 } },
+            2: { lineColor: [220, 220, 220], lineWidth: { right: 0.2 } },
+          },
+        });
+
+        // Borde redondeado alrededor de toda la tarjeta
+        const cardEnd = doc.lastAutoTable.finalY;
+        doc.setDrawColor(210, 210, 210);
+        doc.setLineWidth(0.3);
+        doc.roundedRect(margin, currentY, pageWidth - margin * 2, cardEnd - currentY + 3, 2, 2, 'S');
+
+        currentY = cardEnd + 10;
       });
 
-      currentY = doc.lastAutoTable.finalY + 10;
-    });
+      // ── 5. PROMEDIO GENERAL ────────────────────────────────
+      if (currentY > 245) { doc.addPage(); currentY = 20; }
+      currentY += 5;
 
-    // --- 4. PIE DE PÁGINA --- [cite: 22, 23]
-    doc.setFontSize(9);
-    doc.setFont(undefined, 'bold');
-    doc.text(`PROMEDIO GENERAL DEL PERIODO: ${calcularPromedioPeriodo()}`, margin, currentY + 5); // [cite: 26]
-    
-    doc.setFont(undefined, 'italic');
-    doc.setFontSize(7);
-    doc.text("Nota de Validez: Documento informativo sin validez oficial sin sello de Servicios Escolares.", margin, currentY + 15); // [cite: 23, 24]
+      const labelW = 52;
+      const labelH = 16;
+      const labelX = pageWidth - margin - labelW - 22;
 
-    // DISPARAR DESCARGA
-    doc.save(`Reporte_SESA_${user?.identifier || 'alumno'}.pdf`);
-    console.log("PDF generado con éxito.");
+      doc.setFillColor(primary[0], primary[1], primary[2]);
+      doc.roundedRect(labelX, currentY, labelW, labelH, 2, 2, 'F');
+      doc.setTextColor(255, 255, 255);
+      doc.setFontSize(7);
+      doc.setFont(undefined, 'normal');
+      doc.text("PROMEDIO GENERAL",  labelX + labelW / 2, currentY + 6,  { align: 'center' });
+      doc.text("Del periodo actual", labelX + labelW / 2, currentY + 11, { align: 'center' });
 
-  } catch (err) {
-    console.error("Error crítico al generar PDF:", err);
-    alert("Hubo un problema al generar el PDF. Revisa la consola (F12).");
-  }
-};
-  // Función auxiliar para renderizar el badge de estatus
+      doc.setTextColor(primary[0], primary[1], primary[2]);
+      doc.setFontSize(22);
+      doc.setFont(undefined, 'bold');
+      doc.text(`${calcularPromedioPeriodo()}`, labelX + labelW + 11, currentY + 12, { align: 'center' });
+
+      // ── 6. PIE DE PÁGINA ──────────────────────────────────
+      currentY += labelH + 14;
+
+      // Nota de validez (izquierda) + Fecha de emisión (derecha)
+      doc.setFontSize(7.5);
+      doc.setTextColor(60, 60, 60);
+      doc.setFont(undefined, 'bold');
+      doc.text("Nota de Validez:", margin, currentY);
+      doc.setFont(undefined, 'normal');
+      doc.text("Este documento es de carácter informativo y refleja el estado", margin, currentY + 4);
+      doc.text("académico del alumno al momento de su emisión. Para trámites oficiales,", margin, currentY + 8);
+      doc.text("solicite una versión sellada en Servicios Escolares.", margin, currentY + 12);
+
+      doc.setFont(undefined, 'bold');
+      doc.text("Fecha de Emisión", pageWidth - margin, currentY + 4, { align: 'right' });
+      doc.setFont(undefined, 'normal');
+      doc.text(
+        new Date().toLocaleDateString('es-MX', { day: 'numeric', month: 'long', year: 'numeric' }),
+        pageWidth - margin, currentY + 9, { align: 'right' }
+      );
+
+      currentY += 18;
+      doc.setDrawColor(200, 200, 200);
+      doc.setLineWidth(0.3);
+      doc.line(margin, currentY, pageWidth - margin, currentY);
+      doc.setFontSize(6.5);
+      doc.setTextColor(140, 140, 140);
+      doc.setFont(undefined, 'normal');
+      doc.text("ID Sistema 8829-AD-221 | Generado por: Admin. Académica", margin, currentY + 5);
+
+      doc.save(`Reporte_Calificaciones_${user?.identifier || 'alumno'}.pdf`);
+    } catch (err) {
+      console.error("Error crítico al generar PDF:", err);
+      alert("Hubo un problema al generar el PDF. Revisa la consola (F12).");
+    }
+  };
+
+  // --- UI ORIGINAL DE LA PÁGINA WEB ---
   const renderStatusBadge = (status) => {
     switch (status?.toLowerCase()) {
       case 'aprobada':
@@ -170,7 +280,6 @@ doc.text(nombreFormateado, margin, 45);
     }
   };
 
-  // Renderizado en estado de carga
   if (loading) {
     return (
       <div className="flex justify-center items-center h-full min-h-[60vh]">
@@ -179,7 +288,6 @@ doc.text(nombreFormateado, margin, 45);
     );
   }
 
-  // Renderizado en caso de error
   if (error) {
     return (
       <div className="p-8 text-center">
@@ -190,7 +298,6 @@ doc.text(nombreFormateado, margin, 45);
 
   return (
     <div className="p-8 max-w-7xl mx-auto bg-gray-50 min-h-screen font-sans">
-      {/* Cabecera dinámica [cite: 5] */}
       <div className="mb-8 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-[#0B172A]">Mis Calificaciones</h1>
@@ -200,7 +307,7 @@ doc.text(nombreFormateado, margin, 45);
         <div className="flex gap-2">
           <button
             onClick={handleDownloadPDF} 
-            disabled={calificaciones.length === 0}
+            disabled={calificaciones.length === 0 || calcularPromedioPeriodo() === 'N/A'}
             className="flex items-center gap-2 bg-[#0B172A] text-white px-4 py-2 rounded-md text-sm font-bold hover:bg-slate-800 transition-colors shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <Download size={16} />
@@ -220,7 +327,7 @@ doc.text(nombreFormateado, margin, 45);
           </select>
         </div>
       </div>
-      {/* Si no hay materias */}
+
       {calificaciones.length === 0 ? (
         <div className="bg-white p-12 rounded-xl shadow-sm border border-gray-200 text-center">
           <BookOpen className="mx-auto h-16 w-16 text-gray-200 mb-4" />
@@ -228,11 +335,21 @@ doc.text(nombreFormateado, margin, 45);
           <p className="text-gray-500 mt-2">Aún no tienes calificaciones capturadas para este periodo o no estás inscrito en ningún grupo.</p>
         </div>
       ) : (
-        /* Grid de Materias */
+        <>
+          {/* Promedio general del periodo */}
+          <div className="mb-6 flex items-center justify-between bg-[#0B172A] rounded-xl px-6 py-4 shadow-sm">
+            <div>
+              <p className="text-xs text-gray-400 uppercase font-bold tracking-wider">Promedio general del periodo</p>
+              <p className="text-gray-300 text-sm mt-0.5">Solo materias con promedio final registrado</p>
+            </div>
+            <span className={`text-4xl font-black ${calcularPromedioPeriodo() === 'N/A' ? 'text-gray-400' : 'text-[#D99000]'}`}>
+              {calcularPromedioPeriodo()}
+            </span>
+          </div>
+
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {calificaciones.map((item, index) => (
             <div key={index} className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden hover:shadow-md transition-shadow">
-              {/* Header de la Tarjeta */}
               <div className="bg-[#0B172A] p-4 flex justify-between items-center text-white">
                 <div className="flex items-center gap-3">
                   <BookOpen size={20} className="text-[#D99000]" />
@@ -240,8 +357,6 @@ doc.text(nombreFormateado, margin, 45);
                 </div>
                 {renderStatusBadge(item.status)}
               </div>
-
-              {/* Tabla interna */}
               <div className="p-0">
                 <table className="w-full text-center">
                   <thead className="bg-gray-50 border-b border-gray-100 text-[11px] text-gray-500 uppercase font-bold tracking-wider">
@@ -273,6 +388,7 @@ doc.text(nombreFormateado, margin, 45);
             </div>
           ))}
         </div>
+        </>
       )}
     </div>
   );

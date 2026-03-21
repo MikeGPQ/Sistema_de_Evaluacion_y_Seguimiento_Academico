@@ -742,7 +742,7 @@ def get_my_grades(
     db: Session = Depends(get_db),
 ):
     info_alumno = (
-        db.query(Student.matricula, Career.name.label("carrera"))
+        db.query(Student.matricula, Career.name.label("carrera"), Student.cuatrimestre_actual)
         .join(Career, Student.career_id == Career.id)
         .filter(Student.matricula == matricula)
         .first()
@@ -772,10 +772,13 @@ def get_my_grades(
         .all()
     )
     carrera = info_alumno.carrera if info_alumno else "N/A"
+    cuatrimestre = info_alumno.cuatrimestre_actual if info_alumno and info_alumno.cuatrimestre_actual else 1
+    
     return [
         MisCalificacionesResponse(
             materia=r.materia,
             carrera=carrera,
+            cuatrimestre=cuatrimestre,
             parcial_1=r.parcial_1,
             parcial_2=r.parcial_2,
             parcial_3=r.parcial_3,
