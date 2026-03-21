@@ -20,6 +20,7 @@ import ListadoAdministradores from "../pages/Administradores/ListadoAdministrado
 
 // Docentes (NUEVA IMPORTACIÓN)
 import Calificaciones from "../pages/Docentes/Calificaciones";
+import ReportesDocente from "../pages/Docentes/ReportCards";
 // Layouts
 import AdminLayout from "../layouts/AdminLayout";
 import AlumnoLayout from "../layouts/AlumnoLayout";
@@ -120,7 +121,7 @@ const AppRoutes = () => {
         <Route path="/docente" element={<ProtectedRoute allowedRoles={["docente"]}><DocenteLayout /></ProtectedRoute>}>
           <Route path="pase-lista" element={<AsistenciaDocente />} />
           <Route path="calificaciones" element={<Calificaciones />} />
-          <Route path="actas" element={<EnConstruccion modulo="Generación de Actas Oficiales" />} />
+         <Route path="actas" element={<ReportesDocente />} />
         </Route>
 
         {/* ALUMNO */}
