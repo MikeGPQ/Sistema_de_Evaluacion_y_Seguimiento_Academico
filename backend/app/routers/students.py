@@ -741,6 +741,12 @@ def get_my_grades(
     periodo: Optional[str] = None,
     db: Session = Depends(get_db),
 ):
+    info_alumno = (
+        db.query(Student.matricula, Career.name.label("carrera"))
+        .join(Career, Student.career_id == Career.id)
+        .filter(Student.matricula == matricula)
+        .first()
+    )
     if not periodo:
         periodo_activo = db.query(AcademicPeriod).filter(AcademicPeriod.is_active == True).first()
         if not periodo_activo:
@@ -765,4 +771,16 @@ def get_my_grades(
         )
         .all()
     )
-    return resultados
+    carrera = info_alumno.carrera if info_alumno else "N/A"
+    return [
+        MisCalificacionesResponse(
+            materia=r.materia,
+            carrera=carrera,
+            parcial_1=r.parcial_1,
+            parcial_2=r.parcial_2,
+            parcial_3=r.parcial_3,
+            calificacion_final=r.calificacion_final,
+            status=r.status,
+        )
+        for r in resultados
+    ]

@@ -31,6 +31,7 @@ class BulkGradeUpdateRequest(BaseModel):
     students: List[StudentGradeUpdate]
 class MisCalificacionesResponse(BaseModel):
     materia: str # El nombre de la materia en texto plano
+    carrera: str
     parcial_1: Optional[int]
     parcial_2: Optional[int]
     parcial_3: Optional[int]

@@ -1,7 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { BookOpen, CheckCircle, Clock, AlertCircle } from 'lucide-react';
+import { BookOpen, CheckCircle, Clock, AlertCircle, Download } from 'lucide-react';
 import client from '../../lib/axios'; 
 import { useAuth } from '../../hooks/AuthContext'; 
+import { jsPDF } from 'jspdf';
+import autoTable from 'jspdf-autotable';
 
 const MisCalificaciones = () => {
   const { user } = useAuth(); // Obtenemos el usuario autenticado para sacar la matrícula
@@ -39,7 +41,111 @@ const MisCalificaciones = () => {
     };
     fetchCalificaciones();
   }, [user, periodoSeleccionado]);
+  
+  const calcularPromedioPeriodo = () => {
+    if (calificaciones.length === 0) return "0.0";
+    const sum = calificaciones.reduce((acc, curr) => acc + (curr.calificacion_final || 0), 0);
+    return (sum / calificaciones.length).toFixed(1);
+  };
+  const handleDownloadPDF = () => {
+  try {
+    console.log("Iniciando generación de PDF..."); // Para que veas que sí reacciona
+    const doc = new jsPDF();
+    const pageWidth = doc.internal.pageSize.getWidth();
+    const margin = 20;
 
+    // --- 1. ENCABEZADO ---
+    doc.setFontSize(18);
+    doc.setTextColor(11, 23, 42); 
+    doc.text("UNID", margin, 20); // [cite: 2]
+    doc.setFontSize(10);
+    doc.text("UNIVERSIDAD INTERAMERICANA PARA EL DESARROLLO", margin, 25); // [cite: 2]
+    
+    doc.setFontSize(8);
+    doc.text(`Fecha de Emisión: ${new Date().toLocaleDateString()}`, pageWidth - margin, 20, { align: 'right' }); // [cite: 27, 28]
+
+    doc.setLineWidth(0.5);
+    doc.line(margin, 30, pageWidth - margin, 30);
+
+    // --- 2. DATOS DEL ALUMNO --- [cite: 3, 6, 8, 12]
+    doc.setFont(undefined, 'bold');
+    doc.text("NOMBRE DEL ALUMNO:", margin, 40);
+    doc.text("MATRÍCULA:", margin + 100, 40);
+    
+    doc.setFont(undefined, 'normal');
+    const nombreFormateado = (user?.nombre_completo || 'N/A')
+  .toLowerCase()
+  .split(' ')
+  .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+  .join(' ');
+
+doc.text(nombreFormateado, margin, 45);
+    doc.text(`${user?.identifier || 'N/A'}`, margin + 100, 45); // [cite: 6]
+
+    doc.setFont(undefined, 'bold');
+    doc.text("CARRERA:", margin, 55);
+    doc.text("PERIODO ACADÉMICO:", margin + 100, 55);
+
+    doc.setFont(undefined, 'normal');
+    doc.text(`${calificaciones[0]?.carrera || 'N/A'}`, margin, 60);
+    doc.text(`${periodoSeleccionado || 'N/A'}`, margin + 100, 60);
+
+    doc.setFont(undefined, 'bold');
+    doc.text("CAMPUS:", margin, 68);
+    doc.setFont(undefined, 'normal');
+    doc.text("San Francisco de Campeche", margin, 73);
+
+    // --- 3. TABLAS POR MATERIA --- [cite: 16]
+    let currentY = 85;
+
+    calificaciones.forEach((materia) => {
+      // Si la tabla se va a salir de la página, agrega una nueva
+      if (currentY > 240) {
+        doc.addPage();
+        currentY = 20;
+      }
+
+      doc.setFont(undefined, 'bold');
+      doc.setFillColor(243, 244, 246);
+      doc.rect(margin, currentY, pageWidth - (margin * 2), 7, 'F');
+      doc.text(materia.materia.toUpperCase(), margin + 2, currentY + 5); // [cite: 17, 18, 19]
+
+      autoTable(doc, {
+        startY: currentY + 7,
+        margin: { left: margin, right: margin },
+        head: [['PRIMER PARCIAL', 'SEGUNDO PARCIAL', 'FINAL', 'PROMEDIO FINAL']], // [cite: 17, 20]
+        body: [[
+          materia.parcial_1 ?? '-', 
+          materia.parcial_2 ?? '-', 
+          materia.parcial_3 ?? '-', 
+          materia.calificacion_final ?? '-'
+        ]],
+        theme: 'grid',
+        headStyles: { fillColor: [11, 23, 42], fontSize: 8, halign: 'center' },
+        styles: { fontSize: 9, halign: 'center' },
+      });
+
+      currentY = doc.lastAutoTable.finalY + 10;
+    });
+
+    // --- 4. PIE DE PÁGINA --- [cite: 22, 23]
+    doc.setFontSize(9);
+    doc.setFont(undefined, 'bold');
+    doc.text(`PROMEDIO GENERAL DEL PERIODO: ${calcularPromedioPeriodo()}`, margin, currentY + 5); // [cite: 26]
+    
+    doc.setFont(undefined, 'italic');
+    doc.setFontSize(7);
+    doc.text("Nota de Validez: Documento informativo sin validez oficial sin sello de Servicios Escolares.", margin, currentY + 15); // [cite: 23, 24]
+
+    // DISPARAR DESCARGA
+    doc.save(`Reporte_SESA_${user?.identifier || 'alumno'}.pdf`);
+    console.log("PDF generado con éxito.");
+
+  } catch (err) {
+    console.error("Error crítico al generar PDF:", err);
+    alert("Hubo un problema al generar el PDF. Revisa la consola (F12).");
+  }
+};
   // Función auxiliar para renderizar el badge de estatus
   const renderStatusBadge = (status) => {
     switch (status?.toLowerCase()) {
@@ -84,25 +190,36 @@ const MisCalificaciones = () => {
 
   return (
     <div className="p-8 max-w-7xl mx-auto bg-gray-50 min-h-screen font-sans">
-      {/* Cabecera */}
+      {/* Cabecera dinámica [cite: 5] */}
       <div className="mb-8 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-[#0B172A]">Mis Calificaciones</h1>
           <p className="text-gray-500 mt-1">Consulta tus calificaciones por periodo</p>
         </div>
-        <select
-          value={periodoSeleccionado}
-          onChange={e => setPeriodoSeleccionado(e.target.value)}
-          className="border border-gray-300 rounded-md px-3 py-2 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#0B172A] bg-white shadow-sm"
-        >
-          {periodos.map(p => (
-            <option key={p.period_name} value={p.period_name}>
-              {p.period_name}{p.is_active ? ' (Actual)' : ''}
-            </option>
-          ))}
-        </select>
-      </div>
+        
+        <div className="flex gap-2">
+          <button
+            onClick={handleDownloadPDF} 
+            disabled={calificaciones.length === 0}
+            className="flex items-center gap-2 bg-[#0B172A] text-white px-4 py-2 rounded-md text-sm font-bold hover:bg-slate-800 transition-colors shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            <Download size={16} />
+            Descargar PDF
+          </button>
 
+          <select
+            value={periodoSeleccionado}
+            onChange={e => setPeriodoSeleccionado(e.target.value)}
+            className="border border-gray-300 rounded-md px-3 py-2 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#0B172A] bg-white shadow-sm"
+          >
+            {periodos.map(p => (
+              <option key={p.period_name} value={p.period_name}>
+                {p.period_name}{p.is_active ? ' (Actual)' : ''}
+              </option>
+            ))}
+          </select>
+        </div>
+      </div>
       {/* Si no hay materias */}
       {calificaciones.length === 0 ? (
         <div className="bg-white p-12 rounded-xl shadow-sm border border-gray-200 text-center">
