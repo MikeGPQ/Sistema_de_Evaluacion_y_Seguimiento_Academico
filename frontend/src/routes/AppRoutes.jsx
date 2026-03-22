@@ -14,6 +14,7 @@ import ListadoAlumnos from "../pages/Alumnos/ListadoAlumnos";
 import CambiarEstatusAlumno from "../pages/Alumnos/CambiarEstatusAlumno";
 import GruposYHorarios from "../pages/GruposyHorarios/GrupoyHorarios";
 import MiHorario from "../pages/Alumnos/MiHorario";
+import StudentAttendance from '../pages/Alumnos/StudentAttendance'; 
 
 // Super Admin
 import ListadoAdministradores from "../pages/Administradores/ListadoAdministradores";
@@ -25,6 +26,9 @@ import DocenteLayout from "../layouts/DocenteLayout";
 
 // Docente
 import AsistenciaDocente from "../pages/Docentes/AsistenciaDocente";
+
+
+
 
 // ==========================================
 // COMPONENTES REUTILIZABLES
@@ -131,10 +135,10 @@ const AppRoutes = () => {
           <Route path="actas" element={<EnConstruccion modulo="Generación de Actas Oficiales" />} />
         </Route>
 
-        {/* ALUMNO */}
+         {/* ALUMNO */}
         <Route path="/alumno" element={<ProtectedRoute allowedRoles={["alumno"]}><AlumnoLayout /></ProtectedRoute>}>
           <Route path="horario" element={<MiHorario />} />
-          <Route path="asistencias" element={<EnConstruccion modulo="Mis Asistencias" />} />
+          <Route path="asistencias" element={<StudentAttendance />} /> {/* 🌟 AQUÍ ESTÁ EL CAMBIO */}
           <Route path="calificaciones" element={<EnConstruccion modulo="Mis Calificaciones" />} />
         </Route>
 

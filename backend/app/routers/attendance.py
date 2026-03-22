@@ -14,6 +14,8 @@ from app.models.academic_group import AcademicGroup
 from app.models.subject import Subject
 from app.models.academic_period import AcademicPeriod
 from app.models.teacher import Teacher 
+from sqlalchemy import text
+from fastapi import HTTPException
 
 router = APIRouter(prefix="/asistencia", tags=["Asistencia Docente"])
 
@@ -58,108 +60,160 @@ def obtener_periodos(db: Session = Depends(get_db)):
     periodos = db.query(AcademicPeriod).order_by(AcademicPeriod.fecha_inicio.desc()).all()
     return [{"id": p.period_name, "label": p.period_name, "is_active": p.is_active} for p in periodos]
 
+
+
 @router.get("/mis-grupos")
-def obtener_grupos_docente(
-    periodo: Optional[str] = None, 
-    num_empleado: Optional[str] = None, 
-    teacher_id: Optional[str] = None, 
-    db: Session = Depends(get_db)
-):
-    if not periodo or (not num_empleado and not teacher_id):
-        return []
-
-    teacher_id_real = None
+def obtener_grupos_docente(periodo: str, num_empleado: str = "", teacher_id: str = "", db: Session = Depends(get_db)):
     
-    if num_empleado and num_empleado.strip() != "":
-        maestro = db.query(Teacher).filter(Teacher.external_id == num_empleado).first()
-        if maestro:
-            teacher_id_real = maestro.id
-            
-    elif teacher_id and teacher_id.strip() != "":
-        try:
-            teacher_id_real = int(teacher_id)
-        except ValueError:
-            pass
-
-    if not teacher_id_real:
-        return []
-
-    grupos = db.query(AcademicGroup, Subject, Career).join(
-        Subject, AcademicGroup.subject_id == Subject.id
-    ).outerjoin(
-        Career, Subject.career_id == Career.id
-    ).filter(
-        AcademicGroup.teacher_id == teacher_id_real, 
-        AcademicGroup.periodo == periodo
-    ).all()
-    
-    return [{
-        "id": str(g.id), 
-        "label": f"{m.external_id} - {m.nombre} ({g.identificador_grupo})",
-        "carrera": c.name if c else "Tronco Común"
-    } for g, m, c in grupos]
-
-@router.get("/grupo/{group_id}")
-def obtener_sabana_asistencia(group_id: int, periodo: str, db: Session = Depends(get_db)):
-    grupo = db.query(AcademicGroup).filter(AcademicGroup.id == group_id).first()
-    if not grupo: raise HTTPException(status_code=404, detail="Grupo no encontrado")
+    # 1. Resolvemos el ID del maestro si solo nos mandan el número de empleado
+    if not teacher_id and num_empleado:
+        res = db.execute(
+            text("SELECT id FROM teachers WHERE external_id = :emp"), 
+            {"emp": num_empleado}
+        ).mappings().first()
         
-    materia = db.query(Subject).filter(Subject.id == grupo.subject_id).first()
-    
-    if materia and materia.career_id:
-        carrera_oficial = db.query(Career).filter(Career.id == materia.career_id).first()
-        nombre_carrera = carrera_oficial.name if carrera_oficial else "Tronco Común"
-    else:
-        nombre_carrera = "Tronco Común" 
+        if res:
+            teacher_id = res["id"]
 
-    periodo_db = db.query(AcademicPeriod).filter(AcademicPeriod.period_name == grupo.periodo).first()
-    fechas_dinamicas = calcular_fechas_clase(grupo.horario_json, periodo_db.fecha_inicio, periodo_db.fecha_fin) if periodo_db else []
+    if not teacher_id:
+        return []
 
-    inscripciones = db.query(StudentEnrollment, Student, Career).join(Student, StudentEnrollment.student_matricula == Student.matricula).outerjoin(Career, Student.career_id == Career.id).filter(
-        StudentEnrollment.academic_group_id == group_id, StudentEnrollment.period_name == periodo
-    ).all()
+    # 2. Usamos la vista v_teacher_groups del arquitecto
+    # Hacemos un JOIN rápido con academic_groups solo para sacar el ID interno del grupo que necesita React
+    query = text("""
+        SELECT 
+            g.id AS group_id, 
+            v.crn AS identificador_grupo, 
+            v.materia AS materia_nombre, 
+            v.programa AS carrera_nombre 
+        FROM v_teacher_groups v
+        JOIN academic_groups g ON v.crn = g.identificador_grupo AND v.periodo = g.periodo
+        WHERE v.id_docente = :teacher_id AND v.periodo = :periodo
+    """)
 
-    alumnos_resultado = []
-    for insc, alumno, carrera in inscripciones:
-        asistencias_db = db.query(AttendanceRecord).filter(AttendanceRecord.enrollment_id == insc.id).all()
-        mapa_asistencias = {a.fecha_clase.strftime("%Y-%m-%d"): ("F" if a.estado == "falta" else "R" if a.estado == "retardo" else "J" if a.estado == "justificado" else "P") for a in asistencias_db}
+    grupos = db.execute(query, {"teacher_id": teacher_id, "periodo": periodo}).mappings().all()
 
-        # 🌟 NUEVO: Extraemos los motivos de las justificaciones
-        mapa_justificaciones = {a.fecha_clase.strftime("%Y-%m-%d"): a.notas_justificacion for a in asistencias_db if a.estado == "justificado" and a.notas_justificacion}
-
-        alumnos_resultado.append({
-            "id": insc.id, 
-            "matricula": alumno.matricula,
-            "nombre": f"{alumno.apellido_paterno} {alumno.apellido_materno}, {alumno.nombre}".upper(),
-            "programa": carrera.name if carrera else "Sin Programa",
-            "asistencias": mapa_asistencias,
-            "justificaciones": mapa_justificaciones, # 🌟 Lo mandamos a React
-            "observaciones": insc.observaciones or "" # 🌟 Cargamos la nota general
+    # 3. Armamos la respuesta exacta que espera React
+    respuesta = []
+    for g in grupos:
+        respuesta.append({
+            "id": g["group_id"],
+            "label": f"{g['materia_nombre']} - {g['identificador_grupo']}",
+            "carrera": g["carrera_nombre"]
         })
-    alumnos_resultado.sort(key=lambda x: x["nombre"])
-    
-    horario_str = "No definido"
-    if grupo.horario_json:
-        try:
-            horarios = grupo.horario_json if isinstance(grupo.horario_json, list) else json.loads(grupo.horario_json)
-            dias_con_hora = []
-            for h in horarios:
-                if 'dia' in h:
-                    texto = h['dia']
-                    if 'inicio' in h and 'fin' in h:
-                        texto += f" ({h['inicio']} - {h['fin']})"
-                    dias_con_hora.append(texto)
-            if dias_con_hora: horario_str = " y ".join(dias_con_hora)
-        except: pass
 
-    return { 
-        "acta_cerrada": grupo.acta_status == "cerrada", 
-        "periodo_activo": periodo_db.is_active if periodo_db else False,
-        "fechas": fechas_dinamicas, 
-        "alumnos": alumnos_resultado,
-        "periodo_nombre": periodo_db.period_name if periodo_db else periodo,
-        "dias_clase": horario_str,
-        "carrera_oficial": nombre_carrera 
+    return respuesta
+
+
+
+
+@router.get("/grupo/{grupo_id}")
+def obtener_alumnos_grupo(grupo_id: int, periodo: str, db: Session = Depends(get_db)):
+    
+    # 1. Obtenemos la información base del grupo (para calcular las fechas y saber si ya se cerró el acta)
+    query_grupo = text("""
+        SELECT 
+            g.identificador_grupo, 
+            g.horario_json, 
+            g.acta_status, 
+            p.fecha_inicio, 
+            p.fecha_fin, 
+            p.is_active AS periodo_activo
+        FROM academic_groups g
+        JOIN academic_periods p ON g.periodo = p.period_name
+        WHERE g.id = :grupo_id AND g.periodo = :periodo
+    """)
+    grupo_info = db.execute(query_grupo, {"grupo_id": grupo_id, "periodo": periodo}).mappings().first()
+    
+    if not grupo_info:
+        raise HTTPException(status_code=404, detail="Grupo no encontrado")
+
+    # Calculamos los días exactos de clase
+    fechas_clase = calcular_fechas_clase(grupo_info['horario_json'], grupo_info['fecha_inicio'], grupo_info['fecha_fin'])
+    
+    # 2. Usamos la vista 'v_group_roster' del arquitecto para obtener la lista oficial de alumnos inscritos
+    query_alumnos = text("""
+        SELECT 
+            enrollment_id AS id, 
+            matricula, 
+            alumno AS nombre
+        FROM v_group_roster
+        WHERE crn = :crn AND periodo = :periodo
+        ORDER BY alumno ASC
+    """)
+    alumnos_bd = db.execute(query_alumnos, {"crn": grupo_info['identificador_grupo'], "periodo": periodo}).mappings().all()
+
+    # 3. Obtenemos todas las asistencias y observaciones de este grupo en un solo golpe (optimizado)
+    enrollment_ids = [al['id'] for al in alumnos_bd]
+    
+    asistencias_totales = []
+    observaciones_totales = []
+    
+    if enrollment_ids:
+        # Extraemos asistencias
+        query_asist = text(f"""
+            SELECT enrollment_id, fecha_clase, estado, notas_justificacion 
+            FROM attendance_records 
+            WHERE enrollment_id IN ({','.join(map(str, enrollment_ids))})
+        """)
+        asistencias_totales = db.execute(query_asist).mappings().all()
+        
+        # Extraemos observaciones generales de los alumnos (si existen en student_enrollments)
+        query_obs = text(f"""
+            SELECT id AS enrollment_id, observaciones 
+            FROM student_enrollments 
+            WHERE id IN ({','.join(map(str, enrollment_ids))})
+        """)
+        observaciones_totales = db.execute(query_obs).mappings().all()
+
+    # 4. Mapeamos los datos para que el Frontend los consuma fácilmente
+    mapa_observaciones = {obs['enrollment_id']: obs['observaciones'] for obs in observaciones_totales}
+    
+    alumnos_procesados = []
+    for al in alumnos_bd:
+        asistencias_alumno = {}
+        justificaciones_alumno = {}
+        
+        # Filtramos las asistencias solo de este alumno y traducimos el ENUM a letras
+        registros_al = [r for r in asistencias_totales if r['enrollment_id'] == al['id']]
+        for rec in registros_al:
+            fecha_str = rec['fecha_clase'].strftime("%Y-%m-%d")
+            db_estado = rec['estado']
+            
+            if db_estado == 'asistencia': val = 'P'
+            elif db_estado == 'falta': val = 'F'
+            elif db_estado == 'retardo': val = 'R'
+            elif db_estado == 'justificado': val = 'J'
+            else: val = '-'
+            
+            asistencias_alumno[fecha_str] = val
+            
+            if val == 'J' and rec['notas_justificacion']:
+                justificaciones_alumno[fecha_str] = rec['notas_justificacion']
+        
+        alumnos_procesados.append({
+            "id": al['id'],
+            "matricula": al['matricula'],
+            "nombre": al['nombre'],
+            "asistencias": asistencias_alumno,
+            "justificaciones": justificaciones_alumno,
+            "observaciones": mapa_observaciones.get(al['id'], "")
+        })
+
+    # Extraemos un string bonito del horario para mostrarlo en React
+    import json
+    try:
+        horario_list = json.loads(grupo_info['horario_json']) if isinstance(grupo_info['horario_json'], str) else grupo_info['horario_json']
+        dias_clase_str = ", ".join([h.get('dia', '') for h in horario_list])
+    except:
+        dias_clase_str = "Horario no definido"
+
+    return {
+        "fechas": fechas_clase,
+        "acta_cerrada": grupo_info['acta_status'] == 'cerrada',
+        "periodo_activo": bool(grupo_info['periodo_activo']),
+        "dias_clase": dias_clase_str,
+        "alumnos": alumnos_procesados
     }
 
 @router.post("/guardar")
@@ -216,3 +270,84 @@ def guardar_cambios_asistencia(datos: GuardarCambiosRequest, request: Request, d
     except Exception as e:
         db.rollback()
         raise HTTPException(status_code=500, detail=f"Error al guardar: {str(e)}")
+
+
+
+# ==========================================
+# STUDENT EXCLUSIVE ROUTES (HU-16 & HU-17)
+# ==========================================
+from sqlalchemy import text
+
+@router.get("/student/subjects")
+def get_student_attendance(student_id: str, period: str, db: Session = Depends(get_db)):
+    if not student_id or not period: 
+        return []
+
+    query_enrollments = text("""
+        SELECT 
+            v.enrollment_id,
+            v.materia AS subject_name,
+            v.crn AS group_code,
+            v.docente AS teacher_name,
+            v.alumno AS student_name,
+            g.horario_json AS schedule_json,
+            p.fecha_inicio AS start_date,
+            p.fecha_fin AS end_date
+        FROM v_enrollments_detail v
+        JOIN academic_groups g ON v.crn = g.identificador_grupo AND g.periodo = v.periodo
+        JOIN academic_periods p ON p.period_name = v.periodo
+        WHERE v.matricula = :student_id AND v.periodo = :period
+    """)
+    
+    enrollments_data = db.execute(query_enrollments, {"student_id": student_id, "period": period}).mappings().all()
+
+    # 🌟 NUEVO: Usaremos un diccionario para agrupar y fusionar a los clones
+    materias_fusionadas = {}
+
+    for row in enrollments_data:
+        class_dates = calcular_fechas_clase(row['schedule_json'], row['start_date'], row['end_date'])
+
+        query_records = text("""
+            SELECT fecha_clase, estado, notas_justificacion 
+            FROM attendance_records 
+            WHERE enrollment_id = :enrollment_id
+        """)
+        records_data = db.execute(query_records, {"enrollment_id": row['enrollment_id']}).mappings().all()
+
+        attendance_map = {}
+        justification_map = {}
+
+        for rec in records_data:
+            date_str = rec['fecha_clase'].strftime("%Y-%m-%d")
+            db_status = rec['estado']
+            
+            if db_status == 'asistencia': val = 'P'
+            elif db_status == 'falta': val = 'F'
+            elif db_status == 'retardo': val = 'R'
+            elif db_status == 'justificado': val = 'J'
+            else: val = '-'
+
+            attendance_map[date_str] = val
+            if val == 'J' and rec['notas_justificacion']:
+                justification_map[date_str] = rec['notas_justificacion']
+
+        # 🌟 LA MAGIA DE LA FUSIÓN
+        crn = row['group_code']
+        if crn not in materias_fusionadas:
+            # Es la primera vez que vemos esta materia, la registramos
+            materias_fusionadas[crn] = {
+                "subjectName": row['subject_name'],
+                "groupCode": crn,
+                "teacherName": row['teacher_name'],
+                "studentName": row['student_name'],
+                "classDates": class_dates,
+                "attendanceData": attendance_map,
+                "justifications": justification_map
+            }
+        else:
+            # ¡Es un clon! Fusionamos sus asistencias con las que ya teníamos usando .update()
+            materias_fusionadas[crn]["attendanceData"].update(attendance_map)
+            materias_fusionadas[crn]["justifications"].update(justification_map)
+    
+    # Devolvemos solo los valores ya fusionados y limpios como una lista
+    return list(materias_fusionadas.values())
