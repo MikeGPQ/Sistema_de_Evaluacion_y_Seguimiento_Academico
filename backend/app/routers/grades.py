@@ -1,12 +1,13 @@
-import json
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
+from typing import List, Optional
 
 from app.db.database import get_db
 from app.models.academic_group import AcademicGroup
 from app.models.academic_period import AcademicPeriod
 from app.models.enrollment import StudentEnrollment
 from app.models.grade_status import GradeStatus
+from app.models.grade_value import GradeValue
 from app.models.teacher import Teacher
 from app.models.subject import Subject
 from app.schemas.enrollment import BulkGradeUpdateRequest
@@ -14,213 +15,100 @@ from app.services.audit_service import log_audit_event
 
 router = APIRouter(prefix="/docente", tags=["Docente - Calificaciones"])
 
-
-# ──────────────────────────────────────────────
-# GET  /docente/periodos
-# Devuelve todos los periodos académicos del catálogo
-# ──────────────────────────────────────────────
 @router.get("/periodos")
 def get_periods(db: Session = Depends(get_db)):
-    periods = (
-        db.query(AcademicPeriod)
-        .order_by(AcademicPeriod.fecha_inicio.asc())
-        .all()
-    )
-    return [
-        {
-            "period_name": p.period_name,
-            "is_active": p.is_active,
-        }
-        for p in periods
-    ]
+    periods = db.query(AcademicPeriod).order_by(AcademicPeriod.id.desc()).all()
+    return [{"id": p.id, "period_name": p.period_name, "is_active": p.is_active} for p in periods]
 
-
-# ──────────────────────────────────────────────
-# GET  /docente/grade-statuses
-# Devuelve los códigos de justificación disponibles para el docente
-# (solo los que tienen is_manual_justification = True)
-# ──────────────────────────────────────────────
 @router.get("/grade-statuses")
-def get_grade_statuses(all: bool = False, db: Session = Depends(get_db)):
+def get_grade_statuses(all_statuses: bool = False, db: Session = Depends(get_db)):
     query = db.query(GradeStatus)
-    if not all:
+    if not all_statuses:
         query = query.filter(GradeStatus.is_manual_justification == True)
     statuses = query.all()
     return [{"code": s.code, "label": s.description} for s in statuses]
 
+@router.get("/grade-values")
+def get_grade_values(db: Session = Depends(get_db)):
+    values = db.query(GradeValue).all()
+    return [{"id": v.id, "value": v.value, "numeric": v.numeric_value} for v in values]
 
-def _format_horario(horario_json) -> str:
-    try:
-        h = horario_json
-        if isinstance(h, str):
-            h = json.loads(h)
-        if isinstance(h, list) and h:
-            parts = [f"{s.get('dia', '')} {s.get('inicio', '')}-{s.get('fin', '')}" for s in h]
-            return " y ".join(parts)
-        if isinstance(h, dict):
-            parts = [f"{dia.capitalize()} {horas}" for dia, horas in h.items()]
-            return " y ".join(parts)
-    except Exception:
-        pass
-    return "Horario por definir"
-
-
-# ──────────────────────────────────────────────
-# GET  /docente/{teacher_external_id}/grupos
-# Devuelve todos los grupos asignados al docente
-# ──────────────────────────────────────────────
-@router.get("/{teacher_external_id}/grupos")
+@router.get("/{teacher_matricula}/grupos")
 def get_teacher_groups(
-    teacher_external_id: str,
-    periodo: str = Query(default="2026-1"),
+    teacher_matricula: str,
+    periodo_id: int,
     db: Session = Depends(get_db),
 ):
-    teacher = db.query(Teacher).filter(Teacher.external_id == teacher_external_id).first()
+    teacher = db.query(Teacher).filter(Teacher.matricula_empleado == teacher_matricula).first()
     if not teacher:
         raise HTTPException(status_code=404, detail="Docente no encontrado.")
 
-    rows = (
-        db.query(AcademicGroup, Subject)
-        .join(Subject, AcademicGroup.subject_id == Subject.id)
-        .filter(
-            AcademicGroup.teacher_id == teacher.id,
-            AcademicGroup.periodo == periodo,
-        )
+    groups = (
+        db.query(AcademicGroup)
+        .join(Subject)
+        .filter(AcademicGroup.teacher_id == teacher.id, AcademicGroup.period_id == periodo_id)
         .all()
     )
 
-    result = []
-    for g, subject in rows:
-        result.append({
-            "group_id": g.id,
-            "teacher_id": teacher.id,
-            "identificador_grupo": g.identificador_grupo,
-            "subject_nombre": subject.nombre,
-            "cuatrimestre": subject.cuatrimestre,
-            "horario": _format_horario(g.horario_json),
-            "acta_status": g.acta_status,
-            "periodo": g.periodo,
-        })
+    return [{
+        "group_id": g.id,
+        "identificador_grupo": g.identificador_grupo,
+        "subject_nombre": g.subject.nombre,
+        "cuatrimestre": g.subject.quarter.nombre if g.subject.quarter else "N/A",
+        "acta_status": g.acta_status,
+        "horario": ", ".join([f"{s.dia_semana} {s.hora_inicio}-{s.hora_fin}" for s in g.schedules])
+    } for g in groups]
 
-    return result
-
-
-# ──────────────────────────────────────────────
-# GET  /docente/grupos/{group_id}/alumnos
-# Devuelve los alumnos inscritos en el grupo con sus calificaciones
-# ──────────────────────────────────────────────
 @router.get("/grupos/{group_id}/alumnos")
 def get_group_students(group_id: int, db: Session = Depends(get_db)):
-    group = db.query(AcademicGroup).filter(AcademicGroup.id == group_id).first()
-    if not group:
-        raise HTTPException(status_code=404, detail="Grupo no encontrado.")
-
-    enrollments = (
-        db.query(StudentEnrollment)
-        .filter(StudentEnrollment.academic_group_id == group_id)
-        .all()
-    )
-
+    enrollments = db.query(StudentEnrollment).filter(StudentEnrollment.academic_group_id == group_id).all()
+    
     result = []
     for e in enrollments:
         student = e.student
-        nombre = (
-            f"{student.nombre} {student.apellido_paterno} {student.apellido_materno}".strip()
-            if student else "Alumno desconocido"
-        )
         result.append({
+            "enrollment_id": e.id,
             "matricula": e.student_matricula,
-            "nombre": nombre,
-            "p1": e.parcial_1,
-            "s1": e.status_parcial_1 if e.parcial_1 is not None else None,
-            "p2": e.parcial_2,
-            "s2": e.status_parcial_2 if e.parcial_2 is not None else None,
-            "p3": e.parcial_3,
-            "s3": e.status_parcial_3 if e.parcial_3 is not None else None,
+            "nombre": f"{student.nombre} {student.apellido_paterno} {student.apellido_materno}",
+            "p1": {"id": e.parcial_1_id, "val": e.parcial_1.value if e.parcial_1 else None},
+            "p2": {"id": e.parcial_2_id, "val": e.parcial_2.value if e.parcial_2 else None},
+            "p3": {"id": e.parcial_3_id, "val": e.parcial_3.value if e.parcial_3 else None},
+            "final": e.calificacion_final
         })
-
     return result
 
-
-# ──────────────────────────────────────────────
-# PUT  /docente/grupos/{group_id}/calificaciones
-# Guardado masivo de calificaciones (HU-20 / HU-21)
-# ──────────────────────────────────────────────
 @router.put("/grupos/{group_id}/calificaciones")
 def bulk_update_grades(group_id: int, data: BulkGradeUpdateRequest, db: Session = Depends(get_db)):
-
     group = db.query(AcademicGroup).filter(AcademicGroup.id == group_id).first()
-    if not group:
-        raise HTTPException(status_code=404, detail="Grupo no encontrado.")
+    if not group or group.acta_status == 'cerrada':
+        raise HTTPException(status_code=403, detail="Acta cerrada o grupo no encontrado.")
 
-    if group.acta_status == 'cerrada':
-        raise HTTPException(
-            status_code=403,
-            detail="El acta de este grupo ya está cerrada. No se permiten modificaciones en Solo Lectura."
-        )
-
-    # Resolvemos el identifier del docente para auditoría
-    teacher = db.query(Teacher).filter(Teacher.id == group.teacher_id).first()
-    audit_identifier = teacher.external_id if teacher else str(data.docente_id)
-    cambios_realizados = 0
-
-    for student_data in data.students:
-        enrollment = db.query(StudentEnrollment).filter(
+    cambios = 0
+    for s_data in data.students:
+        enr = db.query(StudentEnrollment).filter(
             StudentEnrollment.academic_group_id == group_id,
-            StudentEnrollment.student_matricula == student_data.student_matricula
+            StudentEnrollment.student_matricula == s_data.student_matricula
         ).first()
 
-        if not enrollment:
-            continue
+        if not enr: continue
 
-        old_values = {}
-        new_values = {}
+        # Actualizar IDs de GradeValue
+        enr.parcial_1_id = s_data.p1_id
+        enr.parcial_2_id = s_data.p2_id
+        enr.parcial_3_id = s_data.p3_id
+        
+        # Lógica de Promedio Ponderado con numeric_value (SESA 3.0)
+        if enr.parcial_1 and enr.parcial_2 and enr.parcial_3:
+            v1 = enr.parcial_1.numeric_value
+            v2 = enr.parcial_2.numeric_value
+            v3 = enr.parcial_3.numeric_value
+            
+            promedio = (v1 * 0.3) + (v2 * 0.3) + (v3 * 0.4)
+            enr.calificacion_final = round(promedio)
+            enr.status = "aprobada" if enr.calificacion_final >= 6 else "reprobada"
+        
+        cambios += 1
 
-        def update_parcial(num_parcial, new_score, new_status):
-            attr_score = f'parcial_{num_parcial}'
-            attr_status = f'status_parcial_{num_parcial}'
-
-            current_score = getattr(enrollment, attr_score)
-            current_status = getattr(enrollment, attr_status)
-
-            if new_score is not None and current_score != new_score:
-                old_values[attr_score] = current_score
-                old_values[attr_status] = current_status
-
-                setattr(enrollment, attr_score, new_score)
-                setattr(enrollment, attr_status, new_status if new_status else "OE")
-
-                new_values[attr_score] = getattr(enrollment, attr_score)
-                new_values[attr_status] = getattr(enrollment, attr_status)
-
-        update_parcial(1, student_data.parcial_1, student_data.status_parcial_1)
-        update_parcial(2, student_data.parcial_2, student_data.status_parcial_2)
-        update_parcial(3, student_data.parcial_3, student_data.status_parcial_3)
-
-        # Cálculo de Promedio Ponderado (HU-21)
-        if enrollment.parcial_1 is not None and enrollment.parcial_2 is not None and enrollment.parcial_3 is not None:
-            promedio_exacto = (enrollment.parcial_1 * 0.3) + (enrollment.parcial_2 * 0.3) + (enrollment.parcial_3 * 0.4)
-            enrollment.calificacion_final = round(promedio_exacto)
-            enrollment.status = "aprobada" if enrollment.calificacion_final >= 7 else "reprobada"
-        else:
-            enrollment.calificacion_final = None
-            enrollment.status = "cursando"
-
-        if new_values:
-            log_audit_event(
-                db=db,
-                user_identifier=audit_identifier,
-                action="UPDATE",
-                entity_name="student_enrollments",
-                entity_id=str(enrollment.id),
-                old_values=old_values,
-                new_values=new_values
-            )
-            cambios_realizados += 1
-
+    log_audit_event(db, data.docente_id, "UPDATE", "grades", str(group_id), None, {"alumnos": len(data.students)})
     db.commit()
-
-    return {
-        "message": "Calificaciones actualizadas y promedios calculados correctamente.",
-        "alumnos_modificados": cambios_realizados
-    }
+    return {"message": "Calificaciones guardadas", "cambios": cambios}

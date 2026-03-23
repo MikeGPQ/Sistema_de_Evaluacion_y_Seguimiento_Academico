@@ -4,153 +4,118 @@ from sqlalchemy.orm import Session
 from sqlalchemy import text
 from app.db.database import get_db
 from datetime import datetime
+from app.models.teacher import Teacher
+from app.models.academic_group import AcademicGroup
+from app.models.academic_period import AcademicPeriod
+from app.services.audit_service import log_audit_event
 
-router = APIRouter(tags=["Generación de Actas"])
+router = APIRouter(prefix="/reportes", tags=["Generación de Actas"])
 
-# =================================================================
-# Grupos academicos activos por docente
-# =================================================================
-@router.get("/docentes/{docente_id}/grupos")
-def obtener_grupos_docente(docente_id: str, db: Session = Depends(get_db)):
-    
-    # Buscamos al maestro por su external_id 
-    query_docente = text("SELECT id FROM teachers WHERE external_id = :docente_id")
-    docente = db.execute(query_docente, {"docente_id": docente_id}).mappings().first()
-    
+@router.get("/docentes/{docente_matricula}/grupos")
+def obtener_grupos_docente(docente_matricula: str, db: Session = Depends(get_db)):
+    # 1. Buscar docente por matrícula de empleado (V3.0)
+    docente = db.query(Teacher).filter(Teacher.matricula_empleado == docente_matricula).first()
     if not docente:
-        # si no se encuentra por su external_id lo intentamos buscar por su ID 
-        try:
-            query_fallback = text("SELECT id FROM teachers WHERE id = :id")
-            docente = db.execute(query_fallback, {"id": int(docente_id)}).mappings().first()
-        except ValueError:
-            pass
-            
-    if not docente:
-        raise HTTPException(status_code=404, detail="Docente no encontrado en la base de datos.")
+        raise HTTPException(status_code=404, detail="Docente no encontrado.")
 
-    # obtenemos los grupos academicos activos del docente para el periodo actual
-    query_grupos = text("""
-        SELECT 
-            g.id, 
-            s.nombre AS materia_nombre, 
-            g.identificador_grupo AS identificador, 
-            g.acta_status,
-            (SELECT COUNT(*) FROM student_enrollments WHERE academic_group_id = g.id) AS total_alumnos
-        FROM academic_groups g
-        JOIN subjects s ON g.subject_id = s.id
-        WHERE g.teacher_id = :teacher_id AND g.periodo = (SELECT period_name FROM academic_periods WHERE is_active = TRUE LIMIT 1)
-    """)
-    
-    grupos = db.execute(query_grupos, {"teacher_id": docente.id}).mappings().all()
-    return [dict(g) for g in grupos]
+    # 2. Obtener periodo activo por ID
+    periodo_activo = db.query(AcademicPeriod).filter(AcademicPeriod.is_active == True).first()
+    if not periodo_activo:
+        return []
 
+    # 3. Consulta de grupos usando el ORM para mayor claridad
+    grupos = db.query(AcademicGroup).filter(
+        AcademicGroup.teacher_id == docente.id,
+        AcademicGroup.period_id == periodo_activo.id
+    ).all()
 
-# =================================================================
-# endpoint para validar el acta de un grupo academico antes de generar la acta oficial
-# =================================================================
+    return [{
+        "id": g.id,
+        "materia_nombre": g.subject.nombre,
+        "identificador": g.identificador_grupo,
+        "acta_status": g.acta_status,
+        "total_alumnos": len(g.enrollments)
+    } for g in grupos]
+
 @router.get("/actas/{grupo_id}/validar")
 def validar_acta_grupo(grupo_id: int, db: Session = Depends(get_db)):
-    query_header = text("""
-        SELECT 
-            c.name AS carrera,
-            s.id AS codigo_materia,
-            'San Francisco - Campeche' AS campus,
-            s.cuatrimestre,
-            g.periodo,
-            g.identificador_grupo AS grupo,
-            s.nombre AS materia_nombre,
-            CONCAT(t.nombre, ' ', t.apellido_paterno) AS docente_nombre,
-            g.acta_status
-        FROM academic_groups g
-        JOIN subjects s ON g.subject_id = s.id
-        LEFT JOIN careers c ON s.career_id = c.id
-        JOIN teachers t ON g.teacher_id = t.id
-        WHERE g.id = :grupo_id
-    """)
-    header = db.execute(query_header, {"grupo_id": grupo_id}).mappings().first()
-    
-    if not header:
-        raise HTTPException(status_code=404, detail="Grupo académico no encontrado.")
-
-    query_alumnos = text("""
-        SELECT 
-            st.matricula,
-            CONCAT(st.apellido_paterno, ' ', st.apellido_materno, ', ', st.nombre) AS nombre,
-            se.calificacion_final 
-        FROM student_enrollments se
-        JOIN students st ON se.student_matricula = st.matricula
-        WHERE se.academic_group_id = :grupo_id
-        ORDER BY st.apellido_paterno ASC
-    """)
-    alumnos_db = db.execute(query_alumnos, {"grupo_id": grupo_id}).mappings().all()
-    alumnos = [dict(a) for a in alumnos_db]
-
-    total_inscritos = len(alumnos)
-    total_calificados = sum(1 for a in alumnos if a['calificacion_final'] is not None)
-    
-    captura_completa = False
-    if total_inscritos > 0 and total_inscritos == total_calificados:
-        captura_completa = True
-
-    return {
-        "carrera": header['carrera'] or "Tronco Común",
-        "codigo_materia": f"MAT-{header['codigo_materia']}",
-        "campus": header['campus'],
-        "cuatrimestre": header['cuatrimestre'],
-        "periodo": header['periodo'],
-        "grupo": header['grupo'],
-        "materia_nombre": header['materia_nombre'],
-        "docente_nombre": header['docente_nombre'],
-        "acta_status": header['acta_status'],
-        "captura_completa": captura_completa,
-        "alumnos": alumnos
-    }
-
-
-# =================================================================
-# endpoint para cerrar el acta oficial de un grupo academico, bloqueando futuras modificaciones a las calificaciones
-# =================================================================
-@router.post("/actas/{grupo_id}/cerrar")
-def cerrar_acta_oficial(grupo_id: int, payload: dict, db: Session = Depends(get_db)):
-    docente_id = payload.get("docente_id", "Desconocido")
-    
-    grupo = db.execute(text("SELECT acta_status FROM academic_groups WHERE id = :grupo_id"), {"grupo_id": grupo_id}).mappings().first()
+    # 1. Obtener cabecera del acta con relaciones V3.0
+    grupo = db.query(AcademicGroup).filter(AcademicGroup.id == grupo_id).first()
     if not grupo:
         raise HTTPException(status_code=404, detail="Grupo no encontrado.")
-    if grupo['acta_status'] == 'cerrada':
-        raise HTTPException(status_code=400, detail="El acta ya se encuentra cerrada y congelada.")
+
+    # 2. Procesar alumnos y sus calificaciones finales
+    alumnos_data = []
+    total_calificados = 0
+    
+    # Ordenar por apellido (Requerimiento de Acta Oficial)
+    enrollments = sorted(grupo.enrollments, key=lambda x: x.student.apellido_paterno)
+
+    for enr in enrollments:
+        calif = enr.calificacion_final
+        if calif is not None:
+            total_calificados += 1
+        
+        alumnos_data.append({
+            "matricula": enr.student_matricula,
+            "nombre": f"{enr.student.apellido_paterno} {enr.student.apellido_materno}, {enr.student.nombre}",
+            "calificacion_final": calif
+        })
+
+    total_inscritos = len(enrollments)
+    captura_completa = (total_inscritos > 0 and total_inscritos == total_calificados)
+
+    return {
+        "carrera": grupo.subject.career.name if grupo.subject.career else "Tronco Común",
+        "nivel": grupo.subject.nivel_academico, # Diferenciación Lic/Mtr
+        "codigo_materia": grupo.subject.codigo_unico or f"MAT-{grupo.subject_id}",
+        "campus": "San Francisco - Campeche",
+        "cuatrimestre": grupo.subject.quarter.nombre if grupo.subject.quarter else "N/A",
+        "periodo": grupo.period.period_name,
+        "grupo": grupo.identificador_grupo,
+        "materia_nombre": grupo.subject.nombre,
+        "docente_nombre": f"{grupo.teacher.nombre} {grupo.teacher.apellido_paterno}",
+        "acta_status": grupo.acta_status,
+        "captura_completa": captura_completa,
+        "alumnos": alumnos_data
+    }
+
+@router.post("/actas/{grupo_id}/cerrar")
+def cerrar_acta_oficial(grupo_id: int, payload: dict, db: Session = Depends(get_db)):
+    usuario_id = payload.get("usuario_id", "Sistema")
+    
+    grupo = db.query(AcademicGroup).filter(AcademicGroup.id == grupo_id).first()
+    if not grupo:
+        raise HTTPException(status_code=404, detail="Grupo no encontrado.")
+    
+    if grupo.acta_status == 'cerrada':
+        raise HTTPException(status_code=400, detail="El acta ya se encuentra cerrada.")
+
+    # Validación extra: No cerrar si no está completa la captura
+    inscritos = len(grupo.enrollments)
+    calificados = sum(1 for e in grupo.enrollments if e.calificacion_final is not None)
+    
+    if inscritos == 0 or inscritos != calificados:
+        raise HTTPException(status_code=400, detail="No se puede cerrar el acta: faltan alumnos por calificar.")
 
     try:
-        # Actualizamos el estado del acta a cerrados
-        db.execute(
-            text("UPDATE academic_groups SET acta_status = 'cerrada' WHERE id = :grupo_id"),
-            {"grupo_id": grupo_id}
-        )
+        old_status = grupo.acta_status
+        grupo.acta_status = 'cerrada'
         
-        # añadimos un registro al log
-        try:
-            db.execute(
-                text("""
-                    INSERT INTO audit_logs 
-                    (user_identifier, action, entity_name, entity_id, old_values, new_values, created_at) 
-                    VALUES (:user_id, :action, :entity_name, :entity_id, :old_vals, :new_vals, :fecha)
-                """),
-                {
-                    "user_id": str(docente_id), 
-                    "action": "UPDATE",
-                    "entity_name": "academic_groups",
-                    "entity_id": grupo_id,
-                    "old_vals": json.dumps({"acta_status": grupo['acta_status']}),
-                    "new_vals": json.dumps({"acta_status": "cerrada"}),
-                    "fecha": datetime.now()
-                }
-            )
-        except Exception as log_error:
-            print(f"Advertencia: No se pudo escribir el log de auditoría. Detalle: {log_error}")
+        # Auditoría V3.0 centralizada
+        log_audit_event(
+            db=db,
+            user_identifier=usuario_id,
+            action="UPDATE",
+            entity_name="academic_groups",
+            entity_id=str(grupo_id),
+            old_values={"acta_status": old_status},
+            new_values={"acta_status": "cerrada", "motivo": "Cierre oficial de acta"}
+        )
 
         db.commit()
-        return {"message": "Acta cerrada exitosamente. Las calificaciones han sido congeladas."}
+        return {"message": "Acta cerrada exitosamente. Calificaciones protegidas."}
         
     except Exception as e:
         db.rollback()
-        raise HTTPException(status_code=500, detail=f"Fallo crítico al cerrar el acta: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))

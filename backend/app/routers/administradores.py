@@ -53,7 +53,6 @@ class AdminUpdate(BaseModel):
 
 @router.put("/actualizar/{numero_empleado}", status_code=status.HTTP_200_OK)
 def update_admin(numero_empleado: str, admin_data: AdminUpdate, db: Session = Depends(get_db)):
-    # 1. Buscar al administrador existente
     admin = db.query(Administrator).filter(Administrator.numero_empleado == numero_empleado).first()
     if not admin:
         raise HTTPException(status_code=404, detail="Administrador no encontrado.")
@@ -67,14 +66,12 @@ def update_admin(numero_empleado: str, admin_data: AdminUpdate, db: Session = De
         "is_active": admin.is_active
     }
 
-    # 2. Validar que el nuevo correo personal no pertenezca a otro usuario
     if admin_data.email_personal != admin.email_personal:
         if db.query(User).filter(User.email == admin_data.email_personal, User.identifier != numero_empleado).first() or \
            db.query(Administrator).filter(Administrator.email_personal == admin_data.email_personal, Administrator.numero_empleado != numero_empleado).first() or \
            db.query(Student).filter(Student.email_personal == admin_data.email_personal).first():
             raise HTTPException(status_code=400, detail="El correo personal ya está registrado por otro usuario.")
 
-    # 3. Validar que el nuevo correo institucional no pertenezca a otro usuario
     if admin_data.email_institucional and admin_data.email_institucional != admin.email_institucional:
         if db.query(User).filter(User.email == admin_data.email_institucional, User.identifier != numero_empleado).first() or \
            db.query(Administrator).filter(Administrator.email_institucional == admin_data.email_institucional, Administrator.numero_empleado != numero_empleado).first() or \
@@ -89,7 +86,6 @@ def update_admin(numero_empleado: str, admin_data: AdminUpdate, db: Session = De
         admin.email_institucional = admin_data.email_institucional
         admin.is_active = admin_data.is_active 
 
-        # Actualizar la tabla User
         user = db.query(User).filter(User.identifier == numero_empleado).first()
         if user:
             user.email = admin_data.email_institucional if admin_data.email_institucional else admin_data.email_personal
@@ -174,13 +170,11 @@ def get_administrators(
 
 @router.post("/register", status_code=status.HTTP_201_CREATED)
 def register_admin(admin_data: AdminCreate, db: Session = Depends(get_db)):
-    # 1. Validar que email_personal no se repita en ninguna tabla
     if db.query(User).filter(User.email == admin_data.email_personal).first() or \
        db.query(Administrator).filter(Administrator.email_personal == admin_data.email_personal).first() or \
        db.query(Student).filter(Student.email_personal == admin_data.email_personal).first():
         raise HTTPException(status_code=400, detail="El correo personal ya está registrado en el sistema.")
 
-    # 2. Validar que email_institucional no se repita en ninguna tabla
     if admin_data.email_institucional:
         if db.query(User).filter(User.email == admin_data.email_institucional).first() or \
            db.query(Administrator).filter(Administrator.email_institucional == admin_data.email_institucional).first() or \
@@ -188,7 +182,6 @@ def register_admin(admin_data: AdminCreate, db: Session = Depends(get_db)):
             raise HTTPException(status_code=400, detail="El correo institucional ya está registrado en el sistema.")
 
     try:
-        # 3. Generación automática del ID
         max_admin = db.query(func.max(Administrator.numero_empleado)).scalar()
         max_student = db.query(func.max(Student.matricula)).scalar()
         max_user = db.query(func.max(User.identifier)).scalar()
@@ -205,7 +198,6 @@ def register_admin(admin_data: AdminCreate, db: Session = Depends(get_db)):
             siguiente_id += 1
             nuevo_numero_empleado = str(siguiente_id).zfill(8)
 
-        # 4. Generación de contraseña
         alphabet = string.ascii_letters + string.digits
         raw_password = ''.join(secrets.choice(alphabet) for _ in range(10))
         hashed_password = get_password_hash(raw_password)
@@ -214,7 +206,6 @@ def register_admin(admin_data: AdminCreate, db: Session = Depends(get_db)):
         if not admin_role:
              raise HTTPException(status_code=500, detail="El rol 'admin' no existe.")
 
-        # 5. Creación de User 
         email_login = admin_data.email_institucional if admin_data.email_institucional else admin_data.email_personal
         new_user = User(
             identifier=nuevo_numero_empleado, 
@@ -225,7 +216,6 @@ def register_admin(admin_data: AdminCreate, db: Session = Depends(get_db)):
         )
         db.add(new_user)
 
-        # 6. Creación de Administrator
         new_admin = Administrator(
             numero_empleado=nuevo_numero_empleado,
             nombre=admin_data.nombre,
@@ -257,7 +247,6 @@ def register_admin(admin_data: AdminCreate, db: Session = Depends(get_db)):
 
         db.commit()
 
-        # 7. Envío de correo
         try:
             remitente = "sesacorp10@gmail.com"
             password_aplicacion = "enecpjvwkoseedip"
@@ -294,7 +283,7 @@ def register_admin(admin_data: AdminCreate, db: Session = Depends(get_db)):
             server.sendmail(remitente, admin_data.email_personal, msg.as_string())
             server.quit()
         except Exception as email_err:
-            print(f"Registro exitoso, fallo correo: {email_err}")
+            pass
 
         return {
             "message": "Administrador creado exitosamente",
