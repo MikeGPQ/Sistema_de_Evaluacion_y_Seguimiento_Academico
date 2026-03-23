@@ -47,10 +47,10 @@ def obtener_grupos_disponibles(matricula: str, db: Session = Depends(get_db)):
             detail=f"El alumno se encuentra en estado '{estado_alumno.upper()}'. No se puede editar ni actualizar su horario hasta que vuelva a estar ACTIVO."
         )
         
-    nombre_carrera = perfil.academic_program.name if perfil.academic_program else "Sin programa asignado"
+    nombre_carrera = perfil.career.name if perfil.career else "Sin programa asignado"
     nombre_completo = f"{alumno.nombre} {alumno.apellido_paterno} {alumno.apellido_materno}"
     
-    cuatrimestre_actual_num = int(perfil.quarter_actual.numero) if perfil.quarter_actual and str(perfil.quarter_actual.numero).isdigit() else 1
+    cuatrimestre_actual_num = int(perfil.quarter_actual.external_id) if perfil.quarter_actual and str(perfil.quarter_actual.external_id).isdigit() else 1
     bloquear_grupo_base = cuatrimestre_actual_num > 1
 
     inscripciones_db = db.query(StudentEnrollment).filter(
@@ -62,10 +62,10 @@ def obtener_grupos_disponibles(matricula: str, db: Session = Depends(get_db)):
         db.query(AcademicGroup)
         .join(Subject, AcademicGroup.subject_id == Subject.id)
         .filter(
-            Subject.quarter_id == perfil.quarter_actual_id, 
+            Subject.quarter_id == perfil.quarter_actual_id,
             or_(
-                Subject.academic_program_id == perfil.academic_program_id, 
-                Subject.academic_program_id.is_(None)              
+                Subject.career_id == perfil.career_id,
+                Subject.career_id.is_(None)
             )
         )
         .all()
@@ -77,8 +77,8 @@ def obtener_grupos_disponibles(matricula: str, db: Session = Depends(get_db)):
         materia = grupo.subject 
         if not materia: continue
             
-        es_tronco_comun = materia.academic_program_id is None 
-            
+        es_tronco_comun = materia.career_id is None
+
         if materia.id not in materias_dict:
             materias_dict[materia.id] = {
                 "subject_id": materia.id, "nombre": materia.nombre, 
@@ -90,7 +90,7 @@ def obtener_grupos_disponibles(matricula: str, db: Session = Depends(get_db)):
             StudentEnrollment.academic_group_id == grupo.id
         ).count()
         
-        cupos_libres = max(0, (grupo.cupo_maximo or 30) - alumnos_inscritos)
+        cupos_libres = max(0, (grupo.subject.cupo_maximo or 30) - alumnos_inscritos)
 
         horario_texto = "Horario por definir"
         sesiones_puras = [] 
@@ -109,10 +109,10 @@ def obtener_grupos_disponibles(matricula: str, db: Session = Depends(get_db)):
 
         materias_dict[materia.id]["grupos_disponibles"].append({
             "group_id": grupo.id,
-            "nombre": grupo.identificador_grupo,  
-            "cupo_disponible": cupos_libres, 
+            "nombre": grupo.sigad_group.identificador if grupo.sigad_group else str(grupo.id),
+            "cupo_disponible": cupos_libres,
             "horario": horario_texto,
-            "horario_raw": sesiones_puras 
+            "horario_raw": sesiones_puras
         })
 
     return {
@@ -138,12 +138,12 @@ def obtener_grupos_autoservicio(matricula: str, db: Session = Depends(get_db)):
     if estado_alumno in ["baja", "baja_temporal", "egresado"]:
         raise HTTPException(status_code=403, detail="Credenciales inactivas para el proceso de inscripción.")
         
-    cuatrimestre_actual_num = int(perfil.quarter_actual.numero) if perfil.quarter_actual and str(perfil.quarter_actual.numero).isdigit() else 1
+    cuatrimestre_actual_num = int(perfil.quarter_actual.external_id) if perfil.quarter_actual and str(perfil.quarter_actual.external_id).isdigit() else 1
 
     if cuatrimestre_actual_num < 2:
         raise HTTPException(status_code=403, detail="Estudiantes de nuevo ingreso requieren gestión por Control Escolar.")
 
-    nombre_carrera = perfil.academic_program.name if perfil.academic_program else "Sin programa"
+    nombre_carrera = perfil.career.name if perfil.career else "Sin programa"
     nombre_completo = f"{alumno.nombre} {alumno.apellido_paterno} {alumno.apellido_materno}"
 
     inscripciones_vigentes = db.query(StudentEnrollment).filter(
@@ -158,8 +158,8 @@ def obtener_grupos_autoservicio(matricula: str, db: Session = Depends(get_db)):
         .join(Subject, AcademicGroup.subject_id == Subject.id)
         .filter(
             or_(
-                Subject.academic_program_id == perfil.academic_program_id,
-                Subject.academic_program_id.is_(None)
+                Subject.career_id == perfil.career_id,
+                Subject.career_id.is_(None)
             )
         )
         .all()
@@ -178,7 +178,7 @@ def obtener_grupos_autoservicio(matricula: str, db: Session = Depends(get_db)):
         if not (es_regular or es_recursamiento):
             continue 
 
-        es_tronco_comun = materia.academic_program_id is None
+        es_tronco_comun = materia.career_id is None
         dict_destino = materias_recursamiento_dict if es_recursamiento else materias_regulares_dict
 
         if materia.id not in dict_destino:
@@ -192,7 +192,7 @@ def obtener_grupos_autoservicio(matricula: str, db: Session = Depends(get_db)):
         alumnos_inscritos = db.query(StudentEnrollment).filter(
             StudentEnrollment.academic_group_id == grupo.id
         ).count()
-        cupos_libres = max(0, (grupo.cupo_maximo or 30) - alumnos_inscritos)
+        cupos_libres = max(0, (grupo.subject.cupo_maximo or 30) - alumnos_inscritos)
 
         horario_texto = "Horario por definir"
         sesiones_puras = []
@@ -211,10 +211,10 @@ def obtener_grupos_autoservicio(matricula: str, db: Session = Depends(get_db)):
 
         dict_destino[materia.id]["grupos_disponibles"].append({
             "group_id": grupo.id,
-            "nombre": grupo.identificador_grupo,  
-            "cupo_disponible": cupos_libres, 
+            "nombre": grupo.sigad_group.identificador if grupo.sigad_group else str(grupo.id),
+            "cupo_disponible": cupos_libres,
             "horario": horario_texto,
-            "horario_raw": sesiones_puras 
+            "horario_raw": sesiones_puras
         })
 
     return {
@@ -245,8 +245,9 @@ def guardar_carga_academica(matricula: str, request: GuardarCargaRequest, db: Se
             StudentEnrollment.academic_profile_id == perfil.id
         ).first()
         
-        if not ya_estaba_inscrito and inscritos >= (grupo.cupo_maximo or 30):
-            raise HTTPException(status_code=400, detail=f"El grupo '{grupo.identificador_grupo}' ya está lleno.")
+        if not ya_estaba_inscrito and inscritos >= (grupo.subject.cupo_maximo or 30):
+            identificador = grupo.sigad_group.identificador if grupo.sigad_group else str(grupo.id)
+            raise HTTPException(status_code=400, detail=f"El grupo '{identificador}' ya está lleno.")
 
     horarios_ocupados = [] 
     for grupo in grupos_a_inscribir:
@@ -296,8 +297,8 @@ def guardar_carga_academica(matricula: str, request: GuardarCargaRequest, db: Se
             nueva_inscripcion = StudentEnrollment(
                 student_matricula=matricula,
                 academic_profile_id=perfil.id,
-                academic_group_id=materia.group_id, 
-                period_name=perfil.period.period_name if perfil.period else "2026-1",
+                academic_group_id=materia.group_id,
+                period_id=perfil.period_id,
                 is_retake=materia.is_retake
             )
             db.add(nueva_inscripcion)
@@ -370,7 +371,7 @@ def obtener_horario_real(matricula: str, db: Session = Depends(get_db)):
             
         materia = materia_obj.nombre
         profe = f"{grupo.teacher.nombre} {grupo.teacher.apellido_paterno}" if grupo.teacher else "S/A"
-        es_tronco_comun = materia_obj.academic_program_id is None
+        es_tronco_comun = materia_obj.career_id is None
         
         if materia not in mapa_colores:
             if es_tronco_comun:

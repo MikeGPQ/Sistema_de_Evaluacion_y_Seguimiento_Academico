@@ -39,8 +39,8 @@ class StudentEnrollment(Base):
     academic_group = relationship("AcademicGroup", back_populates="enrollments")
     period = relationship("AcademicPeriod", back_populates="enrollments")
     
-    calificacion_p1 = relationship("GradeValue", foreign_keys=[parcial_1_id])
-    calificacion_p2 = relationship("GradeValue", foreign_keys=[parcial_2_id])
-    calificacion_p3 = relationship("GradeValue", foreign_keys=[parcial_3_id])
+    calificacion_p1 = relationship("GradeValue", foreign_keys=[parcial_1_id], overlaps="enrollments_p1")
+    calificacion_p2 = relationship("GradeValue", foreign_keys=[parcial_2_id], overlaps="enrollments_p2")
+    calificacion_p3 = relationship("GradeValue", foreign_keys=[parcial_3_id], overlaps="enrollments_p3")
     
     attendance_records = relationship("AttendanceRecord", back_populates="enrollment", cascade="all, delete-orphan")

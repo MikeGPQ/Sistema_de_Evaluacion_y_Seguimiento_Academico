@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Date, YEAR, Boolean, TIMESTAMP, text
+from sqlalchemy import Column, Integer, SmallInteger, String, Date, Boolean, TIMESTAMP, text
 from sqlalchemy.orm import relationship
 from app.db.database import Base
 
@@ -8,7 +8,7 @@ class AcademicPeriod(Base):
     id = Column(Integer, primary_key=True, index=True, autoincrement=True)
     external_id = Column(Integer, nullable=True)
     codigo = Column(String(20), nullable=False)
-    anio = Column(YEAR, nullable=True)
+    anio = Column(SmallInteger, nullable=True)
     fecha_inicio = Column(Date, nullable=False)
     fecha_fin = Column(Date, nullable=False)
     fecha_limite_calif = Column(Date, nullable=True)

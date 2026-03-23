@@ -27,6 +27,7 @@ from app.models.student_academic_profile import StudentAcademicProfile
 from app.models.student_addresses import StudentAddress
 from app.models.student_status import StudentStatus
 from app.models.academic_program import AcademicProgram
+from app.models.academic_level import AcademicLevel
 from app.models.origin_school import OriginSchool
 from app.models.grade_value import GradeValue
 from app.models.user import User
@@ -47,7 +48,9 @@ router = APIRouter(prefix="/alumnos", tags=["Alumnos"])
 def get_form_options(db: Session = Depends(get_db)):
     careers = db.query(AcademicProgram).all()
     schools = db.query(OriginSchool).filter(OriginSchool.is_active == True).all()
-    return {"careers": careers, "schools": schools}
+    levels = db.query(AcademicLevel).all()
+    periods = db.query(AcademicPeriod).all()
+    return {"careers": careers, "schools": schools, "levels": levels, "periods": periods}
 
 @router.post("/set-base-id")
 def set_base_id(nueva_matricula: str = Form(...), db: Session = Depends(get_db)):
@@ -77,10 +80,11 @@ def set_base_id(nueva_matricula: str = Form(...), db: Session = Depends(get_db))
 
         dummy_profile = StudentAcademicProfile(
             student_matricula=dummy_student.matricula,
-            academic_program_id=career.id if career else 1,
+            nivel_id=1,
+            career_id=career.id if career else 1,
             origin_school_id=school.id if school else 1,
             period_id=period.id if period else 1,
-            quarter_actual_id=1, 
+            quarter_actual_id=1,
             status_id=baja_status.id if baja_status else 2,
             promedio_procedencia=0
         )
@@ -112,7 +116,7 @@ def listar_alumnos(
         )
 
     if carrera_id:
-        query = query.filter(StudentAcademicProfile.academic_program_id == carrera_id)
+        query = query.filter(StudentAcademicProfile.career_id == carrera_id)
 
     if cuatrimestre:
         query = query.filter(StudentAcademicProfile.quarter_actual_id == cuatrimestre)
@@ -126,7 +130,7 @@ def listar_alumnos(
     for alumno in alumnos:
         perfil = db.query(StudentAcademicProfile).filter(StudentAcademicProfile.student_matricula == alumno.matricula).order_by(StudentAcademicProfile.id.desc()).first()
         
-        carrera_nombre = perfil.academic_program.name if perfil and perfil.academic_program else "Sin Carrera"
+        carrera_nombre = perfil.career.name if perfil and perfil.career else "Sin Carrera"
         estatus_nombre = perfil.status.name if perfil and perfil.status else "Sin Estatus"
         
         data.append({
@@ -207,7 +211,8 @@ def register_student(
 
         new_profile = StudentAcademicProfile(
             student_matricula=final_matricula,
-            academic_program_id=student_in.career_id,
+            nivel_id=1,
+            career_id=student_in.career_id,
             origin_school_id=student_in.origin_school_id,
             period_id=periodo_activo.id if periodo_activo else 1,
             quarter_actual_id=1,
@@ -391,7 +396,8 @@ async def importar_alumnos(file: UploadFile = File(...), usuario_id: str = Form(
 
             nuevo_perfil = StudentAcademicProfile(
                 student_matricula=matricula_str,
-                academic_program_id=career.id,
+                nivel_id=1,
+                career_id=career.id,
                 origin_school_id=school.id,
                 period_id=periodo_activo.id if periodo_activo else 1,
                 quarter_actual_id=int(cuat_str) if cuat_str.isdigit() else 1,
@@ -448,15 +454,15 @@ def get_student_detail(matricula: str, db: Session = Depends(get_db)):
             "curp": student.curp,
             "email_personal": student.email_personal,
             "email_institucional": student.email_institucional,
-            "career_id": perfil.academic_program_id if perfil else None,
+            "career_id": perfil.career_id if perfil else None,
             "origin_school_id": perfil.origin_school_id if perfil else None,
             "promedio_procedencia": perfil.promedio_procedencia if perfil else None,
             "status_id": perfil.status_id if perfil else None,
             "status": perfil.status.name if perfil and perfil.status else None,
             "foto_id": student.foto_id,
-            "foto_nombre": student.foto.file_name if student.foto else None,
+            "foto_nombre": student.foto_perfil.file_name if student.foto_perfil else None,
             "certificado_id": perfil.certificado_id if perfil else None,
-            "certificado_nombre": perfil.certificado.file_name if perfil and perfil.certificado else None
+            "certificado_nombre": perfil.certificado_file.file_name if perfil and perfil.certificado_file else None
         },
         "address": {
             "calle": address.calle if address else '',
@@ -504,7 +510,7 @@ def update_student(
     student.email_institucional = data_dict.get('email_institucional', student.email_institucional)
 
     if perfil:
-        perfil.academic_program_id = data_dict.get('career_id', perfil.academic_program_id)
+        perfil.career_id = data_dict.get('career_id', perfil.career_id)
         perfil.origin_school_id = data_dict.get('origin_school_id', perfil.origin_school_id)
 
     if address:
@@ -551,8 +557,8 @@ def get_archivo(file_id: int, db: Session = Depends(get_db)):
 
 @router.get("/periodos")
 def get_periodos(db: Session = Depends(get_db)):
-    periodos = db.query(AcademicPeriod).order_by(AcademicPeriod.period_name.desc()).all()
-    return [{"period_name": p.period_name, "is_active": p.is_active} for p in periodos]
+    periodos = db.query(AcademicPeriod).order_by(AcademicPeriod.codigo.desc()).all()
+    return [{"period_name": p.codigo, "is_active": p.is_active} for p in periodos]
 
 @router.get("/mis-calificaciones/{matricula}", response_model=list[MisCalificacionesResponse])
 def get_my_grades(
@@ -564,12 +570,14 @@ def get_my_grades(
     
     if not periodo:
         periodo_activo = db.query(AcademicPeriod).filter(AcademicPeriod.is_active == True).first()
-        periodo = periodo_activo.period_name if periodo_activo else "2026-1"
+        periodo = periodo_activo.codigo if periodo_activo else "2026-1"
 
     resultados = (
         db.query(
             Subject.nombre.label("materia"),
-            StudentEnrollment.p1_id, StudentEnrollment.p2_id, StudentEnrollment.p3_id,
+            StudentEnrollment.parcial_1_id.label("p1_id"),
+            StudentEnrollment.parcial_2_id.label("p2_id"),
+            StudentEnrollment.parcial_3_id.label("p3_id"),
             StudentEnrollment.calificacion_final, StudentEnrollment.status, Subject.quarter_id
         )
         .join(AcademicGroup, StudentEnrollment.academic_group_id == AcademicGroup.id)
@@ -577,7 +585,7 @@ def get_my_grades(
         .filter(StudentEnrollment.student_matricula == matricula)
     ).all()
 
-    carrera = perfil.academic_program.name if perfil and perfil.academic_program else "N/A"
+    carrera = perfil.career.name if perfil and perfil.career else "N/A"
     
     val_map = {gv.id: str(gv.value) for gv in db.query(GradeValue).all()}
 

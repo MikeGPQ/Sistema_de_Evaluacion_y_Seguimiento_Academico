@@ -34,6 +34,7 @@ class StudentAcademicProfile(Base):
     sigad_group = relationship("SigadGroup")
     certificado_file = relationship("File", back_populates="academic_certificates")
     
+    estatus_titulacion = relationship("TitulationStatus", back_populates="student_profiles")
     enrollments = relationship("StudentEnrollment", back_populates="academic_profile")
     status_logs = relationship("StudentStatusLog", back_populates="academic_profile")
     period_gpas = relationship("StudentPeriodGpa", back_populates="academic_profile")

@@ -15,6 +15,6 @@ class StudentStatusLog(Base):
     changed_at = Column(TIMESTAMP, nullable=False, server_default=text("CURRENT_TIMESTAMP"))
 
     academic_profile = relationship("StudentAcademicProfile", back_populates="status_logs")
-    previous_status = relationship("StudentStatus", foreign_keys=[previous_status_id])
-    new_status = relationship("StudentStatus", foreign_keys=[new_status_id])
+    previous_status = relationship("StudentStatus", foreign_keys=[previous_status_id], overlaps="status_logs_previous")
+    new_status = relationship("StudentStatus", foreign_keys=[new_status_id], overlaps="status_logs_new")
     evidence_file = relationship("File", back_populates="status_evidences")

@@ -6,6 +6,7 @@ from app.models.student_status import StudentStatus
 from app.models.academic_level import AcademicLevel
 from app.models.academic_program import AcademicProgram
 from app.models.academic_period import AcademicPeriod
+from app.models.academic_level import AcademicLevel
 from app.models.origin_school import OriginSchool
 from app.models.quarter_catalog import QuarterCatalog
 from app.models.titulation_status import TitulationStatus
@@ -27,9 +28,11 @@ def get_niveles(db: Session = Depends(get_db)):
 def get_programas(nivel_id: int = None, db: Session = Depends(get_db)):
     query = db.query(AcademicProgram)
     if nivel_id:
-        query = query.filter(AcademicProgram.nivel_id == nivel_id)
+        nivel = db.query(AcademicLevel).filter(AcademicLevel.id == nivel_id).first()
+        if nivel:
+            query = query.filter(AcademicProgram.nivel_academico == nivel.name)
     programas = query.all()
-    return [{"id": p.id, "name": p.name, "nivel_id": p.nivel_id} for p in programas]
+    return [{"id": p.id, "name": p.name, "nivel_academico": p.nivel_academico} for p in programas]
 
 @router.get("/periodos")
 def get_periodos(solo_activos: bool = False, db: Session = Depends(get_db)):
@@ -37,7 +40,7 @@ def get_periodos(solo_activos: bool = False, db: Session = Depends(get_db)):
     if solo_activos:
         query = query.filter(AcademicPeriod.is_active == True)
     periodos = query.all()
-    return [{"id": p.id, "name": p.period_name, "is_active": p.is_active} for p in periodos]
+    return [{"id": p.id, "name": p.codigo, "is_active": p.is_active} for p in periodos]
 
 @router.get("/escuelas-procedencia")
 def get_escuelas(tipo: str = None, db: Session = Depends(get_db)):

@@ -28,10 +28,37 @@ class AlumnoListado(BaseModel):
 def listar_alumnos(
     skip: int = 0,
     limit: int = 10,
+    busqueda: str = None,
+    carrera_id: int = None,
+    cuatrimestre: int = None,
     db: Session = Depends(get_db)
 ):
-    total = db.query(Student).count()
-    alumnos_db = db.query(Student).offset(skip).limit(limit).all()
+    from app.models.quarter_catalog import QuarterCatalog
+
+    query = db.query(Student)
+
+    if busqueda:
+        termino = f"%{busqueda}%"
+        query = query.filter(
+            (Student.matricula.ilike(termino)) |
+            (Student.nombre.ilike(termino)) |
+            (Student.apellido_paterno.ilike(termino)) |
+            (Student.apellido_materno.ilike(termino))
+        )
+
+    if carrera_id or cuatrimestre:
+        profile_query = db.query(StudentAcademicProfile.student_matricula)
+        if carrera_id:
+            profile_query = profile_query.filter(StudentAcademicProfile.career_id == carrera_id)
+        if cuatrimestre:
+            profile_query = profile_query.join(
+                QuarterCatalog, StudentAcademicProfile.quarter_actual_id == QuarterCatalog.id
+            ).filter(QuarterCatalog.external_id == cuatrimestre)
+        matriculas_filtradas = [r[0] for r in profile_query.distinct().all()]
+        query = query.filter(Student.matricula.in_(matriculas_filtradas))
+
+    total = query.count()
+    alumnos_db = query.offset(skip).limit(limit).all()
 
     data = []
     for alumno in alumnos_db:
@@ -131,7 +158,7 @@ def cambiar_estatus(
 
         if status_id_anterior != status_id or evidence_file_id is not None:
             nuevo_log = StudentStatusLog(
-                student_matricula=alumno.matricula,
+                academic_profile_id=perfil.id,
                 changed_by_user=usuario_id or "Sistema Desconocido",
                 previous_status_id=status_id_anterior,
                 new_status_id=status_id,
@@ -159,8 +186,15 @@ def cambiar_estatus(
 
 @router.get("/{matricula}/ultimo-log-estatus")
 def get_ultimo_log_estatus(matricula: str, db: Session = Depends(get_db)):
+    perfil = db.query(StudentAcademicProfile).filter(
+        StudentAcademicProfile.student_matricula == matricula
+    ).order_by(StudentAcademicProfile.id.desc()).first()
+
+    if not perfil:
+        return None
+
     log = db.query(StudentStatusLog).filter(
-        StudentStatusLog.student_matricula == matricula
+        StudentStatusLog.academic_profile_id == perfil.id
     ).order_by(StudentStatusLog.changed_at.desc()).first()
 
     if not log:

@@ -4,7 +4,7 @@ from typing import Optional, List
 class CareerSelect(BaseModel):
     id: int
     name: str
-    nivel_id: int
+    nivel_academico: Optional[str] = None
     model_config = ConfigDict(from_attributes=True)
 
 class SchoolSelect(BaseModel):
@@ -13,11 +13,23 @@ class SchoolSelect(BaseModel):
     tipo: str
     model_config = ConfigDict(from_attributes=True)
 
+class LevelSelect(BaseModel):
+    id: int
+    name: str
+    model_config = ConfigDict(from_attributes=True)
+
+class PeriodSelect(BaseModel):
+    id: int
+    codigo: str
+    anio: Optional[int] = None
+    is_active: bool
+    model_config = ConfigDict(from_attributes=True)
+
 class OptionsResponse(BaseModel):
     careers: List[CareerSelect]
     schools: List[SchoolSelect]
-    levels: List[BaseModel]
-    periods: List[BaseModel]
+    levels: List[LevelSelect]
+    periods: List[PeriodSelect]
 
 class AddressCreate(BaseModel):
     calle: str

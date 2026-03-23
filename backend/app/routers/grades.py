@@ -35,6 +35,12 @@ def get_periods(db: Session = Depends(get_db)):
     return [{"period_name": p.period_name, "is_active": p.is_active} for p in periods]
 
 
+@router.get("/grade-values")
+def get_grade_values(db: Session = Depends(get_db)):
+    values = db.query(GradeValue).order_by(GradeValue.id.asc()).all()
+    return [{"id": gv.id, "value": gv.value, "numeric_value": gv.numeric_value} for gv in values]
+
+
 @router.get("/grade-statuses")
 def get_grade_statuses(all: bool = False, db: Session = Depends(get_db)):
     query = db.query(GradeStatus)
@@ -54,7 +60,7 @@ def get_teacher_groups(
     if not teacher:
         raise HTTPException(status_code=404, detail="Docente no encontrado.")
 
-    period_obj = db.query(AcademicPeriod).filter(AcademicPeriod.period_name == periodo).first()
+    period_obj = db.query(AcademicPeriod).filter(AcademicPeriod.codigo == periodo).first()
     if not period_obj:
         return []
 
@@ -75,12 +81,12 @@ def get_teacher_groups(
         result.append({
             "group_id": g.id,
             "teacher_id": teacher.id,
-            "identificador_grupo": g.identificador_grupo,
+            "identificador_grupo": g.sigad_group.identificador if g.sigad_group else None,
             "subject_nombre": materia.nombre if materia else "Sin Materia",
             "cuatrimestre": cuatrimestre_val,
             "horario": _format_schedules_v3(g.schedules),
-            "acta_status": g.acta_status,
-            "periodo": period_obj.period_name,
+            "acta_status": g.estatus_acta,
+            "periodo": period_obj.codigo,
         })
 
     return result
@@ -94,29 +100,23 @@ def get_group_students(group_id: int, db: Session = Depends(get_db)):
 
     enrollments = db.query(StudentEnrollment).filter(StudentEnrollment.academic_group_id == group_id).all()
 
-    grade_values_map = {gv.id: gv.numeric_value for gv in db.query(GradeValue).all()}
-    grade_statuses_map = {gs.id: gs.code for gs in db.query(GradeStatus).all()}
+    grade_values_map = {gv.id: gv.value for gv in db.query(GradeValue).all()}
 
     result = []
     for e in enrollments:
         student = e.student
         nombre = f"{student.nombre} {student.apellido_paterno} {student.apellido_materno}".strip() if student else "Alumno desconocido"
-        
-        p1_val = grade_values_map.get(e.p1_id) if hasattr(e, 'p1_id') else getattr(e, 'parcial_1', None)
-        s1_val = grade_statuses_map.get(e.status_1_id) if hasattr(e, 'status_1_id') else getattr(e, 'status_parcial_1', None)
-        
-        p2_val = grade_values_map.get(e.p2_id) if hasattr(e, 'p2_id') else getattr(e, 'parcial_2', None)
-        s2_val = grade_statuses_map.get(e.status_2_id) if hasattr(e, 'status_2_id') else getattr(e, 'status_parcial_2', None)
-        
-        p3_val = grade_values_map.get(e.p3_id) if hasattr(e, 'p3_id') else getattr(e, 'parcial_3', None)
-        s3_val = grade_statuses_map.get(e.status_3_id) if hasattr(e, 'status_3_id') else getattr(e, 'status_parcial_3', None)
+
+        p1_val = grade_values_map.get(e.parcial_1_id) if e.parcial_1_id else None
+        p2_val = grade_values_map.get(e.parcial_2_id) if e.parcial_2_id else None
+        p3_val = grade_values_map.get(e.parcial_3_id) if e.parcial_3_id else None
 
         result.append({
             "matricula": e.student_matricula,
             "nombre": nombre,
-            "p1": p1_val, "s1": s1_val,
-            "p2": p2_val, "s2": s2_val,
-            "p3": p3_val, "s3": s3_val,
+            "p1": p1_val, "s1": e.status_parcial_1,
+            "p2": p2_val, "s2": e.status_parcial_2,
+            "p3": p3_val, "s3": e.status_parcial_3,
         })
 
     return result
@@ -128,18 +128,14 @@ def bulk_update_grades(group_id: int, data: BulkGradeUpdateRequest, db: Session 
     if not group:
         raise HTTPException(status_code=404, detail="Grupo no encontrado.")
 
-    if group.acta_status == 'cerrada':
+    if group.estatus_acta == 'CERRADA':
         raise HTTPException(status_code=403, detail="El acta de este grupo ya está cerrada.")
 
     teacher = db.query(Teacher).filter(Teacher.id == group.teacher_id).first()
     audit_identifier = teacher.matricula_empleado if teacher else str(data.docente_id)
     cambios_realizados = 0
 
-    val_to_id = {gv.numeric_value: gv.id for gv in db.query(GradeValue).all()}
-    status_to_id = {gs.code: gs.id for gs in db.query(GradeStatus).all()}
-
-    has_v3_grades = hasattr(StudentEnrollment, 'p1_id')
-    has_v3_statuses = hasattr(StudentEnrollment, 'status_1_id')
+    id_to_numeric = {gv.id: gv.numeric_value for gv in db.query(GradeValue).all()}
 
     for student_data in data.students:
         enrollment = db.query(StudentEnrollment).filter(
@@ -153,14 +149,14 @@ def bulk_update_grades(group_id: int, data: BulkGradeUpdateRequest, db: Session 
         old_values, new_values = {}, {}
 
         def update_parcial(num_parcial, new_score_num, new_status_code):
-            attr_score = f'p{num_parcial}_id' if has_v3_grades else f'parcial_{num_parcial}'
-            attr_status = f'status_{num_parcial}_id' if has_v3_statuses else f'status_parcial_{num_parcial}'
+            attr_score = f'parcial_{num_parcial}_id'
+            attr_status = f'status_parcial_{num_parcial}'
 
             current_score = getattr(enrollment, attr_score, None)
             current_status = getattr(enrollment, attr_status, None)
 
-            target_score = val_to_id.get(new_score_num) if has_v3_grades and new_score_num is not None else new_score_num
-            target_status = status_to_id.get(new_status_code or "OE") if has_v3_statuses else (new_status_code or "OE")
+            target_score = new_score_num  # es el grade_value.id enviado por el frontend
+            target_status = new_status_code or "OE"
 
             if current_score != target_score or current_status != target_status:
                 old_values[attr_score] = current_score
@@ -177,7 +173,10 @@ def bulk_update_grades(group_id: int, data: BulkGradeUpdateRequest, db: Session 
         update_parcial(3, student_data.parcial_3, student_data.status_parcial_3)
 
         if student_data.parcial_1 is not None and student_data.parcial_2 is not None and student_data.parcial_3 is not None:
-            promedio_exacto = (student_data.parcial_1 * 0.3) + (student_data.parcial_2 * 0.3) + (student_data.parcial_3 * 0.4)
+            n1 = id_to_numeric.get(student_data.parcial_1, 0)
+            n2 = id_to_numeric.get(student_data.parcial_2, 0)
+            n3 = id_to_numeric.get(student_data.parcial_3, 0)
+            promedio_exacto = (n1 * 0.3) + (n2 * 0.3) + (n3 * 0.4)
             enrollment.calificacion_final = round(promedio_exacto)
             enrollment.status = "aprobada" if enrollment.calificacion_final >= 7 else "reprobada"
         else:

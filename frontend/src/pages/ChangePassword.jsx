@@ -135,7 +135,6 @@ const ChangePassword = () => {
       } else if (isRecovery) {
         await client.post("/auth/reset-password", {
           identifier,
-          code: recoveryCode,
           new_password: trimmedNew,
           confirm_password: trimmedConfirm,
         });

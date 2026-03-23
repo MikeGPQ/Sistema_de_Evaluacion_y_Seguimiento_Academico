@@ -4,11 +4,10 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
 from sqlalchemy import text
-from apscheduler.schedulers.background import BackgroundScheduler
 from app.db.database import engine
 from app.routers import (
     students,
-    listados,
+    Listados as listados,
     auth,
     enrollments,
     catalogos,
@@ -18,20 +17,12 @@ from app.routers import (
     attendance,
     logs,
     reportcards,
-    sync,
-    mock_api
 )
-from app.routers.sync import tarea_automatica_sincronizacion
 
 load_dotenv()
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    scheduler = BackgroundScheduler()
-    scheduler.add_job(tarea_automatica_sincronizacion, 'interval', minutes=1)
-    scheduler.start()
-    print("SESA 3.0: Cronjob de Sincronización Activo")
-
     try:
         with engine.connect() as connection:
             connection.execute(text("SELECT 1"))
@@ -40,9 +31,6 @@ async def lifespan(app: FastAPI):
         print(f"ERROR CRÍTICO AL CONECTAR A LA BD: {e}")
 
     yield
-
-    scheduler.shutdown()
-    print("SESA 3.0: Cronjob Detenido")
 
 app = FastAPI(
     title="SESA API - Versión 3.0",
@@ -81,8 +69,7 @@ app.include_router(attendance.router)
 app.include_router(reportcards.router)
 app.include_router(files_router.router)
 app.include_router(logs.router)
-app.include_router(sync.router)
-app.include_router(mock_api.router)
+
 
 @app.get("/", tags=["Salud del Sistema"])
 def read_root():

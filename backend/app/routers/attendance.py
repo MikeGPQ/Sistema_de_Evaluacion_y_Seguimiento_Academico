@@ -52,7 +52,7 @@ def calcular_fechas_clase_v3(schedules, fecha_inicio: date, fecha_fin: date) -> 
 @router.get("/periodos")
 def obtener_periodos(db: Session = Depends(get_db)):
     periodos = db.query(AcademicPeriod).order_by(AcademicPeriod.id.desc()).all()
-    return [{"id": p.period_name, "label": p.period_name, "is_active": p.is_active} for p in periodos]
+    return [{"id": p.codigo, "label": p.codigo, "is_active": p.is_active} for p in periodos]
 
 @router.get("/mis-grupos")
 def obtener_grupos_docente(periodo: str, num_empleado: str = "", teacher_id: str = "", db: Session = Depends(get_db)):
@@ -65,7 +65,7 @@ def obtener_grupos_docente(periodo: str, num_empleado: str = "", teacher_id: str
     if not teacher:
         return []
 
-    period_obj = db.query(AcademicPeriod).filter(AcademicPeriod.period_name == periodo).first()
+    period_obj = db.query(AcademicPeriod).filter(AcademicPeriod.codigo == periodo).first()
     if not period_obj:
         return []
 
@@ -78,9 +78,10 @@ def obtener_grupos_docente(periodo: str, num_empleado: str = "", teacher_id: str
     for g in grupos:
         carrera_nombre = g.subject.career.name if g.subject and g.subject.career else "Tronco Común"
         materia_nombre = g.subject.nombre if g.subject else "Sin Materia"
+        identificador = g.sigad_group.identificador if g.sigad_group else str(g.id)
         respuesta.append({
             "id": g.id,
-            "label": f"{materia_nombre} - {g.identificador_grupo}",
+            "label": f"{materia_nombre} - {identificador}",
             "carrera": carrera_nombre
         })
 
@@ -92,7 +93,7 @@ def obtener_alumnos_grupo(grupo_id: int, periodo: str, db: Session = Depends(get
     if not grupo:
         raise HTTPException(status_code=404, detail="Grupo no encontrado")
 
-    period_obj = db.query(AcademicPeriod).filter(AcademicPeriod.period_name == periodo).first()
+    period_obj = db.query(AcademicPeriod).filter(AcademicPeriod.codigo == periodo).first()
     if not period_obj:
         raise HTTPException(status_code=404, detail="Periodo no encontrado")
 
@@ -138,7 +139,7 @@ def obtener_alumnos_grupo(grupo_id: int, periodo: str, db: Session = Depends(get
 
     return {
         "fechas": fechas_clase,
-        "acta_cerrada": grupo.acta_status == 'cerrada',
+        "acta_cerrada": grupo.estatus_acta == 'CERRADA',
         "periodo_activo": bool(period_obj.is_active),
         "dias_clase": dias_clase_str,
         "alumnos": alumnos_procesados
@@ -147,10 +148,10 @@ def obtener_alumnos_grupo(grupo_id: int, periodo: str, db: Session = Depends(get
 @router.post("/guardar")
 def guardar_cambios_asistencia(datos: GuardarCambiosRequest, request: Request, db: Session = Depends(get_db)):
     grupo = db.query(AcademicGroup).filter(AcademicGroup.id == datos.academic_group_id).first()
-    if not grupo or grupo.acta_status == 'cerrada':
+    if not grupo or grupo.estatus_acta == 'CERRADA':
         raise HTTPException(status_code=403, detail="El acta está cerrada. No se permiten modificaciones.")
 
-    periodo_db = db.query(AcademicPeriod).filter(AcademicPeriod.period_name == datos.periodo).first()
+    periodo_db = db.query(AcademicPeriod).filter(AcademicPeriod.codigo == datos.periodo).first()
     if periodo_db and not periodo_db.is_active:
         raise HTTPException(status_code=403, detail="Este periodo académico ya finalizó. No se permiten modificaciones.")
 
@@ -251,8 +252,8 @@ def get_student_attendance(student_id: str, period: str, db: Session = Depends(g
     if not student_id or not period: 
         return []
 
-    period_obj = db.query(AcademicPeriod).filter(AcademicPeriod.period_name == period).first()
-    if not period_obj: 
+    period_obj = db.query(AcademicPeriod).filter(AcademicPeriod.codigo == period).first()
+    if not period_obj:
         return []
 
     inscripciones = db.query(StudentEnrollment).join(AcademicGroup).filter(
@@ -264,7 +265,7 @@ def get_student_attendance(student_id: str, period: str, db: Session = Depends(g
 
     for insc in inscripciones:
         grupo = insc.academic_group
-        crn = grupo.identificador_grupo
+        crn = grupo.sigad_group.identificador if grupo.sigad_group else str(grupo.id)
         class_dates = calcular_fechas_clase_v3(grupo.schedules, period_obj.fecha_inicio, period_obj.fecha_fin)
 
         attendance_map = {}

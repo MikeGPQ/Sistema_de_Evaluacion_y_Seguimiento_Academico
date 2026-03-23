@@ -7,16 +7,19 @@ class MateriaSeleccionada(BaseModel):
     is_retake: Optional[bool] = False
 
 class GuardarCargaRequest(BaseModel):
-    profile_id: int
+    profile_id: Optional[int] = None
     materias: List[MateriaSeleccionada]
     usuario_id: Optional[str] = "Sistema"
 
 class StudentGradeUpdate(BaseModel):
     student_matricula: str
-    
-    p1_id: Optional[int] = None
-    p2_id: Optional[int] = None
-    p3_id: Optional[int] = None
+
+    parcial_1: Optional[int] = None
+    status_parcial_1: Optional[str] = None
+    parcial_2: Optional[int] = None
+    status_parcial_2: Optional[str] = None
+    parcial_3: Optional[int] = None
+    status_parcial_3: Optional[str] = None
 
 class BulkGradeUpdateRequest(BaseModel):
     docente_id: int
