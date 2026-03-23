@@ -6,7 +6,6 @@ import { Hammer } from "lucide-react";
 import LoginPage from "../pages/LoginPage";
 import ChangePassword from "../pages/ChangePassword";
 import RecoverPassword from "../pages/RecoverPassword";
-import Profile from "../pages/Profile";
 
 // Admin
 import ImportarAlumnos from "../pages/Alumnos/ImportarAlumnos";
@@ -14,19 +13,25 @@ import ListadoAlumnos from "../pages/Alumnos/ListadoAlumnos";
 import CambiarEstatusAlumno from "../pages/Alumnos/CambiarEstatusAlumno";
 import GruposYHorarios from "../pages/GruposyHorarios/GrupoyHorarios";
 import MiHorario from "../pages/Alumnos/MiHorario";
+import StudentAttendance from '../pages/Alumnos/StudentAttendance'; 
+import MiCargaAcademica from "../pages/GruposyHorarios/MiCargaAcademica"; 
 
 // Super Admin
 import ListadoAdministradores from "../pages/Administradores/ListadoAdministradores";
 
 // Docentes (NUEVA IMPORTACIÓN)
 import Calificaciones from "../pages/Docentes/Calificaciones";
+import ReportesDocente from "../pages/Docentes/ReportCards";
 // Layouts
 import AdminLayout from "../layouts/AdminLayout";
 import AlumnoLayout from "../layouts/AlumnoLayout";
 import DocenteLayout from "../layouts/DocenteLayout";
-
-
 import MisCalificaciones from "../pages/Alumnos/MisCalificaciones";
+// Docente
+import AsistenciaDocente from "../pages/Docentes/AsistenciaDocente";
+
+
+
 
 // ==========================================
 // COMPONENTES REUTILIZABLES
@@ -105,41 +110,30 @@ const AppRoutes = () => {
           element={<ChangePassword />}
         />
 
-        <Route
-          path="/profile"
-          element={
-            <ProtectedRoute>
-              <Profile />
-            </ProtectedRoute>
-          }
-        />
-
         {/* ADMIN & SUPER ADMIN */}
         <Route element={<ProtectedRoute allowedRoles={["admin", "super_admin"]}><AdminLayout /></ProtectedRoute>}>
-
           <Route path="/administradores/listado" element={<ListadoAdministradores />} />
-
           <Route path="/alumnos/listado" element={<ListadoAlumnos />} />
           <Route path="/alumnos/importar" element={<ImportarAlumnos />} />
           <Route path="/alumnos/cambiar-estatus" element={<CambiarEstatusAlumno />} />
-
           <Route path="/docentes" element={<EnConstruccion modulo="Sincronización Docente" />} />
           <Route path="/horarios" element={<GruposYHorarios />} />
-          <Route path="/reportes" element={<EnConstruccion modulo="Boletas y Listas" />} />
+          <Route path="/reportes" element={<AsistenciaDocente />} />
         </Route>
-
+        
         {/* DOCENTE */}
         <Route path="/docente" element={<ProtectedRoute allowedRoles={["docente"]}><DocenteLayout /></ProtectedRoute>}>
-          <Route path="pase-lista" element={<EnConstruccion modulo="Pase de Lista Digital" />} />
+          <Route path="pase-lista" element={<AsistenciaDocente />} />
           <Route path="calificaciones" element={<Calificaciones />} />
-          <Route path="actas" element={<EnConstruccion modulo="Generación de Actas Oficiales" />} />
+         <Route path="actas" element={<ReportesDocente />} />
         </Route>
 
-        {/* ALUMNO */}
+         {/* ALUMNO */}
         <Route path="/alumno" element={<ProtectedRoute allowedRoles={["alumno"]}><AlumnoLayout /></ProtectedRoute>}>
           <Route path="horario" element={<MiHorario />} />
-          <Route path="asistencias" element={<EnConstruccion modulo="Mis Asistencias" />} />
           <Route path="calificaciones" element={<MisCalificaciones />} />
+          <Route path="asistencias" element={<StudentAttendance />} />
+          <Route path="carga-academica" element={<MiCargaAcademica />} />
         </Route>
 
         {/* ROOT */}

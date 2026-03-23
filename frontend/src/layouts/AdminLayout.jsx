@@ -13,6 +13,7 @@ import {
   Shield 
 } from 'lucide-react';
 import { useAuth } from '../hooks/AuthContext';
+import Profile from '../pages/Profile';
 
 const formatName = (name) => {
   if (!name) return "";
@@ -21,6 +22,7 @@ const formatName = (name) => {
 };
 
 const AdminLayout = () => {
+  const [isProfileOpen, setIsProfileOpen] = useState(false);
   const location = useLocation();
   const navigate = useNavigate();
   const { user, logout } = useAuth();
@@ -106,7 +108,7 @@ const AdminLayout = () => {
         <div className={`p-4 border-b border-slate-800 bg-[#0b172a] flex items-center ${effectivelyCollapsed ? 'justify-center' : 'justify-between'}`}>
           <button
             type="button"
-            onClick={() => navigate("/profile")}
+            onClick={() => setIsProfileOpen(true)}
             className={`flex items-center gap-3 overflow-hidden text-left hover:bg-slate-800 rounded-lg p-1 transition-colors flex-1 ${effectivelyCollapsed ? 'justify-center' : ''}`}
             title="Ver perfil"
           >
@@ -196,6 +198,11 @@ const AdminLayout = () => {
           <Outlet />
         </div>
       </main>
+
+      <Profile 
+        isOpen={isProfileOpen} 
+        onClose={() => setIsProfileOpen(false)} 
+      />
 
     </div>
   );
