@@ -41,7 +41,7 @@ ESTADOS_DB = { "P": "asistencia", "F": "falta", "R": "retardo", "J": "justificad
 def calcular_fechas_clase_v3(schedules, fecha_inicio: date, fecha_fin: date) -> List[str]:
     if not schedules or not fecha_inicio or not fecha_fin: return []
     
-    dias_clase = [s.dia_semana - 1 for s in schedules] # Ajuste a 0-6 (Lunes-Domingo)
+    dias_clase = [s.dia_semana - 1 for s in schedules]
     
     fechas = []
     dia_actual = fecha_inicio

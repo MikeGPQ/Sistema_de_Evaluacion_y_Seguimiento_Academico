@@ -1,11 +1,10 @@
 import re
 from typing import Optional
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, EmailStr
 
-PASSWORD_DESC = "Debe tener al menos 8 caracteres, una mayúscula, minúscula, un número y un carácter especial"
+PASSWORD_DESC = "Mínimo 8 caracteres, una mayúscula, una minúscula, un número y un carácter especial"
 
 def validate_secure_password(v: str) -> str:
-    # Usamos la librería 're' de Python que sí soporta look-aheads
     pattern = r"^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[\W_])[A-Za-z\d\W_]{8,}$"
     if not re.match(pattern, v):
         raise ValueError(PASSWORD_DESC)
@@ -26,6 +25,7 @@ class UserResponse(BaseModel):
     identifier: str
     role: RoleResponse
     is_temp_password: bool
+    is_locked: bool
     nombre_completo: Optional[str] = None
     email_personal: Optional[str] = None
     email_institucional: Optional[str] = None
@@ -37,17 +37,16 @@ class UserResponse(BaseModel):
 class PasswordChangeRequest(BaseModel):
     identifier: str
     current_password: str
-    new_password: str = Field(..., min_length=8, description=PASSWORD_DESC)
+    new_password: str = Field(..., min_length=8)
     confirm_password: str
 
-    # Validamos usando una función pura de Python
     @field_validator('new_password')
     @classmethod
     def check_password_strength(cls, v: str) -> str:
         return validate_secure_password(v)
 
 class ForgotPasswordRequest(BaseModel):
-    identifier: str
+    identifier: EmailStr
 
 class ValidateCodeRequest(BaseModel):
     identifier: str
@@ -55,11 +54,9 @@ class ValidateCodeRequest(BaseModel):
 
 class ResetPasswordRequest(BaseModel):
     identifier: str
-    code: str
-    new_password: str = Field(..., min_length=8, description=PASSWORD_DESC)
+    new_password: str = Field(..., min_length=8)
     confirm_password: str
 
-    # Reutilizamos la misma validación aquí
     @field_validator('new_password')
     @classmethod
     def check_password_strength(cls, v: str) -> str:

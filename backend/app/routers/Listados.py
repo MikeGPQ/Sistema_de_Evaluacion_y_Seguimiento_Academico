@@ -24,7 +24,6 @@ def listar_alumnos(
     nivel_id: Optional[int] = None,
     db: Session = Depends(get_db)
 ):
-    # En V3.0 el listado base nace de los Perfiles Académicos
     query = db.query(StudentAcademicProfile).join(Student).join(AcademicProgram).join(StudentStatus)
 
     if busqueda:
@@ -63,19 +62,16 @@ def cambiar_estatus_perfil(
     evidence_file: UploadFile = File(None),
     db: Session = Depends(get_db)
 ):
-    # Buscamos el perfil académico específico
     perfil = db.query(StudentAcademicProfile).filter(StudentAcademicProfile.id == profile_id).first()
     if not perfil:
         raise HTTPException(status_code=404, detail="Perfil académico no encontrado")
 
     nuevo_estatus = db.query(StudentStatus).filter(StudentStatus.id == status_id).first()
     
-    # Validación de evidencia para bajas (Regla de Negocio V3.0)
     if nuevo_estatus.name.lower() in ('baja', 'baja_temporal') and not evidence_file:
         raise HTTPException(status_code=400, detail="Se requiere evidencia digital para procesar una baja.")
 
     try:
-        # 1. Procesar archivo si existe
         file_id = None
         if evidence_file:
             content = evidence_file.file.read()
@@ -88,9 +84,8 @@ def cambiar_estatus_perfil(
             db.flush()
             file_id = nuevo_archivo.id
 
-        # 2. Registrar Log de cambios
         log_status = StudentStatusLog(
-            academic_profile_id=perfil.id, # Ahora vinculado al perfil
+            academic_profile_id=perfil.id,
             student_matricula=perfil.student_matricula,
             previous_status_id=perfil.status_id,
             new_status_id=status_id,
@@ -99,13 +94,11 @@ def cambiar_estatus_perfil(
         )
         db.add(log_status)
 
-        # 3. Limpieza de inscripciones si es baja/egresado para liberar cupos
         if nuevo_estatus.name.lower() in ('baja', 'baja_temporal', 'egresado'):
             db.query(StudentEnrollment).filter(
                 StudentEnrollment.academic_profile_id == perfil.id
             ).delete()
 
-        # 4. Actualizar estatus del perfil
         perfil.status_id = status_id
         
         db.commit()

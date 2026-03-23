@@ -35,12 +35,9 @@ from app.services.audit_service import log_audit_event
 
 router = APIRouter(prefix="/alumnos", tags=["Alumnos"])
 
-# --- AUXILIARES ---
 def generar_password():
     alphabet = string.ascii_letters + string.digits
     return ''.join(secrets.choice(alphabet) for _ in range(10))
-
-# --- ENDPOINTS ---
 
 @router.get("/config-inicial")
 def get_config_registro(db: Session = Depends(get_db)):
@@ -60,19 +57,16 @@ async def registrar_alumno_v3(
 ):
     try:
         data = json.loads(student_data)
-        # Validar si existe la identidad (Student)
         alumno = db.query(Student).filter(Student.curp == data['curp']).first()
         
-        # 1. Crear Identidad si no existe
         if not alumno:
-            # Procesar Foto
             foto_cont = await foto_perfil.read()
             foto_db = FileModel(filename=foto_perfil.filename, mime_type=foto_perfil.content_type, file_content=foto_cont)
             db.add(foto_db)
             db.flush()
 
             alumno = Student(
-                matricula=data['matricula'], # O generar auto
+                matricula=data['matricula'],
                 nombre=data['nombre'],
                 apellido_paterno=data['apellido_paterno'],
                 apellido_materno=data['apellido_materno'],
@@ -82,14 +76,12 @@ async def registrar_alumno_v3(
             )
             db.add(alumno)
             
-            # Dirección
             direccion = StudentAddress(
                 student_matricula=alumno.matricula,
                 calle=data['calle'], colonia=data['colonia'], cp=data['cp'], municipio=data['municipio']
             )
             db.add(direccion)
 
-        # 2. Crear Perfil Académico (La trayectoria específica V3.0)
         cert_id = None
         if certificado:
             cert_cont = await certificado.read()
@@ -104,14 +96,13 @@ async def registrar_alumno_v3(
             career_id=data['career_id'],
             origin_school_id=data['origin_school_id'],
             promedio_procedencia=data['promedio_procedencia'],
-            status_id=1, # Activo por defecto
-            quarter_actual_id=1, # Inicia en 1ero
+            status_id=1,
+            quarter_actual_id=1,
             period_id=data['period_id'],
             certificado_id=cert_id
         )
         db.add(nuevo_perfil)
 
-        # 3. Crear Usuario de Acceso
         raw_pass = generar_password()
         rol_alumno = db.query(Role).filter(Role.name == 'alumno').first()
         nuevo_usuario = User(

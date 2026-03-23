@@ -23,7 +23,6 @@ def time_to_minutes(time_obj):
 
 @router.get("/{matricula}/disponibles")
 def obtener_grupos_disponibles(matricula: str, profile_id: int, db: Session = Depends(get_db)):
-    # 1. Validar Perfil Académico (SESA 3.0)
     perfil = db.query(StudentAcademicProfile).filter(
         StudentAcademicProfile.id == profile_id,
         StudentAcademicProfile.student_matricula == matricula
@@ -32,15 +31,12 @@ def obtener_grupos_disponibles(matricula: str, profile_id: int, db: Session = De
     if not perfil:
         raise HTTPException(status_code=404, detail="Perfil académico no encontrado para esta matrícula.")
     
-    # 2. Validar Estatus
     if perfil.status.name.lower() in ["baja", "baja_temporal", "egresado"]:
         raise HTTPException(
             status_code=403, 
             detail=f"El alumno está en estado '{perfil.status.name.upper()}'. No se permiten inscripciones."
         )
 
-    # 3. Obtener materias del cuatrimestre actual del perfil
-    # Incluye materias de su carrera y de tronco común (career_id is None)
     materias_db = db.query(Subject).filter(
         Subject.quarter_id == perfil.quarter_actual_id,
         or_(Subject.career_id == perfil.career_id, Subject.career_id.is_(None))
@@ -48,7 +44,6 @@ def obtener_grupos_disponibles(matricula: str, profile_id: int, db: Session = De
 
     materias_dict = {}
     for materia in materias_db:
-        # Buscar grupos asociados a la materia en el periodo activo
         grupos = db.query(AcademicGroup).filter(
             AcademicGroup.subject_id == materia.id,
             AcademicGroup.period_id == perfil.period_id
@@ -59,7 +54,6 @@ def obtener_grupos_disponibles(matricula: str, profile_id: int, db: Session = De
             inscritos = db.query(StudentEnrollment).filter(StudentEnrollment.academic_group_id == g.id).count()
             cupos_libres = max(0, (materia.cupo_maximo or 30) - inscritos)
 
-            # Formatear horario desde AssignmentSchedule
             horarios_fmt = [f"{s.dia_semana} {s.hora_inicio}-{s.hora_fin}" for s in g.schedules]
             
             grupos_lista.append({
@@ -67,7 +61,7 @@ def obtener_grupos_disponibles(matricula: str, profile_id: int, db: Session = De
                 "nombre": g.identificador_grupo,
                 "cupo_disponible": cupos_libres,
                 "horario": " | ".join(horarios_fmt) if horarios_fmt else "Sin horario",
-                "schedules": g.schedules # Para validación de cruces en el front
+                "schedules": g.schedules
             })
 
         materias_dict[materia.id] = {
@@ -87,7 +81,6 @@ def obtener_grupos_disponibles(matricula: str, profile_id: int, db: Session = De
 
 @router.post("/{matricula}/guardar")
 def guardar_carga_academica(matricula: str, request: GuardarCargaRequest, db: Session = Depends(get_db)):
-    # 1. Validar cruces de horarios usando la tabla normalizada
     grupos_ids = [m.group_id for m in request.materias]
     grupos_db = db.query(AcademicGroup).filter(AcademicGroup.id.in_(grupos_ids)).all()
     
@@ -109,9 +102,7 @@ def guardar_carga_academica(matricula: str, request: GuardarCargaRequest, db: Se
                 'dia': s.dia_semana, 'ini': ini_a, 'fin': fin_a, 'materia': g.subject.nombre
             })
 
-    # 2. Persistir Inscripciones vinculadas al Perfil Académico
     try:
-        # Limpiar carga previa del periodo actual para este perfil
         db.query(StudentEnrollment).filter(
             StudentEnrollment.student_matricula == matricula,
             StudentEnrollment.academic_profile_id == request.profile_id
@@ -120,7 +111,7 @@ def guardar_carga_academica(matricula: str, request: GuardarCargaRequest, db: Se
         for m in request.materias:
             nueva = StudentEnrollment(
                 student_matricula=matricula,
-                academic_profile_id=request.profile_id, # Clave en V3.0
+                academic_profile_id=request.profile_id,
                 academic_group_id=m.group_id,
                 is_retake=m.is_retake
             )

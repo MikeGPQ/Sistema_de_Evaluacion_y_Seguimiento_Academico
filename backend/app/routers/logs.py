@@ -25,7 +25,6 @@ def get_audit_logs(
     fecha_hasta: Optional[date] = None,
     db: Session = Depends(get_db)
 ):
-    # 1. KPIs de Seguridad (SESA 3.0)
     usuarios_activos = db.query(User).filter(User.is_locked == False).count()
     usuarios_bloqueados = db.query(User).filter(User.is_locked == True).all()
     
@@ -38,14 +37,12 @@ def get_audit_logs(
         } for u in usuarios_bloqueados
     ]
 
-    # 2. Consulta de Auditoría con Join dinámico a Roles
     query = db.query(AuditLog, Role.name).outerjoin(
         User, AuditLog.user_identifier == User.identifier
     ).outerjoin(
         Role, User.role_id == Role.id
     )
 
-    # 3. Filtros avanzados
     if usuario_id:
         query = query.filter(AuditLog.user_identifier.ilike(f"%{usuario_id}%"))
     if modulo:
@@ -58,7 +55,6 @@ def get_audit_logs(
     total = query.count()
     resultados = query.order_by(AuditLog.created_at.desc()).offset(skip).limit(limit).all()
 
-    # 4. Construcción de respuesta
     data = []
     for log, role_name in resultados:
         data.append({
@@ -92,12 +88,10 @@ def unlock_user(identifier: str, data: UnlockRequest, db: Session = Depends(get_
     if not user.is_locked:
         raise HTTPException(status_code=400, detail="El usuario no se encuentra bloqueado")
 
-    # Reset de seguridad
     user.is_locked = False
     user.locked_at = None
     user.failed_login_attempts = 0
 
-    # Registro manual en auditoría del desbloqueo
     new_log = AuditLog(
         user_identifier=data.admin_identifier, 
         action="UPDATE",

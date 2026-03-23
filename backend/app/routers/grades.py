@@ -92,12 +92,10 @@ def bulk_update_grades(group_id: int, data: BulkGradeUpdateRequest, db: Session 
 
         if not enr: continue
 
-        # Actualizar IDs de GradeValue
         enr.parcial_1_id = s_data.p1_id
         enr.parcial_2_id = s_data.p2_id
         enr.parcial_3_id = s_data.p3_id
         
-        # Lógica de Promedio Ponderado con numeric_value (SESA 3.0)
         if enr.parcial_1 and enr.parcial_2 and enr.parcial_3:
             v1 = enr.parcial_1.numeric_value
             v2 = enr.parcial_2.numeric_value

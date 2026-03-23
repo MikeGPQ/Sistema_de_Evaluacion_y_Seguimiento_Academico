@@ -13,17 +13,14 @@ router = APIRouter(prefix="/reportes", tags=["Generación de Actas"])
 
 @router.get("/docentes/{docente_matricula}/grupos")
 def obtener_grupos_docente(docente_matricula: str, db: Session = Depends(get_db)):
-    # 1. Buscar docente por matrícula de empleado (V3.0)
     docente = db.query(Teacher).filter(Teacher.matricula_empleado == docente_matricula).first()
     if not docente:
         raise HTTPException(status_code=404, detail="Docente no encontrado.")
 
-    # 2. Obtener periodo activo por ID
     periodo_activo = db.query(AcademicPeriod).filter(AcademicPeriod.is_active == True).first()
     if not periodo_activo:
         return []
 
-    # 3. Consulta de grupos usando el ORM para mayor claridad
     grupos = db.query(AcademicGroup).filter(
         AcademicGroup.teacher_id == docente.id,
         AcademicGroup.period_id == periodo_activo.id
@@ -39,16 +36,13 @@ def obtener_grupos_docente(docente_matricula: str, db: Session = Depends(get_db)
 
 @router.get("/actas/{grupo_id}/validar")
 def validar_acta_grupo(grupo_id: int, db: Session = Depends(get_db)):
-    # 1. Obtener cabecera del acta con relaciones V3.0
     grupo = db.query(AcademicGroup).filter(AcademicGroup.id == grupo_id).first()
     if not grupo:
         raise HTTPException(status_code=404, detail="Grupo no encontrado.")
 
-    # 2. Procesar alumnos y sus calificaciones finales
     alumnos_data = []
     total_calificados = 0
     
-    # Ordenar por apellido (Requerimiento de Acta Oficial)
     enrollments = sorted(grupo.enrollments, key=lambda x: x.student.apellido_paterno)
 
     for enr in enrollments:
@@ -67,7 +61,7 @@ def validar_acta_grupo(grupo_id: int, db: Session = Depends(get_db)):
 
     return {
         "carrera": grupo.subject.career.name if grupo.subject.career else "Tronco Común",
-        "nivel": grupo.subject.nivel_academico, # Diferenciación Lic/Mtr
+        "nivel": grupo.subject.nivel_academico,
         "codigo_materia": grupo.subject.codigo_unico or f"MAT-{grupo.subject_id}",
         "campus": "San Francisco - Campeche",
         "cuatrimestre": grupo.subject.quarter.nombre if grupo.subject.quarter else "N/A",
@@ -91,7 +85,6 @@ def cerrar_acta_oficial(grupo_id: int, payload: dict, db: Session = Depends(get_
     if grupo.acta_status == 'cerrada':
         raise HTTPException(status_code=400, detail="El acta ya se encuentra cerrada.")
 
-    # Validación extra: No cerrar si no está completa la captura
     inscritos = len(grupo.enrollments)
     calificados = sum(1 for e in grupo.enrollments if e.calificacion_final is not None)
     
@@ -102,7 +95,6 @@ def cerrar_acta_oficial(grupo_id: int, payload: dict, db: Session = Depends(get_
         old_status = grupo.acta_status
         grupo.acta_status = 'cerrada'
         
-        # Auditoría V3.0 centralizada
         log_audit_event(
             db=db,
             user_identifier=usuario_id,

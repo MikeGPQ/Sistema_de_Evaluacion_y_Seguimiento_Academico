@@ -11,25 +11,19 @@ def log_audit_event(
     new_values: dict = None,
     ip_address: str = None,
 ):
-    """
-    Registra un evento en la 'Caja Negra' (audit_logs).
-    """
+    
     if action == 'UPDATE' and not new_values:
         return
 
     audit_entry = AuditLog(
-        user_identifier=str(user_identifier) if user_identifier is not None else None,
-        action=action,
-        entity_name=entity_name,
+        user_identifier=str(user_identifier) if user_identifier else "SISTEMA",
+        action=action.upper(),
+        entity_name=entity_name.lower(),
         entity_id=str(entity_id),
-        old_values=old_values,
-        new_values=new_values,
+        old_values=old_values if old_values else None,
+        new_values=new_values if new_values else None,
         ip_address=ip_address,
     )
 
     db.add(audit_entry)
-
-    # NOTA ARQUITECTÓNICA:
-    # No hacemos db.commit() aquí a propósito. El commit se hará en el router
-    # principal para garantizar que la calificación y el log se guarden juntos,
-    # o si algo falla, se cancelen juntos (Atomicidad).
+    db.flush()
