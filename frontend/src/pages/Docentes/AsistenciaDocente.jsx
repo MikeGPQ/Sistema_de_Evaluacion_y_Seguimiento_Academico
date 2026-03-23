@@ -401,7 +401,8 @@ const AsistenciaDocente = () => {
         academic_group_id: parseInt(materiaSeleccionada),
         periodo: periodoSeleccionado, 
         cambios: payloadEnvio,
-        observaciones_alumnos: observacionesEnvio 
+        observaciones_alumnos: observacionesEnvio,
+        usuario_id: user?.identifier || user?.email || "Docente Local" 
       });
       
       Swal.fire({ icon: 'success', title: '¡Guardado Exitoso!', text: `Se registraron ${response.data.total_cambios} actualizaciones en la base de datos.`, confirmButtonColor: '#1A237E' });

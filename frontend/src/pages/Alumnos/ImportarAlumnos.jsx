@@ -8,9 +8,11 @@ import client from '../../lib/axios';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { useNavigate } from 'react-router-dom';
+import { useAuth } from '../../hooks/AuthContext';
 
 const ImportarAlumnos = () => {
   const navigate = useNavigate();
+  const { user } = useAuth();
   const [datos, setDatos] = useState([]);
   const [archivoNombre, setArchivoNombre] = useState("");
   const [fileObject, setFileObject] = useState(null); 
@@ -143,6 +145,7 @@ const ImportarAlumnos = () => {
 
     const formData = new FormData();
     formData.append('file', fileObject); 
+    formData.append('usuario_id', user?.identifier || user?.email || "Admin Local");
 
     try {
       const response = await client.post('/alumnos/importar', formData, {

@@ -8,6 +8,7 @@ import client from '../../lib/axios';
 import Swal from 'sweetalert2';
 import jsPDF from 'jspdf';
 import { toPng } from 'html-to-image';
+import { useAuth } from '../../hooks/AuthContext';
 
 const HORAS_CLASE = [
   "7:00 - 8:00", "8:00 - 9:00", "9:00 - 10:00", 
@@ -32,6 +33,7 @@ const normalizarDia = (str) => {
 };
 
 const GruposYHorarios = () => {
+  const { user } = useAuth();
   const navigate = useNavigate();
   const [vistaActual, setVistaActual] = useState('asignacion'); 
   
@@ -264,7 +266,10 @@ const GruposYHorarios = () => {
         }));
         
         try {
-          await client.post(`/asignacion/${alumnoInfo.matricula}/guardar`, { materias: materiasPayload });
+          await client.post(`/asignacion/${alumnoInfo.matricula}/guardar`, { 
+              materias: materiasPayload,
+              usuario_id: user?.identifier || user?.email || "Admin Local"
+          });
           setSeleccion(nuevaSeleccion);
           setSeleccionOriginal(nuevaSeleccion); 
           setInscripcionesOriginales(materiasPayload.map(m => m.group_id));
@@ -373,7 +378,8 @@ const GruposYHorarios = () => {
     setGuardando(true);
     try {
       const response = await client.post(`/asignacion/${alumnoInfo.matricula}/guardar`, {
-        materias: materiasPayload
+        materias: materiasPayload,
+        usuario_id: user?.identifier || user?.email || "Admin Local"
       });
       
       await Swal.fire({

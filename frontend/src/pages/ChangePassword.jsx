@@ -22,6 +22,9 @@ const ChangePassword = () => {
   const recoveryCode = location.state?.code || "";
   const recoveryIdentifier = location.state?.identifier || "";
 
+  const isAdminUnlock = location.state?.isAdminUnlock || false;
+  const targetUser = location.state?.targetUser || "";
+
   const forced = useMemo(() => {
     const params = new URLSearchParams(location.search);
     return params.get("forced") === "1";
@@ -41,7 +44,8 @@ const ChangePassword = () => {
   const [fieldError, setFieldError] = useState("");
   const [ok, setOk] = useState("");
   const [loading, setLoading] = useState(false);
-  const identifier = user?.identifier || recoveryIdentifier;
+  
+  const identifier = isAdminUnlock ? targetUser : (user?.identifier || recoveryIdentifier);
 
   const goHomeByRole = (role) => {
     if (role?.name === "admin") return navigate("/alumnos/listado");
@@ -67,11 +71,11 @@ const ChangePassword = () => {
     setOk("");
 
     if (!identifier) {
-      setError("No hay sesión activa ni proceso de recuperación.");
+      setError("No hay sesión activa ni proceso válido.");
       return;
     }
 
-    if (!isRecovery && !form.current_password.trim()) {
+    if (!isRecovery && !isAdminUnlock && !form.current_password.trim()) {
       setError("Escribe la contraseña actual.");
       setFieldError("current_password");
       return;
@@ -90,7 +94,7 @@ const ChangePassword = () => {
       return;
     }
 
-    if (!isRecovery && form.current_password === form.new_password) {
+    if (!isRecovery && !isAdminUnlock && form.current_password === form.new_password) {
       setError("La nueva contraseña no puede ser igual a la contraseña actual.");
       setFieldError("new_password");
       return;
@@ -113,7 +117,22 @@ const ChangePassword = () => {
 
     setLoading(true);
     try {
-      if (isRecovery) {
+      if (isAdminUnlock) {
+        const userStorage = localStorage.getItem('user');
+        const currentAdminId = userStorage ? JSON.parse(userStorage).identifier : 'Sistema';
+
+        await client.put("/auth/admin-force-password", {
+          identifier: targetUser,
+          new_password: trimmedNew,
+          admin_id: currentAdminId
+        });
+
+        setOk(`Contraseña asignada exitosamente al usuario ${targetUser}.`);
+        setTimeout(() => {
+          navigate(-1);
+        }, 1500);
+
+      } else if (isRecovery) {
         await client.post("/auth/reset-password", {
           identifier,
           code: recoveryCode,
@@ -150,7 +169,7 @@ const ChangePassword = () => {
       if (msg === "La contraseña actual es incorrecta") {
         setFieldError("current_password");
       }
-      console.error("Error change-password:", err?.response?.data || err.message);
+      console.error("Error password update:", err?.response?.data || err.message);
     } finally {
       setLoading(false);
     }
@@ -158,6 +177,10 @@ const ChangePassword = () => {
 
   const onCancel = () => {
     if (forced) return;
+    if (isAdminUnlock) {
+      navigate(-1);
+      return;
+    }
     goHomeByRole(user?.role);
   };
 
@@ -186,7 +209,7 @@ const ChangePassword = () => {
 
           <div className="p-8 pb-10 flex flex-col text-center">
             <h1 className="text-[22px] font-bold text-[#1A1A1A] mb-1">
-              {isRecovery ? "Restablecer Contraseña" : "Cambio de Contraseña"}
+              {isAdminUnlock ? "Asignar Nueva Contraseña" : isRecovery ? "Restablecer Contraseña" : "Cambio de Contraseña"}
             </h1>
 
             {forced ? (
@@ -201,7 +224,9 @@ const ChangePassword = () => {
               </div>
             ) : (
               <p className="text-sm text-gray-500 mb-6 font-medium">
-                {isRecovery
+                {isAdminUnlock
+                  ? `Estableciendo nueva credencial de acceso para el usuario ID: ${targetUser}.`
+                  : isRecovery
                   ? "Ingresa tu nueva contraseña para recuperar el acceso a tu cuenta."
                   : "Actualiza tu contraseña para mantener tu cuenta segura."}
               </p>
@@ -211,7 +236,7 @@ const ChangePassword = () => {
               onSubmit={onSubmit}
               className="space-y-5 text-left flex flex-col"
             >
-              {!isRecovery && (
+              {!isRecovery && !isAdminUnlock && (
                 <div className="space-y-1.5">
                   <label className="text-[10px] font-bold text-gray-700 uppercase tracking-wide ml-0.5">
                     Contraseña actual
@@ -357,7 +382,7 @@ const ChangePassword = () => {
                     : "active:scale-[0.98]"
                 }`}
               >
-                {loading ? "Guardando..." : "Actualizar contraseña"}
+                {loading ? "Guardando..." : isAdminUnlock ? "Asignar credencial" : "Actualizar contraseña"}
                 <ArrowRight size={16} className="ml-1" />
               </button>
 

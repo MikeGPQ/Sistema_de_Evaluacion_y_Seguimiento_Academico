@@ -10,6 +10,7 @@ from app.models.enrollment import StudentEnrollment
 from app.models.academic_group import AcademicGroup
 from app.models.subject import Subject
 from app.models.student_status import StudentStatus
+from app.services.audit_service import log_audit_event
 
 
 router = APIRouter(prefix="/asignacion", tags=["Asignación de Horarios"])
@@ -299,12 +300,20 @@ def guardar_carga_academica(matricula: str, request: GuardarCargaRequest, db: Se
             print(f"Error procesando el horario del grupo {grupo.identificador_grupo}: {e}")
 
     try:
+        inscripciones_viejas = db.query(StudentEnrollment).filter(
+            StudentEnrollment.student_matricula == matricula
+        ).all()
+        
+        old_values = {
+            "grupos_inscritos": [insc.academic_group_id for insc in inscripciones_viejas]
+        }
+        
         db.query(StudentEnrollment).filter(
             StudentEnrollment.student_matricula == matricula
         ).delete()
 
+        nuevos_grupos = []
         for materia in request.materias:
-          
             grupo_obj = next((g for g in grupos_a_inscribir if g.id == materia.group_id), None)
             periodo_grupo = grupo_obj.periodo if grupo_obj else "2026-1"
             
@@ -315,7 +324,22 @@ def guardar_carga_academica(matricula: str, request: GuardarCargaRequest, db: Se
                 is_retake=materia.is_retake
             )
             db.add(nueva_inscripcion)
-        
+            nuevos_grupos.append(materia.group_id)
+
+        new_values = {
+            "grupos_inscritos": nuevos_grupos
+        }
+
+        log_audit_event(
+            db=db,
+            user_identifier=request.usuario_id,
+            action="UPDATE",
+            entity_name="student_enrollments",
+            entity_id=matricula,
+            old_values=old_values,
+            new_values=new_values
+        )
+
         db.commit()
     except Exception as e:
         db.rollback()
@@ -356,7 +380,10 @@ def obtener_horario_real(matricula: str, db: Session = Depends(get_db)):
     resultados = db.execute(query, {"matricula": matricula}).mappings().all()
     horario_formateado = []
     
-    colores_carrera = ['#3b82f6', '#22c55e', '#f97316', '#ef4444', '#14b8a6', '#ec4899'] 
+    colores_carrera = [
+    '#2563EB', '#DC2626', '#16A34A', '#D97706', '#9333EA', 
+    '#0891B2', '#EA580C', '#4F46E5', '#C026D3', '#4D7C0F'
+    ]   
     color_tronco_comun = '#475569' 
     
     mapa_colores = {}
