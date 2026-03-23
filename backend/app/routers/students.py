@@ -6,6 +6,8 @@ import string
 import bcrypt
 import pandas as pd
 import smtplib
+
+
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Form, Query
@@ -14,6 +16,15 @@ from sqlalchemy.orm import Session
 from sqlalchemy import func, or_
 from passlib.context import CryptContext
 from typing import Optional
+
+
+from app.models.enrollment import StudentEnrollment
+from app.models.academic_group import AcademicGroup
+from app.models.subject import Subject
+from app.models.academic_period import AcademicPeriod
+from app.schemas.enrollment import MisCalificacionesResponse
+
+
 
 from app.db.database import get_db
 from app.models.file import File as FileModel
@@ -712,3 +723,67 @@ def get_archivo(file_id: int, db: Session = Depends(get_db)):
         media_type=archivo.mime_type,
         headers={"Content-Disposition": f'inline; filename="{archivo.file_name}"'}
     )
+
+# ==========================================
+# PERIODOS ACADÉMICOS
+# ==========================================
+@router.get("/periodos")
+def get_periodos(db: Session = Depends(get_db)):
+    periodos = db.query(AcademicPeriod).order_by(AcademicPeriod.period_name.desc()).all()
+    return [{"period_name": p.period_name, "is_active": p.is_active} for p in periodos]
+
+# ==========================================
+# HU-23: VISUALIZACIÓN DE CALIFICACIONES (ALUMNO)
+# ==========================================
+@router.get("/mis-calificaciones/{matricula}", response_model=list[MisCalificacionesResponse])
+def get_my_grades(
+    matricula: str,
+    periodo: Optional[str] = None,
+    db: Session = Depends(get_db),
+):
+    info_alumno = (
+        db.query(Student.matricula, Career.name.label("carrera"), Student.cuatrimestre_actual)
+        .join(Career, Student.career_id == Career.id)
+        .filter(Student.matricula == matricula)
+        .first()
+    )
+    if not periodo:
+        periodo_activo = db.query(AcademicPeriod).filter(AcademicPeriod.is_active == True).first()
+        if not periodo_activo:
+            periodo_activo = db.query(AcademicPeriod).order_by(AcademicPeriod.period_name.desc()).first()
+        periodo = periodo_activo.period_name if periodo_activo else "2026-1"
+
+    # 2. Hacemos el JOIN para cruzar el Kardex con Grupos y Materias
+    resultados = (
+        db.query(
+            Subject.nombre.label("materia"),
+            StudentEnrollment.parcial_1,
+            StudentEnrollment.parcial_2,
+            StudentEnrollment.parcial_3,
+            StudentEnrollment.calificacion_final,
+            StudentEnrollment.status
+        )
+        .join(AcademicGroup, StudentEnrollment.academic_group_id == AcademicGroup.id)
+        .join(Subject, AcademicGroup.subject_id == Subject.id)
+        .filter(
+            StudentEnrollment.student_matricula == matricula,
+            StudentEnrollment.period_name == periodo
+        )
+        .all()
+    )
+    carrera = info_alumno.carrera if info_alumno else "N/A"
+    cuatrimestre = info_alumno.cuatrimestre_actual if info_alumno and info_alumno.cuatrimestre_actual else 1
+    
+    return [
+        MisCalificacionesResponse(
+            materia=r.materia,
+            carrera=carrera,
+            cuatrimestre=cuatrimestre,
+            parcial_1=r.parcial_1,
+            parcial_2=r.parcial_2,
+            parcial_3=r.parcial_3,
+            calificacion_final=r.calificacion_final,
+            status=r.status,
+        )
+        for r in resultados
+    ]

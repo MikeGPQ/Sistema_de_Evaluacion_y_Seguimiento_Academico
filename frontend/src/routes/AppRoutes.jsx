@@ -26,7 +26,7 @@ import ReportesDocente from "../pages/Docentes/ReportCards";
 import AdminLayout from "../layouts/AdminLayout";
 import AlumnoLayout from "../layouts/AlumnoLayout";
 import DocenteLayout from "../layouts/DocenteLayout";
-
+import MisCalificaciones from "../pages/Alumnos/MisCalificaciones";
 // Docente
 import AsistenciaDocente from "../pages/Docentes/AsistenciaDocente";
 
@@ -131,9 +131,9 @@ const AppRoutes = () => {
          {/* ALUMNO */}
         <Route path="/alumno" element={<ProtectedRoute allowedRoles={["alumno"]}><AlumnoLayout /></ProtectedRoute>}>
           <Route path="horario" element={<MiHorario />} />
+          <Route path="calificaciones" element={<MisCalificaciones />} />
           <Route path="asistencias" element={<StudentAttendance />} />
           <Route path="carga-academica" element={<MiCargaAcademica />} />
-          <Route path="calificaciones" element={<EnConstruccion modulo="Mis Calificaciones" />} />
         </Route>
 
         {/* ROOT */}
