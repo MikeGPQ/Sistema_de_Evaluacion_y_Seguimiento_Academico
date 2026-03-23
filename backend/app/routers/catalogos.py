@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 from app.db.database import get_db
+
 from app.models.student_status import StudentStatus
 from app.models.academic_level import AcademicLevel
 from app.models.academic_program import AcademicProgram
@@ -12,10 +13,10 @@ from app.models.classroom import Classroom
 
 router = APIRouter(prefix="/catalogos", tags=["Catálogos"])
 
-@router.get("/estatus-alumno")
-def get_estatus_alumno(db: Session = Depends(get_db)):
+@router.get("/estatus")
+def get_estatus(db: Session = Depends(get_db)):
     estatus = db.query(StudentStatus).all()
-    return [{"id": s.id, "name": s.name, "description": s.description} for s in estatus]
+    return [{"id": s.id, "name": s.name, "description": getattr(s, 'description', '')} for s in estatus]
 
 @router.get("/niveles-academicos")
 def get_niveles(db: Session = Depends(get_db)):
@@ -44,7 +45,7 @@ def get_escuelas(tipo: str = None, db: Session = Depends(get_db)):
     if tipo:
         query = query.filter(OriginSchool.tipo == tipo)
     escuelas = query.all()
-    return [{"id": e.id, "name": e.name, "tipo": e.tipo} for e in escuelas]
+    return [{"id": e.id, "name": e.name, "tipo": getattr(e, 'tipo', '')} for e in escuelas]
 
 @router.get("/cuatrimestres")
 def get_cuatrimestres(db: Session = Depends(get_db)):

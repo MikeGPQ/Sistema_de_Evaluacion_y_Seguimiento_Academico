@@ -282,7 +282,7 @@ def register_admin(admin_data: AdminCreate, db: Session = Depends(get_db)):
             server.login(remitente, password_aplicacion)
             server.sendmail(remitente, admin_data.email_personal, msg.as_string())
             server.quit()
-        except Exception as email_err:
+        except Exception:
             pass
 
         return {

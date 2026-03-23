@@ -1,95 +1,117 @@
 import json
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
-from sqlalchemy import text
 from app.db.database import get_db
 from datetime import datetime
-from app.models.teacher import Teacher
+
 from app.models.academic_group import AcademicGroup
 from app.models.academic_period import AcademicPeriod
+from app.models.teacher import Teacher
+from app.models.subject import Subject
+from app.models.academic_program import AcademicProgram
+from app.models.enrollment import StudentEnrollment
+from app.models.student import Student
 from app.services.audit_service import log_audit_event
 
-router = APIRouter(prefix="/reportes", tags=["Generación de Actas"])
+router = APIRouter(tags=["Generación de Actas"])
 
-@router.get("/docentes/{docente_matricula}/grupos")
-def obtener_grupos_docente(docente_matricula: str, db: Session = Depends(get_db)):
-    docente = db.query(Teacher).filter(Teacher.matricula_empleado == docente_matricula).first()
+@router.get("/docentes/{docente_id}/grupos")
+def obtener_grupos_docente(docente_id: str, db: Session = Depends(get_db)):
+    docente = db.query(Teacher).filter(Teacher.matricula_empleado == docente_id).first()
+    
     if not docente:
-        raise HTTPException(status_code=404, detail="Docente no encontrado.")
+        try:
+            docente = db.query(Teacher).filter(Teacher.id == int(docente_id)).first()
+        except ValueError:
+            pass
+            
+    if not docente:
+        raise HTTPException(status_code=404, detail="Docente no encontrado en la base de datos.")
 
-    periodo_activo = db.query(AcademicPeriod).filter(AcademicPeriod.is_active == True).first()
-    if not periodo_activo:
+    periodo_actual = db.query(AcademicPeriod).filter(AcademicPeriod.is_active == True).first()
+    
+    if not periodo_actual:
         return []
 
-    grupos = db.query(AcademicGroup).filter(
+    grupos_db = db.query(AcademicGroup).filter(
         AcademicGroup.teacher_id == docente.id,
-        AcademicGroup.period_id == periodo_activo.id
+        AcademicGroup.period_id == periodo_actual.id
     ).all()
 
-    return [{
-        "id": g.id,
-        "materia_nombre": g.subject.nombre,
-        "identificador": g.identificador_grupo,
-        "acta_status": g.acta_status,
-        "total_alumnos": len(g.enrollments)
-    } for g in grupos]
+    resultados = []
+    for g in grupos_db:
+        total_alumnos = db.query(StudentEnrollment).filter(StudentEnrollment.academic_group_id == g.id).count()
+        resultados.append({
+            "id": g.id,
+            "materia_nombre": g.subject.nombre if g.subject else "Sin Materia",
+            "identificador": g.identificador_grupo,
+            "acta_status": g.acta_status,
+            "total_alumnos": total_alumnos
+        })
+        
+    return resultados
 
 @router.get("/actas/{grupo_id}/validar")
 def validar_acta_grupo(grupo_id: int, db: Session = Depends(get_db)):
     grupo = db.query(AcademicGroup).filter(AcademicGroup.id == grupo_id).first()
-    if not grupo:
-        raise HTTPException(status_code=404, detail="Grupo no encontrado.")
-
-    alumnos_data = []
-    total_calificados = 0
     
-    enrollments = sorted(grupo.enrollments, key=lambda x: x.student.apellido_paterno)
+    if not grupo:
+        raise HTTPException(status_code=404, detail="Grupo académico no encontrado.")
 
-    for enr in enrollments:
-        calif = enr.calificacion_final
-        if calif is not None:
-            total_calificados += 1
+    materia = grupo.subject
+    docente = grupo.teacher
+    programa = materia.academic_program if materia else None
+    periodo = grupo.period
+
+    cuatrimestre_val = materia.quarter.numero if materia and materia.quarter else getattr(materia, 'cuatrimestre', 1)
+
+    inscripciones = db.query(StudentEnrollment).filter(StudentEnrollment.academic_group_id == grupo_id).all()
+    
+    alumnos = []
+    for insc in inscripciones:
+        st = insc.student
+        nombre_formateado = f"{st.apellido_paterno} {st.apellido_materno or ''}, {st.nombre}".strip() if st else "Desconocido"
         
-        alumnos_data.append({
-            "matricula": enr.student_matricula,
-            "nombre": f"{enr.student.apellido_paterno} {enr.student.apellido_materno}, {enr.student.nombre}",
-            "calificacion_final": calif
+        alumnos.append({
+            "matricula": insc.student_matricula,
+            "nombre": nombre_formateado,
+            "calificacion_final": insc.calificacion_final
         })
 
-    total_inscritos = len(enrollments)
-    captura_completa = (total_inscritos > 0 and total_inscritos == total_calificados)
+    alumnos.sort(key=lambda x: x['nombre'])
+
+    total_inscritos = len(alumnos)
+    total_calificados = sum(1 for a in alumnos if a['calificacion_final'] is not None)
+    
+    captura_completa = False
+    if total_inscritos > 0 and total_inscritos == total_calificados:
+        captura_completa = True
 
     return {
-        "carrera": grupo.subject.career.name if grupo.subject.career else "Tronco Común",
-        "nivel": grupo.subject.nivel_academico,
-        "codigo_materia": grupo.subject.codigo_unico or f"MAT-{grupo.subject_id}",
+        "carrera": programa.name if programa else "Tronco Común",
+        "codigo_materia": f"MAT-{materia.id if materia else '000'}",
         "campus": "San Francisco - Campeche",
-        "cuatrimestre": grupo.subject.quarter.nombre if grupo.subject.quarter else "N/A",
-        "periodo": grupo.period.period_name,
+        "cuatrimestre": cuatrimestre_val,
+        "periodo": periodo.period_name if periodo else "Desconocido",
         "grupo": grupo.identificador_grupo,
-        "materia_nombre": grupo.subject.nombre,
-        "docente_nombre": f"{grupo.teacher.nombre} {grupo.teacher.apellido_paterno}",
+        "materia_nombre": materia.nombre if materia else "Sin Materia",
+        "docente_nombre": f"{docente.nombre} {docente.apellido_paterno}" if docente else "Sin Docente",
         "acta_status": grupo.acta_status,
         "captura_completa": captura_completa,
-        "alumnos": alumnos_data
+        "alumnos": alumnos
     }
 
 @router.post("/actas/{grupo_id}/cerrar")
 def cerrar_acta_oficial(grupo_id: int, payload: dict, db: Session = Depends(get_db)):
-    usuario_id = payload.get("usuario_id", "Sistema")
+    docente_id = payload.get("docente_id", "Desconocido")
     
     grupo = db.query(AcademicGroup).filter(AcademicGroup.id == grupo_id).first()
+    
     if not grupo:
         raise HTTPException(status_code=404, detail="Grupo no encontrado.")
-    
+        
     if grupo.acta_status == 'cerrada':
-        raise HTTPException(status_code=400, detail="El acta ya se encuentra cerrada.")
-
-    inscritos = len(grupo.enrollments)
-    calificados = sum(1 for e in grupo.enrollments if e.calificacion_final is not None)
-    
-    if inscritos == 0 or inscritos != calificados:
-        raise HTTPException(status_code=400, detail="No se puede cerrar el acta: faltan alumnos por calificar.")
+        raise HTTPException(status_code=400, detail="El acta ya se encuentra cerrada y congelada.")
 
     try:
         old_status = grupo.acta_status
@@ -97,17 +119,17 @@ def cerrar_acta_oficial(grupo_id: int, payload: dict, db: Session = Depends(get_
         
         log_audit_event(
             db=db,
-            user_identifier=usuario_id,
+            user_identifier=str(docente_id),
             action="UPDATE",
             entity_name="academic_groups",
-            entity_id=str(grupo_id),
+            entity_id=str(grupo.id),
             old_values={"acta_status": old_status},
-            new_values={"acta_status": "cerrada", "motivo": "Cierre oficial de acta"}
+            new_values={"acta_status": "cerrada"}
         )
 
         db.commit()
-        return {"message": "Acta cerrada exitosamente. Calificaciones protegidas."}
+        return {"message": "Acta cerrada exitosamente. Las calificaciones han sido congeladas."}
         
     except Exception as e:
         db.rollback()
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=f"Fallo crítico al cerrar el acta: {str(e)}")
