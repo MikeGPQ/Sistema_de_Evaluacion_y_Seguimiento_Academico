@@ -1,4 +1,4 @@
-from sqlalchemy import Column, String, Integer, BigInteger, ForeignKey, TIMESTAMP, text
+from sqlalchemy import Column, String, BigInteger, ForeignKey, TIMESTAMP, text
 from sqlalchemy.orm import relationship
 from app.db.database import Base
 
@@ -7,6 +7,7 @@ class Student(Base):
 
     matricula = Column(String(20), primary_key=True, index=True)
 
+    # DATOS PERSONALES (Los únicos que se quedaron en esta tabla)
     nombre = Column(String(100), nullable=False)
     apellido_paterno = Column(String(100), nullable=False)
     apellido_materno = Column(String(100), nullable=False)
@@ -14,15 +15,22 @@ class Student(Base):
     foto_id = Column(BigInteger, ForeignKey("files.id"), nullable=True)
     email_personal = Column(String(150), nullable=False)
     email_institucional = Column(String(150), nullable=True)
-    origin_school_id = Column(Integer, ForeignKey("origin_schools.id"), nullable=True)
-    promedio_procedencia = Column(Integer, nullable=False)
-    certificado_id = Column(BigInteger, ForeignKey("files.id"), nullable=True)
-    career_id = Column(Integer, ForeignKey("careers.id"), nullable=False)
-    cuatrimestre_actual = Column(Integer, nullable=False, server_default=text("1"))
-    status_id = Column(Integer, ForeignKey("student_statuses.id"), nullable=False, server_default=text("1"))
+    
     created_at = Column(TIMESTAMP, server_default=text("CURRENT_TIMESTAMP"))
     updated_at = Column(TIMESTAMP, server_default=text("NULL ON UPDATE CURRENT_TIMESTAMP"), nullable=True)
-    career = relationship("Career")
-    status = relationship("StudentStatus")
+    
+    # RELACIONES VÁLIDAS
     foto = relationship("File", foreign_keys=[foto_id])
-    certificado = relationship("File", foreign_keys=[certificado_id])
+    
+    # ❌ COLUMNAS ELIMINADAS (Movidas a student_academic_profiles por el arquitecto):
+    # origin_school_id
+    # promedio_procedencia
+    # certificado_id
+    # career_id (Ahora es academic_program_id)
+    # cuatrimestre_actual
+    # status_id
+    
+    # ❌ RELACIONES ELIMINADAS DE ESTE MODELO:
+    # career = relationship("Career")  <-- La tabla careers ya no existe
+    # status = relationship("StudentStatus")
+    # certificado = relationship("File", foreign_keys=[certificado_id])

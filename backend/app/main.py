@@ -8,6 +8,7 @@ from apscheduler.schedulers.background import BackgroundScheduler
 
 from app.db.database import engine
 from app.routers.students import router as students_router
+from app.routers import reportcards
 from app.routers import Listados
 from app.routers import auth
 from app.routers import mock_api
@@ -82,6 +83,7 @@ app.include_router(enrollments.router)
 app.include_router(grades.router)
 app.include_router(attendance.router) 
 app.include_router(logs.router)
+app.include_router(reportcards.router)
 
 @app.get("/")
 def read_root():
