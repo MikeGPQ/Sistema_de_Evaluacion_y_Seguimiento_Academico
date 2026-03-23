@@ -31,7 +31,7 @@ const AlumnoLayout = () => {
 
   const photoUrl =
     user?.foto_id
-      ? `${import.meta.env.VITE_API_URL}files/${user.foto_id}`
+      ? `${import.meta.env.VITE_API_URL}/files/${user.foto_id}`
       : null;
   const isActive = (path) => location.pathname.includes(path);
 

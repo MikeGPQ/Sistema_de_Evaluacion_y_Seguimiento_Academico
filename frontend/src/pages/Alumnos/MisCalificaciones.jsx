@@ -94,12 +94,12 @@ const MisCalificaciones = () => {
       doc.setTextColor(120, 120, 120);
       doc.text("DOCUMENTO OFICIAL", pageWidth - margin, 25.5, { align: 'right' });
 
-      // Línea separadora dorada
+  
       doc.setDrawColor(gold[0], gold[1], gold[2]);
       doc.setLineWidth(1.5);
       doc.line(margin, 34, pageWidth - margin, 34);
 
-      // ── 2. CAJA DE DATOS DEL ALUMNO ────────────────────────
+    
       const boxX = margin;
       const boxY = 40;
       const boxW = pageWidth - margin * 2;
@@ -133,7 +133,7 @@ const MisCalificaciones = () => {
       drawField("CUATRIMESTRE", `${calificaciones[0]?.cuatrimestre || '4'}° Cuatrimestre`, col1, infoY);
       drawField("CAMPUS", "San Francisco de Campeche", col2, infoY);
 
-      // ── 3. TÍTULO MATERIAS INSCRITAS ───────────────────────
+    
       let currentY = boxY + boxH + 10;
       doc.setFillColor(primary[0], primary[1], primary[2]);
       doc.rect(margin,       currentY - 4, 3, 3, 'F');
@@ -144,14 +144,13 @@ const MisCalificaciones = () => {
       doc.text("MATERIAS INSCRITAS", margin + 10, currentY - 1);
       currentY += 5;
 
-      // ── 4. TARJETA POR MATERIA ─────────────────────────────
+      
       calificaciones.forEach((materia) => {
         if (currentY > 240) {
           doc.addPage();
           currentY = 20;
         }
 
-        // Nombre de la materia
         doc.setFontSize(10);
         doc.setFont(undefined, 'bold');
         doc.setTextColor(primary[0], primary[1], primary[2]);
@@ -189,7 +188,7 @@ const MisCalificaciones = () => {
           },
         });
 
-        // Borde redondeado alrededor de toda la tarjeta
+       
         const cardEnd = doc.lastAutoTable.finalY;
         doc.setDrawColor(210, 210, 210);
         doc.setLineWidth(0.3);
@@ -198,7 +197,6 @@ const MisCalificaciones = () => {
         currentY = cardEnd + 10;
       });
 
-      // ── 5. PROMEDIO GENERAL ────────────────────────────────
       if (currentY > 245) { doc.addPage(); currentY = 20; }
       currentY += 5;
 
@@ -219,10 +217,8 @@ const MisCalificaciones = () => {
       doc.setFont(undefined, 'bold');
       doc.text(`${calcularPromedioPeriodo()}`, labelX + labelW + 11, currentY + 12, { align: 'center' });
 
-      // ── 6. PIE DE PÁGINA ──────────────────────────────────
       currentY += labelH + 14;
 
-      // Nota de validez (izquierda) + Fecha de emisión (derecha)
       doc.setFontSize(7.5);
       doc.setTextColor(60, 60, 60);
       doc.setFont(undefined, 'bold');
@@ -256,7 +252,7 @@ const MisCalificaciones = () => {
     }
   };
 
-  // --- UI ORIGINAL DE LA PÁGINA WEB ---
+
   const renderStatusBadge = (status) => {
     switch (status?.toLowerCase()) {
       case 'aprobada':
@@ -271,7 +267,7 @@ const MisCalificaciones = () => {
             <AlertCircle size={14} /> Reprobada
           </span>
         );
-      default: // 'cursando'
+      default: 
         return (
           <span className="flex items-center gap-1 px-3 py-1 bg-yellow-100 text-yellow-700 rounded-full text-xs font-bold">
             <Clock size={14} /> Cursando

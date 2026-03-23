@@ -34,7 +34,7 @@ const Profile = ({ isOpen, onClose }) => {
 
   const photo =
     (roleName === "alumno" && user?.foto_id)
-      ? `${import.meta.env.VITE_API_URL}files/${user.foto_id}`
+      ? `${import.meta.env.VITE_API_URL}/files/${user.foto_id}`
       : null;
 
   const getRoleLabel = (role) => {

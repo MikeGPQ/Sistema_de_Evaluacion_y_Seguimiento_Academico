@@ -582,7 +582,11 @@ def get_my_grades(
         )
         .join(AcademicGroup, StudentEnrollment.academic_group_id == AcademicGroup.id)
         .join(Subject, AcademicGroup.subject_id == Subject.id)
-        .filter(StudentEnrollment.student_matricula == matricula)
+        .join(AcademicPeriod, AcademicGroup.period_id == AcademicPeriod.id)
+        .filter(
+            StudentEnrollment.student_matricula == matricula,
+            AcademicPeriod.codigo == periodo,
+        )
     ).all()
 
     carrera = perfil.career.name if perfil and perfil.career else "N/A"
