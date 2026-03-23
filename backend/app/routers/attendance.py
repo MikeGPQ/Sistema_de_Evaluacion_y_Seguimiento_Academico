@@ -37,7 +37,7 @@ class GuardarCambiosRequest(BaseModel):
     observaciones_alumnos: List[ObservacionAlumno] = [] # 🌟 RECIBIMOS LAS NOTAS
 
 ESTADOS_DB = { "P": "asistencia", "F": "falta", "R": "retardo", "J": "justificado" }
-MAPA_DIAS = { "Lunes": 0, "Martes": 1, "Miércoles": 2, "Jueves": 3, "Viernes": 4, "Sábado": 5, "Domingo": 6 }
+MAPA_DIAS = { "Lunes": 0, "Martes": 1, "Miércoles": 2, "Miercoles": 2, "Jueves": 3, "Viernes": 4, "Sábado": 5, "Sabado": 5, "Domingo": 6 }
 
 def calcular_fechas_clase(horario_data, fecha_inicio: date, fecha_fin: date) -> List[str]:
     if not horario_data or not fecha_inicio or not fecha_fin: return []

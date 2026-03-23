@@ -6,7 +6,6 @@ import { Hammer } from "lucide-react";
 import LoginPage from "../pages/LoginPage";
 import ChangePassword from "../pages/ChangePassword";
 import RecoverPassword from "../pages/RecoverPassword";
-import Profile from "../pages/Profile";
 
 // Admin
 import ImportarAlumnos from "../pages/Alumnos/ImportarAlumnos";
@@ -15,10 +14,14 @@ import CambiarEstatusAlumno from "../pages/Alumnos/CambiarEstatusAlumno";
 import GruposYHorarios from "../pages/GruposyHorarios/GrupoyHorarios";
 import MiHorario from "../pages/Alumnos/MiHorario";
 import StudentAttendance from '../pages/Alumnos/StudentAttendance'; 
+import MiCargaAcademica from "../pages/GruposyHorarios/MiCargaAcademica"; 
 
 // Super Admin
 import ListadoAdministradores from "../pages/Administradores/ListadoAdministradores";
 
+// Docentes (NUEVA IMPORTACIÓN)
+import Calificaciones from "../pages/Docentes/Calificaciones";
+import ReportesDocente from "../pages/Docentes/ReportCards";
 // Layouts
 import AdminLayout from "../layouts/AdminLayout";
 import AlumnoLayout from "../layouts/AlumnoLayout";
@@ -107,15 +110,6 @@ const AppRoutes = () => {
           element={<ChangePassword />}
         />
 
-        <Route
-          path="/profile"
-          element={
-            <ProtectedRoute>
-              <Profile />
-            </ProtectedRoute>
-          }
-        />
-
         {/* ADMIN & SUPER ADMIN */}
         <Route element={<ProtectedRoute allowedRoles={["admin", "super_admin"]}><AdminLayout /></ProtectedRoute>}>
           <Route path="/administradores/listado" element={<ListadoAdministradores />} />
@@ -129,16 +123,16 @@ const AppRoutes = () => {
         
         {/* DOCENTE */}
         <Route path="/docente" element={<ProtectedRoute allowedRoles={["docente"]}><DocenteLayout /></ProtectedRoute>}>
-          {/* RUTA CORREGIDA: AsistenciaDocente sin el comentario rompiendo JSX */}
           <Route path="pase-lista" element={<AsistenciaDocente />} />
-          <Route path="calificaciones" element={<EnConstruccion modulo="Captura de Calificaciones" />} />
-          <Route path="actas" element={<EnConstruccion modulo="Generación de Actas Oficiales" />} />
+          <Route path="calificaciones" element={<Calificaciones />} />
+         <Route path="actas" element={<ReportesDocente />} />
         </Route>
 
          {/* ALUMNO */}
         <Route path="/alumno" element={<ProtectedRoute allowedRoles={["alumno"]}><AlumnoLayout /></ProtectedRoute>}>
           <Route path="horario" element={<MiHorario />} />
-          <Route path="asistencias" element={<StudentAttendance />} /> {/* 🌟 AQUÍ ESTÁ EL CAMBIO */}
+          <Route path="asistencias" element={<StudentAttendance />} />
+          <Route path="carga-academica" element={<MiCargaAcademica />} />
           <Route path="calificaciones" element={<EnConstruccion modulo="Mis Calificaciones" />} />
         </Route>
 

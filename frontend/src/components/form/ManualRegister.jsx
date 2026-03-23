@@ -389,11 +389,63 @@ export default function ManualRegister({ isOpen, onClose, alumnoAEditar }) {
     setFormData(prev => ({ ...prev, [name]: selectedOption ? selectedOption.value : '' }));
   };
 
-  const handleFileChange = (e) => {
+const handleFileChange = (e) => {
     const { name, files: selectedFiles } = e.target;
-    if (selectedFiles && selectedFiles[0]) {
-      setFiles(prev => ({ ...prev, [name]: selectedFiles[0] }));
+    const file = selectedFiles[0];
+
+    if (!file) return;
+
+    if (name === 'foto') {
+      // Validación 1: Formato JPG o PNG
+      const validTypes = ['image/jpeg', 'image/png'];
+      if (!validTypes.includes(file.type)) {
+        Swal.fire('Formato Inválido', 'La fotografía debe ser en formato JPG o PNG.', 'error');
+        e.target.value = ''; 
+        return;
+      }
+
+      // Validación 2: Peso máximo 
+      const maxSizeInBytes = 2 * 1024 * 1024;
+      if (file.size > maxSizeInBytes) {
+        Swal.fire('Archivo muy pesado', 'La fotografía no debe superar los 2MB.', 'error');
+        e.target.value = '';
+        return;
+      }
+
+      // Validación 3: Dimensiones mínimas 
+      const img = new Image();
+      const objectUrl = URL.createObjectURL(file);
+      
+      img.onload = () => {
+        URL.revokeObjectURL(objectUrl); 
+        if (img.width < 250 || img.height < 250) {
+          Swal.fire('Dimensiones Inválidas', 'La fotografía debe tener al menos 250x250 píxeles.', 'error');
+          e.target.value = '';
+          return;
+        }
+        
+        setFiles(prev => ({ ...prev, [name]: file }));
+      };
+
+      img.onerror = () => {
+        URL.revokeObjectURL(objectUrl);
+        Swal.fire('Error', 'El archivo de imagen está corrupto o no se puede leer.', 'error');
+        e.target.value = '';
+      };
+      
+      img.src = objectUrl;
+      return;
     }
+
+    if (name === 'certificado') {
+      if (file.size > 2 * 1024 * 1024) {
+        Swal.fire('Archivo muy pesado', 'El certificado no debe superar los 2MB.', 'error');
+        e.target.value = '';
+        return;
+      }
+    }
+
+    setFiles(prev => ({ ...prev, [name]: file }));
   };
 
   const handleCheckCurp = async () => {
@@ -687,7 +739,7 @@ export default function ManualRegister({ isOpen, onClose, alumnoAEditar }) {
           </h4>
           <div className="grid grid-cols-2 gap-5">
             <div className="relative group">
-              <input type="file" name="foto" id="f-foto" accept="image/*" onChange={handleFileChange} className="hidden" />
+              <input type="file" name="foto" id="f-foto" accept="image/jpeg, image/png" onChange={handleFileChange} className="hidden" />
               <label htmlFor="f-foto" className={`flex flex-col items-center justify-center h-24 border-2 border-dashed rounded-lg cursor-pointer transition-all ${files.foto ? 'border-green-500 bg-green-50 text-green-700' : 'border-gray-300 bg-gray-50 hover:border-blue-400 hover:bg-blue-50 text-gray-400'}`}>
                 <span className="text-xs font-bold uppercase tracking-wider text-center px-2">
                     {files.foto

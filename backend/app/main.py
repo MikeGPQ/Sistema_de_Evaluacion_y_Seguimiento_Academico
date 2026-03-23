@@ -8,6 +8,7 @@ from apscheduler.schedulers.background import BackgroundScheduler
 
 from app.db.database import engine
 from app.routers.students import router as students_router
+from app.routers import reportcards
 from app.routers import Listados
 from app.routers import auth
 from app.routers import mock_api
@@ -17,6 +18,7 @@ from app.routers import catalogos
 from app.routers import administradores
 from app.routers import files as files_router
 from app.routers.sync import tarea_automatica_sincronizacion
+from app.routers import grades
 from app.routers import enrollments
 from app.routers import attendance
 
@@ -77,7 +79,9 @@ app.include_router(catalogos.router)
 app.include_router(administradores.router)
 app.include_router(files_router.router)
 app.include_router(enrollments.router)
+app.include_router(grades.router)
 app.include_router(attendance.router) 
+app.include_router(reportcards.router)
 
 @app.get("/")
 def read_root():
