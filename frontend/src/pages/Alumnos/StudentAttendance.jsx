@@ -110,72 +110,48 @@ const StudentAttendance = () => {
     }
   };
 
-  const handleExportPDF = () => {
+const handleExportPDF = () => {
     if (!selectedSubject) return;
     try {
-      // 🌟 CAMBIO 1: Formato Vertical (Portrait) por defecto en 'p'
       const doc = new jsPDF('p', 'mm', 'a4'); 
       const pageWidth = doc.internal.pageSize.getWidth();
       const pageHeight = doc.internal.pageSize.getHeight();
       
-      // Header Oficial UNID adaptado a vertical
-      doc.setFillColor(11, 23, 42); doc.rect(14, 15, 12, 12, 'F');
-      doc.setTextColor(255, 255, 255); doc.setFontSize(16); doc.setFont("helvetica", "bold"); doc.text("U", 20, 23.5, { align: "center" }); 
-      
-      doc.setTextColor(26, 35, 126); doc.setFontSize(16); doc.text("UNID", 30, 20);
-      doc.setFontSize(9); doc.setTextColor(100); doc.setFont("helvetica", "normal"); doc.text("SISTEMA ACADÉMICO SESA", 30, 24);
-      
-      doc.setTextColor(26, 35, 126); doc.setFontSize(14); doc.setFont("helvetica", "bold"); doc.text("REPORTE DE ASISTENCIA", pageWidth - 14, 20, { align: "right" });
-      doc.setFontSize(10); doc.setTextColor(100); doc.setFont("helvetica", "normal"); doc.text("Historial Individual", pageWidth - 14, 25, { align: "right" });
+      // 1. FORMATO DE FECHA d/m/a
+      const today = new Date();
+      const dia = String(today.getDate()).padStart(2, '0');
+      const mes = String(today.getMonth() + 1).padStart(2, '0');
+      const anio = today.getFullYear();
+      const fechaGeneracion = `${dia}/${mes}/${anio}`;
 
-      doc.setDrawColor(242, 169, 0); doc.setLineWidth(0.5); doc.line(14, 30, pageWidth - 14, 30);
-      
-      // 🌟 CAMBIO 2: Distribución de datos en bloques
-      doc.setFontSize(8); doc.setTextColor(150); doc.setFont("helvetica", "bold");
-      doc.text("ALUMNO", 14, 38); doc.text("MATRÍCULA", 110, 38); doc.text("PERIODO", 160, 38);
-      
-      doc.setTextColor(50); doc.setFont("helvetica", "bold"); doc.setFontSize(10);
-      doc.text(selectedSubject.studentName.toUpperCase(), 14, 43);
-      doc.text(studentId, 110, 43);
-      doc.text(selectedPeriod, 160, 43);
+      // 2. CARRERA DEL ALUMNO
+      // Si la base de datos ya te manda la carrera en selectedSubject, úsala. 
+      // Si no, puedes tomarla de tu estado global de usuario (ej. user.career.name)
+      const carreraAlumno = selectedSubject.careerName || user?.career?.name || "PROGRAMA ACADÉMICO";
 
-      doc.setFontSize(8); doc.setTextColor(150); doc.setFont("helvetica", "bold");
-      doc.text("MATERIA", 14, 52); doc.text("GRUPO", 110, 52); doc.text("DOCENTE", 140, 52);
-
-      doc.setTextColor(50); doc.setFont("helvetica", "bold"); doc.setFontSize(10);
-      doc.text(selectedSubject.subjectName.toUpperCase(), 14, 57);
-      doc.text(selectedSubject.groupCode, 110, 57);
-      doc.text(selectedSubject.teacherName.toUpperCase(), 140, 57);
-
-      // Resumen Global de Faltas
-      doc.setFillColor(248, 249, 250); doc.rect(14, 63, pageWidth - 28, 10, 'F');
-      doc.setFontSize(9); doc.setTextColor(100); doc.setFont("helvetica", "bold");
-      doc.text("TOTAL DE ASISTENCIAS:", 18, 70); 
-      doc.setTextColor(34, 197, 94); doc.text(globalAttendances.toString(), 62, 70); // Verde
-      doc.setTextColor(100); doc.text("FALTAS ACUMULADAS:", 80, 70); 
-      doc.setTextColor(239, 68, 68); doc.text(globalAbsences.toString(), 122, 70); // Rojo
-      doc.setTextColor(100); doc.text(`FECHA DE CORTE: ${new Date().toLocaleDateString('es-ES')}`, 140, 70);
-
-    
+      // 3. ENCABEZADOS DE COLUMNA (Más limpios)
       const tableColumn = ["N° SESIÓN", "FECHA", "ESTADO"];
       
+      // 4. SOLO EL NÚMERO EN LA CELDA DE SESIÓN
       const tableRows = selectedSubject.classDates.map((date, idx) => {
         const status = selectedSubject.attendanceData[date] || '-';
-        // Solo retornamos los 3 datos limpios
-        return [`Sesión ${idx + 1}`, formatMonthDate(date), status];
+        return [(idx + 1).toString(), formatMonthDate(date), status]; // Solo mandamos el número (ej: "1", "2")
       });
 
       autoTable(doc, {
-        head: [tableColumn], body: tableRows, startY: 78, theme: 'plain',
-        margin: { bottom: 25, top: 15, left: 14, right: 14 }, 
-        styles: { fontSize: 10, cellPadding: 4, textColor: [50, 50, 50] }, // Letra un poco más grande
+        head: [tableColumn], 
+        body: tableRows, 
+        startY: 78, 
+        theme: 'plain',
+        // 🌟 EL SECRETO PARA REPETIR EL ENCABEZADO: Dejar un margen superior de 78mm en todas las hojas
+        margin: { top: 78, bottom: 25, left: 14, right: 14 }, 
+        styles: { fontSize: 10, cellPadding: 4, textColor: [50, 50, 50] }, 
         headStyles: { fillColor: [248, 249, 250], textColor: [26, 35, 126], fontStyle: 'bold', lineWidth: 0.1, lineColor: [220, 220, 220], halign: 'center', valign: 'middle' },
         bodyStyles: { lineWidth: 0.1, lineColor: [230, 230, 230], valign: 'middle' },
         columnStyles: { 
-          // Repartimos el ancho matemáticamente para que llene la hoja (50mm + 66mm + 66mm = 182mm útiles)
-          0: { fontStyle: 'bold', cellWidth: 50, halign: 'center' }, 
-          1: { cellWidth: 66, halign: 'center', fontStyle: 'bold', textColor: [26, 35, 126] }, 
-          2: { cellWidth: 66, halign: 'center' } 
+          0: { fontStyle: 'bold', cellWidth: 40, halign: 'center' }, 
+          1: { cellWidth: 71, halign: 'center', fontStyle: 'bold', textColor: [26, 35, 126] }, 
+          2: { cellWidth: 71, halign: 'center' } 
         },
         didParseCell: function (data) {
           if (data.section === 'body' && data.column.index === 2) {
@@ -191,8 +167,52 @@ const StudentAttendance = () => {
             }
           }
         },
+        // 🌟 AQUÍ DIBUJAMOS EL ENCABEZADO Y PIE DE PÁGINA (Se ejecuta por cada hoja nueva)
         didDrawPage: function (data) {
+          
+          // ================= ENCABEZADO =================
+          doc.setFillColor(11, 23, 42); doc.rect(14, 15, 12, 12, 'F');
+          doc.setTextColor(255, 255, 255); doc.setFontSize(16); doc.setFont("helvetica", "bold"); doc.text("U", 20, 23.5, { align: "center" }); 
+          
+          doc.setTextColor(26, 35, 126); doc.setFontSize(16); doc.text("UNID", 30, 20);
+          doc.setFontSize(9); doc.setTextColor(100); doc.setFont("helvetica", "normal"); doc.text("SISTEMA ACADÉMICO SESA", 30, 24);
+          
+          doc.setTextColor(26, 35, 126); doc.setFontSize(14); doc.setFont("helvetica", "bold"); doc.text("REPORTE DE ASISTENCIA", pageWidth - 14, 20, { align: "right" });
+          doc.setFontSize(10); doc.setTextColor(100); doc.setFont("helvetica", "normal"); doc.text("Historial Individual", pageWidth - 14, 25, { align: "right" });
+
+          doc.setDrawColor(242, 169, 0); doc.setLineWidth(0.5); doc.line(14, 30, pageWidth - 14, 30);
+          
+          // Bloque 1: Alumno, Matrícula, Carrera
+          doc.setFontSize(8); doc.setTextColor(150); doc.setFont("helvetica", "bold");
+          doc.text("ALUMNO", 14, 38); doc.text("MATRÍCULA", 95, 38); doc.text("CARRERA", 135, 38);
+          
+          doc.setTextColor(50); doc.setFont("helvetica", "bold"); doc.setFontSize(10);
+          doc.text(selectedSubject.studentName.toUpperCase(), 14, 43);
+          doc.text(studentId, 95, 43);
+          doc.text(carreraAlumno.toUpperCase(), 135, 43);
+
+          // Bloque 2: Materia, Grupo, Docente, Periodo
+          doc.setFontSize(8); doc.setTextColor(150); doc.setFont("helvetica", "bold");
+          doc.text("MATERIA", 14, 52); doc.text("GRUPO", 95, 52); doc.text("DOCENTE", 120, 52); doc.text("PERIODO", 175, 52);
+
+          doc.setTextColor(50); doc.setFont("helvetica", "bold"); doc.setFontSize(10);
+          doc.text(selectedSubject.subjectName.toUpperCase(), 14, 57);
+          doc.text(selectedSubject.groupCode, 95, 57);
+          doc.text(selectedSubject.teacherName.toUpperCase(), 120, 57);
+          doc.text(selectedPeriod, 175, 57);
+
+          // Bloque 3: Resumen Global
+          doc.setFillColor(248, 249, 250); doc.rect(14, 63, pageWidth - 28, 10, 'F');
+          doc.setFontSize(9); doc.setTextColor(100); doc.setFont("helvetica", "bold");
+          doc.text("TOTAL DE ASISTENCIAS:", 18, 70); 
+          doc.setTextColor(34, 197, 94); doc.text(globalAttendances.toString(), 62, 70); 
+          doc.setTextColor(100); doc.text("FALTAS ACUMULADAS:", 80, 70); 
+          doc.setTextColor(239, 68, 68); doc.text(globalAbsences.toString(), 122, 70); 
+          doc.setTextColor(100); doc.text(`FECHA DE GENERACIÓN: ${fechaGeneracion}`, 135, 70);
+
+          // ================= PIE DE PÁGINA =================
           const footerY = pageHeight - 15;
+          doc.setDrawColor(220, 220, 220); doc.setLineWidth(0.5); doc.line(14, footerY - 5, pageWidth - 14, footerY - 5); // Línea divisoria superior del footer
           doc.setFontSize(9); 
           doc.setFont("zapfdingbats"); doc.setTextColor(34, 197, 94); doc.text("4", 14, footerY); 
           doc.setFont("helvetica", "normal"); doc.setTextColor(150); doc.text(" Asistencia", 18, footerY);
