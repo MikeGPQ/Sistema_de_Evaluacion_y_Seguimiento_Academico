@@ -1,7 +1,9 @@
-from sqlalchemy import Column, String, BigInteger, ForeignKey, text
+from sqlalchemy import Column, String, BigInteger, ForeignKey, CHAR, text
+from sqlalchemy.orm import relationship
 from app.db.database import Base
 
 class StudentAddress(Base):
+
     __tablename__ = "student_addresses"
 
     id = Column(BigInteger, primary_key=True, autoincrement=True)
@@ -16,6 +18,7 @@ class StudentAddress(Base):
     calle = Column(String(150), nullable=False)
     numero_domicilio = Column(String(50), nullable=False)
     colonia = Column(String(100), nullable=False)
-    codigo_postal = Column(String(5), nullable=False)
+    codigo_postal = Column(CHAR(5), nullable=False)
     municipio = Column(String(100), nullable=False)
-    estado = Column(String(50), server_default="Campeche")
+    estado = Column(String(50), nullable=False, server_default="Campeche")
+    student = relationship("Student", back_populates="address")
