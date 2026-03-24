@@ -118,7 +118,7 @@ const AppRoutes = () => {
           <Route path="/alumnos/cambiar-estatus" element={<CambiarEstatusAlumno />} />
           <Route path="/docentes" element={<EnConstruccion modulo="Sincronización Docente" />} />
           <Route path="/horarios" element={<GruposYHorarios />} />
-          <Route path="/reportes" element={<AsistenciaDocente />} />
+          <Route path="/reportes" element={<EnConstruccion modulo="Boletas y Listas" />} />
         </Route>
 
         {/* SUPER ADMIN */}
