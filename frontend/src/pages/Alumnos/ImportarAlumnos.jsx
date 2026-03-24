@@ -300,17 +300,6 @@ const ImportarAlumnos = () => {
            </button> 
            &gt; <span className="text-[#1A237E] ml-1 font-bold">Importación Masiva</span>
         </div>
-        <div className="flex items-center gap-3">
-           <div className="flex items-center gap-3 border-l pl-4 border-gray-200">
-               <div className="text-right">
-                 <p className="text-sm font-bold text-gray-800 leading-tight">Administrador SESA</p>
-                 <p className="text-[10px] text-green-600 font-medium tracking-wide uppercase">En línea</p>
-               </div>
-               <div className="w-9 h-9 rounded-full bg-gradient-to-tr from-[#1A237E] to-blue-500 flex items-center justify-center text-white text-xs font-bold shadow-sm border-2 border-white">
-                   AD
-               </div>
-           </div>
-        </div>
       </header>
 
       <main className="flex-1 p-8">
