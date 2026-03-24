@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Download, BookOpen, ChevronDown, Loader2, CheckCircle, XCircle, CalendarDays, AlertTriangle } from 'lucide-react';
+
 import Swal from 'sweetalert2';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
@@ -25,38 +26,34 @@ const StudentAttendance = () => {
   
   const studentId = user?.matricula || user?.identifier || user?.username || '';
 
-  const [periodsList, setPeriodsList] = useState([]);
   const [selectedPeriod, setSelectedPeriod] = useState('');
-  const [isPeriodDropdownOpen, setIsPeriodDropdownOpen] = useState(false);
 
   const [subjectsList, setSubjectsList] = useState([]);
   const [selectedSubject, setSelectedSubject] = useState(null);
   const [isSubjectDropdownOpen, setIsSubjectDropdownOpen] = useState(false);
-  
+
   const [isLoading, setIsLoading] = useState(true);
-  
-  const periodDropdownRef = useRef(null);
+
   const subjectDropdownRef = useRef(null);
 
   const todayDate = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Merida', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
 
   useEffect(() => {
-    const fetchInitialData = async () => {
+    const fetchActivePeriod = async () => {
       try {
         const resPeriods = await client.get('/asistencia/periodos');
-        setPeriodsList(resPeriods.data);
         const activePeriod = resPeriods.data.find(p => p.is_active) || resPeriods.data[0];
         if (activePeriod) {
           setSelectedPeriod(activePeriod.id);
         } else {
           setIsLoading(false);
         }
-      } catch (error) { 
-        console.error("Error loading periods", error); 
+      } catch (error) {
+        console.error("Error loading periods", error);
         setIsLoading(false);
       }
     };
-    fetchInitialData();
+    fetchActivePeriod();
   }, []);
 
   useEffect(() => {
@@ -82,8 +79,7 @@ const StudentAttendance = () => {
   }, [selectedPeriod, studentId]);
 
   useEffect(() => {
-    const handleClickOutside = (e) => { 
-      if (periodDropdownRef.current && !periodDropdownRef.current.contains(e.target)) setIsPeriodDropdownOpen(false);
+    const handleClickOutside = (e) => {
       if (subjectDropdownRef.current && !subjectDropdownRef.current.contains(e.target)) setIsSubjectDropdownOpen(false);
     };
     document.addEventListener('mousedown', handleClickOutside);
@@ -238,19 +234,11 @@ const handleExportPDF = () => {
         
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4 border-b pb-6">
           <div className="flex flex-wrap items-center gap-4 w-full md:w-auto">
-            
-            <div className="flex flex-col relative z-40" ref={periodDropdownRef}>
+
+            <div className="flex flex-col">
               <label className="text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-1">Periodo</label>
-              <div onClick={() => setIsPeriodDropdownOpen(!isPeriodDropdownOpen)} className={`relative flex items-center justify-between w-[150px] h-[38px] px-3 py-2 border rounded-lg text-sm bg-white font-bold cursor-pointer transition-all ${isPeriodDropdownOpen ? 'border-[#1A237E] ring-2 ring-[#1A237E]/20 text-[#1A237E]' : 'border-gray-300 text-gray-800'}`}>
-                <span className="truncate">{selectedPeriod || "Cargando..."}</span>
-                <ChevronDown className={`w-4 h-4 text-gray-500 transition-transform ${isPeriodDropdownOpen ? 'rotate-180 text-[#1A237E]' : ''}`} />
-              </div>
-              <div className={`absolute top-full mt-1.5 w-[180px] bg-white border border-gray-200 rounded-lg shadow-xl overflow-hidden transition-all duration-200 origin-top ${isPeriodDropdownOpen ? 'opacity-100 scale-y-100 visible' : 'opacity-0 scale-y-95 invisible'}`}>
-                {periodsList.map(opt => (
-                  <div key={opt.id} onClick={() => { setSelectedPeriod(opt.id); setIsPeriodDropdownOpen(false); }} className={`px-4 py-3 text-sm cursor-pointer border-b border-gray-50 ${selectedPeriod === opt.id ? 'bg-blue-50 text-[#1A237E] font-bold' : 'text-gray-700 hover:bg-gray-50'}`}>
-                    {opt.label}
-                  </div>
-                ))}
+              <div className="h-[38px] px-3 py-2 border border-gray-200 bg-gray-50 rounded-lg text-sm text-gray-700 font-bold flex items-center cursor-default select-none">
+                {selectedPeriod || "Cargando..."}
               </div>
             </div>
 
@@ -283,7 +271,7 @@ const handleExportPDF = () => {
           
           <div className="flex flex-col shrink-0 mt-2 md:mt-0">
             <label className="text-[11px] font-bold text-transparent uppercase tracking-wider mb-1 hidden md:block">.</label>
-            <button onClick={handleExportPDF} disabled={!selectedSubject} className="h-[38px] flex items-center px-5 py-2 bg-[#1A237E] text-white rounded-lg text-sm font-bold hover:bg-[#283593] transition-colors shadow-sm disabled:opacity-50">
+            <button onClick={handleExportPDF} disabled={!selectedSubject || !Object.values(selectedSubject?.attendanceData || {}).some(s => ['P','F','R','J'].includes(s))} className="h-[38px] flex items-center px-5 py-2 bg-[#1A237E] text-white rounded-lg text-sm font-bold hover:bg-[#283593] transition-colors shadow-sm disabled:opacity-50">
               <Download className="w-4 h-4 mr-2" /> Descargar PDF
             </button>
           </div>

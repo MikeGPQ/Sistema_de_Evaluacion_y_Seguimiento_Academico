@@ -55,14 +55,24 @@ const ListadoAlumnos = () => {
 
   const limite = 10;
 
+  // --- ESTADOS KPI ---
+  const [resumenEstatus, setResumenEstatus] = useState({ activo: 0, baja: 0, baja_temporal: 0, egresado: 0 });
+
+  useEffect(() => {
+    client.get('/alumnos/resumen-estatus').then(res => setResumenEstatus(res.data)).catch(() => {});
+  }, []);
+
   // --- ESTADOS DE FILTROS DE JORGE (HU-25a) ---
   const [busquedaAlumno, setBusquedaAlumno] = useState('');
   const [filtroCarrera, setFiltroCarrera] = useState('');
   const [filtroCuatrimestre, setFiltroCuatrimestre] = useState('');
+  const [filtroNivelAcademico, setFiltroNivelAcademico] = useState('');
+  const [nivelesAcademicos, setNivelesAcademicos] = useState([]);
 
   // --- CATÁLOGO DE ESTATUS DESDE API ---
   useEffect(() => {
     client.get('/catalogos/estatus').then(res => setEstatusCatalogo(res.data)).catch(() => {});
+    client.get('/catalogos/niveles-academicos').then(res => setNivelesAcademicos(res.data)).catch(() => {});
   }, []);
 
   // --- FUNCIÓN PARA OBTENER ALUMNOS ---
@@ -77,6 +87,7 @@ const ListadoAlumnos = () => {
       if (terminoBusqueda) params.append('busqueda', terminoBusqueda);
       if (filtroCarrera) params.append('carrera_id', filtroCarrera);
       if (filtroCuatrimestre) params.append('cuatrimestre', filtroCuatrimestre);
+      if (filtroNivelAcademico) params.append('nivel_academico_id', filtroNivelAcademico);
 
       const response = await client.get(`/alumnos/listado?${params.toString()}`);
       setAlumnos(response.data.data);
@@ -93,7 +104,7 @@ const ListadoAlumnos = () => {
       fetchAlumnos();
     }, 400); 
     return () => clearTimeout(retardoBusqueda);
-  }, [pagina, busquedaAlumno, filtroCarrera, filtroCuatrimestre]);
+  }, [pagina, busquedaAlumno, filtroCarrera, filtroCuatrimestre, filtroNivelAcademico]);
 
   // --- MANEJADORES DE FILTROS (JORGE) ---
   const handleCambioFiltro = (setter, valor) => {
@@ -105,10 +116,11 @@ const ListadoAlumnos = () => {
     setBusquedaAlumno('');
     setFiltroCarrera('');
     setFiltroCuatrimestre('');
+    setFiltroNivelAcademico('');
     setPagina(1);
   };
 
-  const hayFiltrosActivos = busquedaAlumno || filtroCarrera || filtroCuatrimestre;
+  const hayFiltrosActivos = busquedaAlumno || filtroCarrera || filtroCuatrimestre || filtroNivelAcademico;
 
   const getStatusColor = (status) => {
     const s = status?.toLowerCase() || '';
@@ -241,6 +253,28 @@ const ListadoAlumnos = () => {
         </div>
       </div>
 
+      {/* --- KPI CARDS --- */}
+      <div className="grid grid-cols-2 gap-4 mb-6">
+        <div className="bg-white rounded-xl border border-gray-200 shadow-sm px-6 py-4 flex items-center gap-4">
+          <div className="bg-green-100 p-3 rounded-xl">
+            <CheckCircle className="w-6 h-6 text-green-600" />
+          </div>
+          <div>
+            <p className="text-xs font-bold text-gray-500 uppercase tracking-wider">Alumnos Activos</p>
+            <p className="text-3xl font-black text-green-600">{resumenEstatus.activo}</p>
+          </div>
+        </div>
+        <div className="bg-white rounded-xl border border-gray-200 shadow-sm px-6 py-4 flex items-center gap-4">
+          <div className="bg-red-100 p-3 rounded-xl">
+            <XCircle className="w-6 h-6 text-red-600" />
+          </div>
+          <div>
+            <p className="text-xs font-bold text-gray-500 uppercase tracking-wider">Alumnos en Baja</p>
+            <p className="text-3xl font-black text-red-600">{resumenEstatus.baja}</p>
+          </div>
+        </div>
+      </div>
+
       {/* --- TABLA CON FILTROS --- */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden flex flex-col">
         
@@ -288,7 +322,7 @@ const ListadoAlumnos = () => {
 
           <div className="w-40">
             <label className="block text-xs font-semibold text-gray-600 mb-1">Cuatrimestre</label>
-            <select 
+            <select
               value={filtroCuatrimestre}
               onChange={(e) => handleCambioFiltro(setFiltroCuatrimestre, e.target.value)}
               className="w-full px-4 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:border-blue-500 bg-white cursor-pointer"
@@ -296,6 +330,20 @@ const ListadoAlumnos = () => {
               <option value="">Todos</option>
               {[1,2,3,4,5,6,7,8,9].map(num => (
                 <option key={num} value={num}>{num}º Cuatrimestre</option>
+              ))}
+            </select>
+          </div>
+
+          <div className="w-44">
+            <label className="block text-xs font-semibold text-gray-600 mb-1">Nivel Académico</label>
+            <select
+              value={filtroNivelAcademico}
+              onChange={(e) => handleCambioFiltro(setFiltroNivelAcademico, e.target.value)}
+              className="w-full px-4 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:border-blue-500 bg-white cursor-pointer"
+            >
+              <option value="">Todos</option>
+              {nivelesAcademicos.map(n => (
+                <option key={n.id} value={n.id}>{n.name}</option>
               ))}
             </select>
           </div>

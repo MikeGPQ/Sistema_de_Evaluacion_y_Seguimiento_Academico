@@ -95,6 +95,22 @@ def set_base_id(nueva_matricula: str = Form(...), db: Session = Depends(get_db))
         db.rollback()
         raise HTTPException(status_code=500, detail=f"Error al fijar ID: {str(e)}")
 
+@router.get("/resumen-estatus", response_model=dict)
+def resumen_estatus_alumnos(db: Session = Depends(get_db)):
+    resultados = (
+        db.query(StudentStatus.name, func.count(StudentAcademicProfile.id))
+        .join(StudentAcademicProfile, StudentAcademicProfile.status_id == StudentStatus.id)
+        .group_by(StudentStatus.name)
+        .all()
+    )
+    conteos = {nombre: total for nombre, total in resultados}
+    return {
+        "activo": conteos.get("activo", 0),
+        "baja": conteos.get("baja", 0),
+        "baja_temporal": conteos.get("baja_temporal", 0),
+        "egresado": conteos.get("egresado", 0),
+    }
+
 @router.get("/listado", response_model=dict)
 def listar_alumnos(
     skip: int = 0,
@@ -102,6 +118,7 @@ def listar_alumnos(
     busqueda: Optional[str] = Query(None, min_length=3, max_length=50, pattern=r"^[a-zA-Z0-9 áéíóúÁÉÍÓÚñÑ]+$"),
     carrera_id: Optional[int] = Query(None),
     cuatrimestre: Optional[int] = Query(None),
+    nivel_academico_id: Optional[int] = Query(None),
     db: Session = Depends(get_db)
 ):
     query = db.query(Student).outerjoin(StudentAcademicProfile)
@@ -120,6 +137,9 @@ def listar_alumnos(
 
     if cuatrimestre:
         query = query.filter(StudentAcademicProfile.quarter_actual_id == cuatrimestre)
+
+    if nivel_academico_id:
+        query = query.filter(StudentAcademicProfile.nivel_id == nivel_academico_id)
 
     query = query.distinct()
     
@@ -616,7 +636,11 @@ def get_my_grades(
         )
         .join(AcademicGroup, StudentEnrollment.academic_group_id == AcademicGroup.id)
         .join(Subject, AcademicGroup.subject_id == Subject.id)
-        .filter(StudentEnrollment.student_matricula == matricula)
+        .join(AcademicPeriod, AcademicGroup.period_id == AcademicPeriod.id)
+        .filter(
+            StudentEnrollment.student_matricula == matricula,
+            AcademicPeriod.codigo == periodo,
+        )
     ).all()
 
     carrera = perfil.career.name if perfil and perfil.career else "N/A"
