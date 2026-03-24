@@ -348,12 +348,23 @@ async def importar_alumnos(file: UploadFile = File(...), usuario_id: str = Form(
         nombre = str(row.get('Nombre', '')).strip()
         ap_pat_limpio = str(row.get('Apellido Paterno', '')).strip()
         ap_mat_limpio = str(row.get('Apellido Materno', '')).strip()
-        
+
+        if nombre == 'nan': nombre = ""
         if ap_pat_limpio == 'nan': ap_pat_limpio = ""
         if ap_mat_limpio == 'nan': ap_mat_limpio = ""
 
-        if not nombre or nombre == 'nan':
+        if not nombre or not nombre.strip():
             errores_fila.append("Nombre vacío"); campos_error.append("Nombre")
+        elif not re.match(regex_solo_letras, nombre):
+            errores_fila.append("Nombre solo debe contener letras"); campos_error.append("Nombre")
+
+        if not ap_pat_limpio or not ap_pat_limpio.strip():
+            errores_fila.append("Apellido paterno vacío"); campos_error.append("Apellido Paterno")
+        elif not re.match(regex_solo_letras, ap_pat_limpio):
+            errores_fila.append("Apellido paterno solo debe contener letras"); campos_error.append("Apellido Paterno")
+
+        if ap_mat_limpio and not re.match(regex_solo_letras, ap_mat_limpio):
+            errores_fila.append("Apellido materno solo debe contener letras"); campos_error.append("Apellido Materno")
             
         curp_str = str(row.get('Curp', '')).strip().upper()
         if not curp_str or curp_str == 'nan' or len(curp_str) != 18 or not re.match(regex_curp, curp_str):
@@ -368,10 +379,34 @@ async def importar_alumnos(file: UploadFile = File(...), usuario_id: str = Form(
                 errores_fila.append("Correo personal inválido o duplicado"); campos_error.append("Correo Personal")
             else: correos_pers_vistos.add(email_pers)
 
+        email_inst = str(row.get('Correo Institucional', '')).strip()
+        if email_inst and email_inst != 'nan':
+            if not re.match(regex_email_inst, email_inst) or email_inst in correos_inst_vistos or db.query(Student).filter(Student.email_institucional == email_inst).first():
+                errores_fila.append("Correo institucional inválido o duplicado (debe ser @red.unid.mx)"); campos_error.append("Correo Institucional")
+            else: correos_inst_vistos.add(email_inst)
+
+        cuat_raw = str(row.get('Cuatrimestre', '')).strip().replace('.0', '')
+        cuat_val = int(cuat_raw) if cuat_raw.isdigit() else None
+        if cuat_val is None or not (1 <= cuat_val <= 9):
+            errores_fila.append(f"Cuatrimestre debe ser un entero entre 1 y 9 (valor: '{cuat_raw}')"); campos_error.append("Cuatrimestre")
+
+        promedio_raw = str(row.get('Promedio General', '')).strip()
+        try:
+            promedio_float = float(promedio_raw)
+            if promedio_float != int(promedio_float):
+                errores_fila.append(f"El promedio no debe tener decimales (valor: '{promedio_raw}')"); campos_error.append("Promedio General")
+            elif not (0 <= int(promedio_float) <= 10):
+                errores_fila.append(f"El promedio debe estar entre 0 y 10 (valor: '{promedio_raw}')"); campos_error.append("Promedio General")
+            else:
+                promedio_val = int(promedio_float)
+        except (ValueError, TypeError):
+            errores_fila.append(f"El promedio debe ser un número (valor: '{promedio_raw}')"); campos_error.append("Promedio General")
+            promedio_val = 0
+
         carrera_excel = str(row.get('Carrera', '')).strip()
-        career = db.query(AcademicProgram).filter((AcademicProgram.external_id == carrera_excel) | (AcademicProgram.name == carrera_excel)).first()
+        career = db.query(AcademicProgram).filter(AcademicProgram.codigo_unico == carrera_excel).first()
         if not career:
-            errores_fila.append(f"Carrera '{carrera_excel}' no encontrada"); campos_error.append("Carrera")
+            errores_fila.append(f"Carrera con código '{carrera_excel}' no encontrada"); campos_error.append("Carrera")
 
         escuela_excel = str(row.get('Procedencia', '')).strip()
         school = db.query(OriginSchool).filter(OriginSchool.name == escuela_excel).first()
@@ -385,14 +420,13 @@ async def importar_alumnos(file: UploadFile = File(...), usuario_id: str = Form(
         try:
             nuevo_alumno = Student(
                 matricula=matricula_str, nombre=nombre, apellido_paterno=ap_pat_limpio, apellido_materno=ap_mat_limpio,
-                curp=curp_str, email_personal=email_pers
+                curp=curp_str, email_personal=email_pers,
+                email_institucional=email_inst if email_inst and email_inst != 'nan' else None
             )
             db.add(nuevo_alumno)
             db.flush()
 
             estatus_excel = str(row.get('Estatus', 'activo')).strip().lower() if pd.notna(row.get('Estatus', 'activo')) else 'activo'
-            cuat_str = str(row.get('Cuatrimestre', '1')).strip().replace('.0', '')
-            promedio_str = str(row.get('Promedio General', '0')).strip().replace('.0', '')
 
             nuevo_perfil = StudentAcademicProfile(
                 student_matricula=matricula_str,
@@ -400,9 +434,9 @@ async def importar_alumnos(file: UploadFile = File(...), usuario_id: str = Form(
                 career_id=career.id,
                 origin_school_id=school.id,
                 period_id=periodo_activo.id if periodo_activo else 1,
-                quarter_actual_id=int(cuat_str) if cuat_str.isdigit() else 1,
+                quarter_actual_id=cuat_val,
                 status_id=status_map.get(estatus_excel, 1),
-                promedio_procedencia=int(promedio_str) if promedio_str.isdigit() else 0
+                promedio_procedencia=promedio_val
             )
             db.add(nuevo_perfil)
             
@@ -421,7 +455,7 @@ async def importar_alumnos(file: UploadFile = File(...), usuario_id: str = Form(
             )
             db.add(nuevo_usuario)
 
-            credenciales_generadas.append({"nombre": f"{nombre} {ap_pat_limpio}", "usuario": matricula_str, "password": password_aleatoria, "correo": email_pers})
+            credenciales_generadas.append({"nombre": f"{nombre} {ap_pat_limpio}", "usuario": matricula_str, "password": password_aleatoria, "correo": email_inst if email_inst and email_inst != 'nan' else email_pers})
             db.flush()
             registros_nuevos += 1
 

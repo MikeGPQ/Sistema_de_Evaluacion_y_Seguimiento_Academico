@@ -455,7 +455,7 @@ const ListadoAlumnos = () => {
 
               {renderAlertaDinamica()}
 
-              {logEvidencia?.evidence_file_name && (
+              {esBaja && logEvidencia?.evidence_file_name && (
                 <div className="mb-4 p-3 bg-blue-50 rounded-lg border border-blue-200 flex items-center gap-2">
                   <FileText className="w-4 h-4 text-blue-700 flex-shrink-0" />
                   <div className="flex-1 overflow-hidden">
@@ -527,8 +527,8 @@ const ListadoAlumnos = () => {
                 </button>
                 <button
                   onClick={handleConfirmarCambioEstatus}
-                  disabled={(requiereArchivo && !archivoBaja) || guardandoEstatus}
-                  className={`flex-1 py-2 text-sm font-bold text-white rounded-lg shadow-md transition flex justify-center items-center ${(requiereArchivo && !archivoBaja) || guardandoEstatus ? 'bg-gray-300 cursor-not-allowed' : 'bg-blue-900 hover:bg-blue-800'}`}
+                  disabled={(requiereArchivo && !archivoBaja) || guardandoEstatus || nuevoEstatus === alumnoSeleccionado?.estatus}
+                  className={`flex-1 py-2 text-sm font-bold text-white rounded-lg shadow-md transition flex justify-center items-center ${(requiereArchivo && !archivoBaja) || guardandoEstatus || nuevoEstatus === alumnoSeleccionado?.estatus ? 'bg-gray-300 cursor-not-allowed' : 'bg-blue-900 hover:bg-blue-800'}`}
                 >
                   {guardandoEstatus ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Guardar Cambios'}
                 </button>

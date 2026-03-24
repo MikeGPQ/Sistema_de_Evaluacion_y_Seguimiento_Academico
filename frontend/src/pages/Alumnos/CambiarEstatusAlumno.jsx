@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { User, CheckCircle, XCircle, Upload, FileText, AlertTriangle, Loader2, GraduationCap } from 'lucide-react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import client from '../../lib/axios';

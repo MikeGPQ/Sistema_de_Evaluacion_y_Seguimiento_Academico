@@ -113,7 +113,14 @@ def cambiar_estatus(
         raise HTTPException(status_code=400, detail="Estatus no válido")
 
     if nuevo_estatus.name in ('baja', 'baja_temporal') and not evidence_file:
-        raise HTTPException(status_code=400, detail="Se requiere un archivo de evidencia para este estatus.")
+        estatus_actual = db.query(StudentStatus).filter(StudentStatus.id == perfil.status_id).first()
+        estatus_actual_es_baja = estatus_actual and estatus_actual.name in ('baja', 'baja_temporal')
+        log_con_evidencia = db.query(StudentStatusLog).filter(
+            StudentStatusLog.academic_profile_id == perfil.id,
+            StudentStatusLog.evidence_file_id != None
+        ).order_by(StudentStatusLog.id.desc()).first()
+        if not (estatus_actual_es_baja and log_con_evidencia):
+            raise HTTPException(status_code=400, detail="Se requiere un archivo de evidencia para este estatus.")
 
     try:
         evidence_file_id = None
@@ -194,7 +201,8 @@ def get_ultimo_log_estatus(matricula: str, db: Session = Depends(get_db)):
         return None
 
     log = db.query(StudentStatusLog).filter(
-        StudentStatusLog.academic_profile_id == perfil.id
+        StudentStatusLog.academic_profile_id == perfil.id,
+        StudentStatusLog.evidence_file_id != None
     ).order_by(StudentStatusLog.changed_at.desc()).first()
 
     if not log:

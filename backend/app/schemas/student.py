@@ -40,17 +40,18 @@ class AddressCreate(BaseModel):
     estado: str = "Campeche"
 
 class StudentCreate(BaseModel):
-    matricula: str = Field(..., pattern=r"^\d{8}$")
+    matricula: Optional[str] = None
     nombre: str
     apellido_paterno: str
     apellido_materno: Optional[str] = None
     curp: str = Field(..., min_length=18, max_length=18)
     email_personal: EmailStr
-    
-    nivel_id: int
+    email_institucional: Optional[str] = None
+
+    nivel_id: Optional[int] = None
     career_id: int
     origin_school_id: int
     promedio_procedencia: int
-    period_id: int
+    period_id: Optional[int] = None
     address: AddressCreate
     usuario_id: Optional[str] = "Sistema"

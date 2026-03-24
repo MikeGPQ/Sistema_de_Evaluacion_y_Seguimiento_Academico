@@ -149,8 +149,8 @@ export default function ManualRegister({ isOpen, onClose, alumnoAEditar }) {
                 email_inst_limpio = email_inst_limpio.split('@')[0];
             }
 
-            const promRaw = String(student.promedio_procedencia || '').trim().toLowerCase();
-            const esPromedioInvalido = ['', 'nan', 'null', 'none', 'undefined', '0'].includes(promRaw);
+            const promRaw = String(student.promedio_procedencia ?? '').trim().toLowerCase();
+            const esPromedioInvalido = ['', 'nan', 'null', 'none', 'undefined'].includes(promRaw);
             const promedioValor = esPromedioInvalido ? '' : Math.round(student.promedio_procedencia).toString();
 
             const dataCargada = {
@@ -274,6 +274,30 @@ export default function ManualRegister({ isOpen, onClose, alumnoAEditar }) {
 
     if (name === 'nombre' || name === 'apellido_paterno' || name === 'apellido_materno') {
       finalValue = finalValue.replace(/[^a-zA-ZáéíóúÁÉÍÓÚñÑ\s]/g, '');
+
+      const nombreActual    = name === 'nombre'           ? finalValue : formData.nombre;
+      const paternoActual   = name === 'apellido_paterno' ? finalValue : formData.apellido_paterno;
+      const maternoActual   = name === 'apellido_materno' ? finalValue : formData.apellido_materno;
+      const curpActual      = formData.curp;
+      const curpRegex       = /^[A-Z]{4}\d{6}[HM][A-Z]{5}[A-Z0-9]\d$/i;
+
+      if (curpActual.length === 18 && curpRegex.test(curpActual) && nombreActual && paternoActual) {
+        const letrasEsperadas = calcularLetrasCURP(nombreActual, paternoActual, maternoActual);
+        if (letrasEsperadas) {
+          const prefijoIngresado      = curpActual.substring(0, 4);
+          const consonantesIngresadas = curpActual.substring(13, 16);
+          if (prefijoIngresado !== letrasEsperadas.prefijo) {
+            setErroresEnVivo(prev => ({ ...prev, curp: `❌ El inicio de la CURP no coincide con el nombre. Debería ser ${letrasEsperadas.prefijo}.` }));
+            setValidacionExitosa(prev => ({ ...prev, curp: false }));
+          } else if (consonantesIngresadas !== letrasEsperadas.consonantes) {
+            setErroresEnVivo(prev => ({ ...prev, curp: `❌ Las consonantes internas no coinciden. Deberían ser ${letrasEsperadas.consonantes}.` }));
+            setValidacionExitosa(prev => ({ ...prev, curp: false }));
+          } else {
+            setErroresEnVivo(prev => ({ ...prev, curp: '' }));
+            setValidacionExitosa(prev => ({ ...prev, curp: true }));
+          }
+        }
+      }
     }
 
     if (name === 'numero_domicilio') {

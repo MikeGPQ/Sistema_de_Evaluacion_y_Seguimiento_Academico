@@ -405,8 +405,8 @@ const ImportarAlumnos = () => {
     {String(alumno["Procedencia"] || alumno["Procedencia:"] || '---')}
 </td>
 
-<td className={`p-3 font-bold ${errorCampos.includes("Promedio General") ? 'text-red-700 bg-red-100 rounded border border-red-200 cursor-help' : 'text-blue-600'}`} title={errorCampos.includes("Promedio General") ? mensajeError : ""}>
-    {String(alumno["Promedio General"] || alumno["Promedio General:"] || '0.00')}
+<td className={`p-3 font-bold ${errorCampos.includes("Promedio General") ? 'text-red-700 bg-red-100 rounded border border-red-200 cursor-help' : 'text-gray-700'}`} title={errorCampos.includes("Promedio General") ? mensajeError : ""}>
+    {alumno["Promedio General"] != null && alumno["Promedio General"] !== '' ? String(alumno["Promedio General"]) : (alumno["Promedio General:"] != null ? String(alumno["Promedio General:"]) : '---')}
 </td>
                                                   
                                                   <td className={`p-3 font-mono ${errorCampos.includes("Curp") ? 'text-red-700 bg-red-100 rounded border border-red-200 cursor-help' : 'text-gray-500'}`} title={errorCampos.includes("Curp") ? mensajeError : ""}>
