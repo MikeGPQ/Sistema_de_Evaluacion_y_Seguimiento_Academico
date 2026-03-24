@@ -270,12 +270,10 @@ const GruposYHorarios = () => {
               materias: materiasPayload,
               usuario_id: user?.identifier || user?.email || "Admin Local"
           });
-          setSeleccion(nuevaSeleccion);
-          setSeleccionOriginal(nuevaSeleccion); 
-          setInscripcionesOriginales(materiasPayload.map(m => m.group_id));
-          const resHorario = await client.get(`/asignacion/${alumnoInfo.matricula}/horario`);
-          setHorarioReal(resHorario.data);
-          Swal.fire({ icon: 'success', title: 'Operación exitosa', text: 'Baja registrada en el sistema.', confirmButtonColor: '#1A237E' });
+          
+          await Swal.fire({ icon: 'success', title: 'Operación exitosa', text: 'Baja registrada en el sistema.', confirmButtonColor: '#1A237E' });
+          await buscarAlumno(alumnoInfo.matricula);
+          
         } catch (error) {
           Swal.fire({ icon: 'error', title: 'Fallo de operación', text: error.response?.data?.detail || 'Imposible completar la transacción.', confirmButtonColor: '#1A237E' });
         }
@@ -382,17 +380,14 @@ const GruposYHorarios = () => {
         usuario_id: user?.identifier || user?.email || "Admin Local"
       });
       
-      await Swal.fire({
+await Swal.fire({
         icon: 'success',
         title: 'Transacción Confirmada',
         text: response.data.message,
         confirmButtonColor: '#1A237E'
       });
 
-      const resHorario = await client.get(`/asignacion/${alumnoInfo.matricula}/horario`);
-      setHorarioReal(resHorario.data);
-      setSeleccionOriginal(seleccion);
-      setInscripcionesOriginales(materiasPayload.map(m => m.group_id));
+      await buscarAlumno(alumnoInfo.matricula);
 
     } catch (error) {
       Swal.fire({

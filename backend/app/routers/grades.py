@@ -32,8 +32,7 @@ def _format_schedules_v3(schedules) -> str:
 @router.get("/periodos")
 def get_periods(db: Session = Depends(get_db)):
     periods = db.query(AcademicPeriod).order_by(AcademicPeriod.fecha_inicio.asc()).all()
-    return [{"period_name": p.period_name, "is_active": p.is_active} for p in periods]
-
+    return [{"codigo": p.codigo, "is_active": p.is_active} for p in periods]
 
 @router.get("/grade-values")
 def get_grade_values(db: Session = Depends(get_db)):
@@ -76,7 +75,12 @@ def get_teacher_groups(
     result = []
     for g in grupos:
         materia = g.subject
-        cuatrimestre_val = materia.quarter.numero if hasattr(materia, 'quarter') and materia.quarter else getattr(materia, 'cuatrimestre', None)
+        cuatrimestre_val = None
+        if materia:
+            if hasattr(materia, 'quarter') and materia.quarter:
+                cuatrimestre_val = materia.quarter.external_id
+            else:
+                cuatrimestre_val = getattr(materia, 'quarter_id', None)
         
         result.append({
             "group_id": g.id,
@@ -85,7 +89,7 @@ def get_teacher_groups(
             "subject_nombre": materia.nombre if materia else "Sin Materia",
             "cuatrimestre": cuatrimestre_val,
             "horario": _format_schedules_v3(g.schedules),
-            "acta_status": g.estatus_acta,
+            "acta_status": g.estatus_acta.lower() if g.estatus_acta else "abierta",
             "periodo": period_obj.codigo,
         })
 
