@@ -676,7 +676,12 @@ const AsistenciaDocente = () => {
           <div className="flex flex-col shrink-0 self-end lg:self-auto mt-2 lg:mt-0">
             <label className="text-[11px] font-bold text-transparent uppercase tracking-wider mb-1 hidden lg:block">.</label>
             <div className="flex gap-3">
-              <button onClick={handleExportPDF} disabled={!materiaSeleccionada || alumnos.length === 0} className="h-[38px] flex items-center px-4 py-2 bg-white border border-gray-300 text-gray-700 rounded-lg text-sm font-bold hover:bg-gray-50 hover:text-[#1A237E] hover:border-[#1A237E] transition-all shadow-sm disabled:opacity-50">
+              <button 
+                onClick={handleExportPDF} 
+                disabled={!materiaSeleccionada || alumnos.length === 0 || hayCambiosSinGuardar} 
+                title={hayCambiosSinGuardar ? "Guarda los cambios pendientes antes de exportar" : "Exportar lista a PDF"}
+                className="h-[38px] flex items-center px-4 py-2 bg-white border border-gray-300 text-gray-700 rounded-lg text-sm font-bold hover:bg-gray-50 hover:text-[#1A237E] hover:border-[#1A237E] transition-all shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
+              >
                 <Download className="w-4 h-4 mr-2" /> Exportar PDF
               </button>
               <button onClick={handleGuardar} disabled={guardando || !materiaSeleccionada || isSoloLectura || !hayCambiosSinGuardar} className="h-[38px] flex items-center px-5 py-2 bg-[#1A237E] text-white rounded-lg text-sm font-bold hover:bg-[#283593] transition-colors shadow-sm disabled:opacity-50 disabled:cursor-not-allowed">

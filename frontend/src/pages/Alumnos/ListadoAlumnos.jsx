@@ -1,21 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { 
-  Edit2, 
-  UserX, 
-  ChevronLeft, 
-  ChevronRight,
-  Loader2,
-  Search,
-  Upload,
-  Plus,
-  X,
-  Filter,
-  User, 
-  CheckCircle, 
-  XCircle, 
-  FileText,
-  AlertTriangle, 
-  GraduationCap
+  Edit2, UserX, ChevronLeft, ChevronRight, Loader2, Search, Upload, Plus, X, 
+  Filter, User, CheckCircle, XCircle, FileText, AlertTriangle, GraduationCap,
+  Eye, MapPin, Mail, Star, BookOpen 
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import client from '../../lib/axios';
@@ -27,17 +14,14 @@ const ListadoAlumnos = () => {
   const navigate = useNavigate();
   const { user } = useAuth(); 
 
-  // --- ESTADOS DE DATOS Y PAGINACIÓN ---
   const [alumnos, setAlumnos] = useState([]);
   const [cargando, setCargando] = useState(true);
   const [pagina, setPagina] = useState(1);
   const [total, setTotal] = useState(0);
   
-  // --- ESTADOS DE MAURICIO (MODAL DE EDICIÓN/ALTA) ---
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [alumnoAEditar, setAlumnoAEditar] = useState(null);
 
-  // --- ESTADOS DE ALEJANDRO (MODAL DE ESTATUS) ---
   const [modalEstatusOpen, setModalEstatusOpen] = useState(false);
   const [alumnoSeleccionado, setAlumnoSeleccionado] = useState(null);
   const [nuevoEstatus, setNuevoEstatus] = useState('');
@@ -45,6 +29,24 @@ const ListadoAlumnos = () => {
   const [guardandoEstatus, setGuardandoEstatus] = useState(false);
   const [estatusCatalogo, setEstatusCatalogo] = useState([]);
   const [logEvidencia, setLogEvidencia] = useState(null);
+
+  const [modalDetalleOpen, setModalDetalleOpen] = useState(false);
+  const [detalleAlumno, setDetalleAlumno] = useState(null);
+  const [cargandoDetalle, setCargandoDetalle] = useState(false);
+
+  const handleVerDetalles = async (alumno) => {
+    try {
+      setCargandoDetalle(true);
+      setModalDetalleOpen(true); 
+      const res = await client.get(`/alumnos/detalle/${alumno.matricula}`);
+      setDetalleAlumno(res.data);
+    } catch (error) {
+      Swal.fire('Error', 'No se pudieron cargar los detalles del alumno.', 'error');
+      setModalDetalleOpen(false);
+    } finally {
+      setCargandoDetalle(false);
+    }
+  };
 
   const STATUS_UI = {
     'activo':       { label: 'Activo',        desc: 'Inscripción vigente',   color: 'text-green-600',  activeBg: 'bg-green-50 border-green-500',   Icon: CheckCircle },
@@ -55,27 +57,23 @@ const ListadoAlumnos = () => {
 
   const limite = 10;
 
-  // --- ESTADOS KPI ---
   const [resumenEstatus, setResumenEstatus] = useState({ activo: 0, baja: 0, baja_temporal: 0, egresado: 0 });
 
   useEffect(() => {
     client.get('/alumnos/resumen-estatus').then(res => setResumenEstatus(res.data)).catch(() => {});
   }, []);
 
-  // --- ESTADOS DE FILTROS DE JORGE (HU-25a) ---
   const [busquedaAlumno, setBusquedaAlumno] = useState('');
   const [filtroCarrera, setFiltroCarrera] = useState('');
   const [filtroCuatrimestre, setFiltroCuatrimestre] = useState('');
   const [filtroNivelAcademico, setFiltroNivelAcademico] = useState('');
   const [nivelesAcademicos, setNivelesAcademicos] = useState([]);
 
-  // --- CATÁLOGO DE ESTATUS DESDE API ---
   useEffect(() => {
     client.get('/catalogos/estatus').then(res => setEstatusCatalogo(res.data)).catch(() => {});
     client.get('/catalogos/niveles-academicos').then(res => setNivelesAcademicos(res.data)).catch(() => {});
   }, []);
 
-  // --- FUNCIÓN PARA OBTENER ALUMNOS ---
   const fetchAlumnos = async () => {
     try {
       setCargando(true);
@@ -106,7 +104,6 @@ const ListadoAlumnos = () => {
     return () => clearTimeout(retardoBusqueda);
   }, [pagina, busquedaAlumno, filtroCarrera, filtroCuatrimestre, filtroNivelAcademico]);
 
-  // --- MANEJADORES DE FILTROS (JORGE) ---
   const handleCambioFiltro = (setter, valor) => {
     setter(valor);
     setPagina(1); 
@@ -131,7 +128,6 @@ const ListadoAlumnos = () => {
     return 'bg-gray-100 text-gray-700 border-gray-200';
   };
 
-  // --- MANEJADORES DE MAURICIO (MODAL EDICIÓN/ALTA) ---
   const handleEditarAlumno = (alumno) => {
     console.log("Datos del alumno al editar:", alumno);
     setAlumnoAEditar(alumno);
@@ -149,7 +145,6 @@ const ListadoAlumnos = () => {
     fetchAlumnos(); 
   };
 
-  // --- MANEJADORES DE ALEJANDRO (MODAL ESTATUS) ---
   const abrirModalEstatus = async (alumno) => {
     setAlumnoSeleccionado(alumno);
     setNuevoEstatus(alumno.estatus);
@@ -162,7 +157,6 @@ const ListadoAlumnos = () => {
         const res = await client.get(`/alumnos/${alumno.matricula}/ultimo-log-estatus`);
         setLogEvidencia(res.data);
       } catch {
-        // no hay log previo, ignoramos
       }
     }
   };
@@ -236,8 +230,6 @@ const ListadoAlumnos = () => {
 
   return (
     <div className="p-8 bg-gray-50 min-h-screen relative">
-      
-      {/* --- HEADER --- */}
       <div className="mb-6 flex justify-between items-start">
         <div>
           <h1 className="text-2xl font-bold text-[#1a2b4b]">Listado General de Alumnos</h1>
@@ -253,7 +245,6 @@ const ListadoAlumnos = () => {
         </div>
       </div>
 
-      {/* --- KPI CARDS --- */}
       <div className="grid grid-cols-2 gap-4 mb-6">
         <div className="bg-white rounded-xl border border-gray-200 shadow-sm px-6 py-4 flex items-center gap-4">
           <div className="bg-green-100 p-3 rounded-xl">
@@ -275,10 +266,8 @@ const ListadoAlumnos = () => {
         </div>
       </div>
 
-      {/* --- TABLA CON FILTROS --- */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden flex flex-col">
         
-        {/* --- FILTROS DE JORGE --- */}
         <div className="p-4 border-b border-gray-100 bg-gray-50/50 flex flex-wrap gap-4 items-end">
           <div className="flex-1 min-w-[250px]">
             <label className="block text-xs font-semibold text-gray-600 mb-1">Búsqueda de Alumno</label>
@@ -372,6 +361,7 @@ const ListadoAlumnos = () => {
                   <th className="p-4 pl-6">Matrícula</th>
                   <th className="p-4">Nombre Completo</th>
                   <th className="p-4">Carrera</th>
+                  <th className="p-4">Nivel Académico</th> 
                   <th className="p-4 text-center">Estatus</th>
                   <th className="p-4 text-center">Acciones</th>
                 </tr>
@@ -391,6 +381,9 @@ const ListadoAlumnos = () => {
                       <td className="p-4 text-sm text-gray-600 font-medium">
                         {alumno.carrera}
                       </td>
+                      <td className="p-4 text-sm text-gray-600 font-medium">
+                        {alumno.nivel_academico}
+                      </td>
                       <td className="p-4 text-center">
                         <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-bold border capitalize ${getStatusColor(alumno.estatus)}`}>
                           <span className={`w-1.5 h-1.5 rounded-full mr-1.5 ${alumno.estatus?.toLowerCase() === 'activo' ? 'bg-green-500' : alumno.estatus?.toLowerCase() === 'baja' ? 'bg-red-500' : 'bg-gray-500'}`}></span>
@@ -399,6 +392,14 @@ const ListadoAlumnos = () => {
                       </td>
                       <td className="p-4">
                         <div className="flex items-center justify-center gap-2">
+                          <button 
+                            onClick={() => handleVerDetalles(alumno)} 
+                            className="p-1.5 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors border border-transparent hover:border-indigo-100" 
+                            title="Ver Detalles"
+                          >
+                            <Eye className="w-4 h-4" />
+                          </button>
+
                           <button 
                             onClick={() => handleEditarAlumno(alumno)} 
                             className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors border border-transparent hover:border-blue-100" 
@@ -419,7 +420,7 @@ const ListadoAlumnos = () => {
                   ))
                 ) : (
                   <tr>
-                    <td colSpan="5" className="p-16 text-center text-gray-500">
+                    <td colSpan="6" className="p-16 text-center text-gray-500">
                       <div className="flex flex-col items-center">
                         <Search className="w-12 h-12 text-gray-300 mb-3" />
                         <p className="font-semibold text-gray-700">No se encontraron alumnos</p>
@@ -433,7 +434,6 @@ const ListadoAlumnos = () => {
           )}
         </div>
 
-        {/* --- PAGINACIÓN --- */}
         {!cargando && total > 0 && (
           <div className="flex items-center justify-between p-4 border-t border-gray-200 bg-white">
             <p className="text-xs text-gray-500 font-medium">
@@ -452,14 +452,12 @@ const ListadoAlumnos = () => {
         )}
       </div>
 
-      {/* --- MODAL DE EDICIÓN/ALTA (MAURICIO) --- */}
       <ManualRegister 
         isOpen={isModalOpen} 
         onClose={handleCerrarModal} 
         alumnoAEditar={alumnoAEditar} 
       />
 
-      {/* --- MODAL DE ESTATUS (ALEJANDRO) --- */}
       {modalEstatusOpen && alumnoSeleccionado && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in">
           <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full overflow-hidden relative">
@@ -586,6 +584,104 @@ const ListadoAlumnos = () => {
         </div>
       )}
 
+      {modalDetalleOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-lg w-full overflow-hidden relative">
+            <button 
+              onClick={() => { setModalDetalleOpen(false); setDetalleAlumno(null); }} 
+              className="absolute top-4 right-4 text-white hover:text-gray-200 focus:outline-none z-10"
+            >
+              <X className="w-5 h-5" />
+            </button>
+
+            {cargandoDetalle || !detalleAlumno ? (
+              <div className="p-16 flex flex-col items-center justify-center bg-white">
+                <Loader2 className="w-10 h-10 text-[#1A237E] animate-spin mb-4" />
+                <p className="text-gray-500 font-medium text-sm">Cargando expediente...</p>
+              </div>
+            ) : (
+              <>
+                <div className="bg-[#1A237E] p-6 text-white text-center relative">
+                  <div className="bg-indigo-500/30 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-3 border-2 border-indigo-300/50">
+                    <User className="w-8 h-8 text-white" />
+                  </div>
+                  <h2 className="text-xl font-bold tracking-wide">
+                    {detalleAlumno.student.nombre} {detalleAlumno.student.apellido_paterno} {detalleAlumno.student.apellido_materno}
+                  </h2>
+                  <p className="text-indigo-200 text-sm mt-1 font-mono tracking-widest">{detalleAlumno.student.matricula}</p>
+                </div>
+
+                <div className="p-6 space-y-4">
+                  {/* KPI - Promedio General */}
+                  <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-4 flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className="bg-yellow-100 p-2 rounded-lg">
+                        <Star className="w-6 h-6 text-yellow-600" />
+                      </div>
+                      <div>
+                        <p className="text-xs font-bold text-yellow-800 uppercase tracking-wider">Promedio General</p>
+                        <p className="text-xs text-yellow-600 font-medium">Histórico acumulado</p>
+                      </div>
+                    </div>
+                    <span className="text-2xl font-black text-yellow-600">
+                      {detalleAlumno.student.promedio_general || "N/A"}
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="flex items-start gap-3 p-3 bg-gray-50 rounded-lg border border-gray-100 col-span-2">
+                      <BookOpen className="w-5 h-5 text-gray-400 mt-0.5 flex-shrink-0" />
+                      <div>
+                        <p className="text-xs font-bold text-gray-500 uppercase tracking-wider">Programa Académico</p>
+                        <p className="text-sm font-medium text-gray-800">{detalleAlumno.student.carrera_nombre}</p>
+                      </div>
+                    </div>
+
+                    <div className="flex items-start gap-3 p-3 bg-gray-50 rounded-lg border border-gray-100 col-span-2 sm:col-span-1">
+                      <Mail className="w-5 h-5 text-gray-400 mt-0.5 flex-shrink-0" />
+                      <div className="overflow-hidden">
+                        <p className="text-xs font-bold text-gray-500 uppercase tracking-wider">Personal</p>
+                        <p className="text-sm font-medium text-gray-800 truncate" title={detalleAlumno.student.email_personal}>
+                          {detalleAlumno.student.email_personal}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="flex items-start gap-3 p-3 bg-gray-50 rounded-lg border border-gray-100 col-span-2 sm:col-span-1">
+                      <Mail className="w-5 h-5 text-gray-400 mt-0.5 flex-shrink-0" />
+                      <div className="overflow-hidden">
+                        <p className="text-xs font-bold text-gray-500 uppercase tracking-wider">Institucional</p>
+                        <p className="text-sm font-medium text-gray-800 truncate" title={detalleAlumno.student.email_institucional || 'N/A'}>
+                          {detalleAlumno.student.email_institucional || <span className="text-gray-400 italic">No asignado</span>}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="flex items-start gap-3 p-3 bg-gray-50 rounded-lg border border-gray-100 col-span-2">
+                      <MapPin className="w-5 h-5 text-gray-400 mt-0.5 flex-shrink-0" />
+                      <div>
+                        <p className="text-xs font-bold text-gray-500 uppercase tracking-wider">Domicilio Registrado</p>
+                        <p className="text-sm font-medium text-gray-800">
+                          {detalleAlumno.address.calle} {detalleAlumno.address.numero_domicilio}, {detalleAlumno.address.colonia}. CP: {detalleAlumno.address.codigo_postal}, {detalleAlumno.address.municipio}, {detalleAlumno.address.estado}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="p-4 border-t border-gray-100 bg-gray-50 flex justify-end">
+                  <button 
+                    onClick={() => { setModalDetalleOpen(false); setDetalleAlumno(null); }}
+                    className="px-5 py-2 bg-gray-200 hover:bg-gray-300 text-gray-700 text-sm font-bold rounded-lg transition-colors"
+                  >
+                    Cerrar
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 };
