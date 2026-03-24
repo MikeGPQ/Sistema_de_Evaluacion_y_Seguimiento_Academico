@@ -11,7 +11,9 @@ from app.models.subject import Subject
 from app.models.academic_program import AcademicProgram
 from app.models.enrollment import StudentEnrollment
 from app.models.student import Student
+from app.models.student_period_gpa import StudentPeriodGpa
 from app.services.audit_service import log_audit_event
+from sqlalchemy import func, case
 
 router = APIRouter(tags=["Generación de Actas"])
 
@@ -116,7 +118,7 @@ def cerrar_acta_oficial(grupo_id: int, payload: dict, db: Session = Depends(get_
     try:
         old_status = grupo.estatus_acta
         grupo.estatus_acta = 'CERRADA'
-        
+
         log_audit_event(
             db=db,
             user_identifier=str(docente_id),
@@ -127,9 +129,58 @@ def cerrar_acta_oficial(grupo_id: int, payload: dict, db: Session = Depends(get_
             new_values={"estatus_acta": "CERRADA"}
         )
 
+        # Flush para que las queries siguientes vean estatus_acta = 'CERRADA'
+        db.flush()
+
+        # --- Recalcular GPA para los alumnos de este grupo en este periodo ---
+        period_id = grupo.period_id
+        profile_ids = [e.academic_profile_id for e in db.query(StudentEnrollment.academic_profile_id)
+                       .filter(StudentEnrollment.academic_group_id == grupo_id).all()]
+
+        for profile_id in set(profile_ids):
+            resultado = (
+                db.query(
+                    func.round(func.avg(StudentEnrollment.calificacion_final), 2).label("gpa"),
+                    func.count(StudentEnrollment.id).label("total"),
+                    func.sum(case((StudentEnrollment.status == 'aprobada', 1), else_=0)).label("aprobadas"),
+                    func.sum(case((StudentEnrollment.status == 'reprobada', 1), else_=0)).label("reprobadas"),
+                )
+                .join(AcademicGroup, StudentEnrollment.academic_group_id == AcademicGroup.id)
+                .filter(
+                    StudentEnrollment.academic_profile_id == profile_id,
+                    StudentEnrollment.period_id == period_id,
+                    AcademicGroup.estatus_acta == 'CERRADA',
+                    StudentEnrollment.calificacion_final.isnot(None),
+                )
+                .first()
+            )
+
+            if not resultado or resultado.gpa is None:
+                continue
+
+            existing = db.query(StudentPeriodGpa).filter(
+                StudentPeriodGpa.academic_profile_id == profile_id,
+                StudentPeriodGpa.period_id == period_id,
+            ).first()
+
+            if existing:
+                existing.gpa = float(resultado.gpa)
+                existing.total_subjects = resultado.total
+                existing.approved_subjects = int(resultado.aprobadas or 0)
+                existing.failed_subjects = int(resultado.reprobadas or 0)
+            else:
+                db.add(StudentPeriodGpa(
+                    academic_profile_id=profile_id,
+                    period_id=period_id,
+                    gpa=float(resultado.gpa),
+                    total_subjects=resultado.total,
+                    approved_subjects=int(resultado.aprobadas or 0),
+                    failed_subjects=int(resultado.reprobadas or 0),
+                ))
+
         db.commit()
         return {"message": "Acta cerrada exitosamente. Las calificaciones han sido congeladas."}
-        
+
     except Exception as e:
         db.rollback()
         raise HTTPException(status_code=500, detail=f"Fallo crítico al cerrar el acta: {str(e)}")
