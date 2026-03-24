@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { 
   ArrowLeft, BookOpen, Clock, AlertTriangle, 
@@ -8,7 +8,6 @@ import client from '../../lib/axios';
 import Swal from 'sweetalert2';
 import { useAuth } from '../../hooks/AuthContext';
 
-// Funcion utilitaria para la conversion de formato de hora a minutos totales
 const timeToMinutes = (t) => {
   if (!t) return 0;
   const [h, m] = t.split(':');
@@ -29,12 +28,10 @@ const MiCargaAcademica = () => {
   const [seleccionOriginal, setSeleccionOriginal] = useState({}); 
   const [inscripcionesOriginales, setInscripcionesOriginales] = useState([]);
 
-  // detencion de cambios en la seleccion para activar proteccion de perdida de datos
   const seleccionValues = Object.values(seleccion).map(s => s.group_id).sort().join(',');
   const originalValues = [...inscripcionesOriginales].sort().join(',');
   const hayCambios = seleccionValues !== originalValues;
 
-   
   useEffect(() => {
     const handleBeforeUnload = (evento) => {
       if (hayCambios) {
@@ -46,7 +43,6 @@ const MiCargaAcademica = () => {
     return () => window.removeEventListener('beforeunload', handleBeforeUnload);
   }, [hayCambios]);
 
-  // Controlador de navegaciones internas para proteger la perdida de estado
   const ejecutarConProteccion = async (accionConfirmada) => {
     if (hayCambios) {
       const confirmacion = await Swal.fire({
@@ -69,74 +65,67 @@ const MiCargaAcademica = () => {
     }
   };
 
-  // carga inicial de datos del alumno y su catalogo de materias disponibles
-  useEffect(() => {
-    let isMounted = true; 
+  // Función unificada para obtener e hidratar todo el estado desde el backend
+  const cargarDatosDelAlumno = useCallback(async (matriculaActiva) => {
+    setCargando(true);
+    try {
+      const response = await client.get(`/asignacion/autoservicio/${matriculaActiva}/disponibles`);
+      const data = response.data;
 
-    const cargarDatosDelAlumno = async () => {
-      const matriculaActiva = user?.identifier || user?.matricula || '20240001';
+      setAlumnoInfo({
+        matricula: data.alumno_matricula,
+        nombre: data.alumno_nombre,
+        cuatrimestre: data.alumno_cuatrimestre,
+        carrera: data.carrera,
+        grupoBase: data.grupo_base,
+        bloqueado: data.grupo_base_bloqueado
+      });
       
-      try {
-        const response = await client.get(`/asignacion/autoservicio/${matriculaActiva}/disponibles`);
-        const data = response.data;
+      setMateriasRegulares(data.materias_regulares);
+      setMateriasRecursamiento(data.materias_recursamiento);
 
-        if (isMounted) {
-          setAlumnoInfo({
-            matricula: data.alumno_matricula,
-            nombre: data.alumno_nombre,
-            cuatrimestre: data.alumno_cuatrimestre,
-            carrera: data.carrera,
-            grupoBase: data.grupo_base,
-            bloqueado: data.grupo_base_bloqueado
+      const seleccionInicial = {};
+      const gruposQueYaTenia = data.grupos_inscritos || [];
+
+      const escanearCatalogo = (catalogo, isRetake) => {
+        catalogo.forEach(mat => {
+          mat.grupos_disponibles.forEach(g => {
+            if (gruposQueYaTenia.includes(g.group_id)) {
+              seleccionInicial[mat.subject_id] = { group_id: g.group_id, is_retake: isRetake };
+            }
           });
-          
-          setMateriasRegulares(data.materias_regulares);
-          setMateriasRecursamiento(data.materias_recursamiento);
+        });
+      };
 
-          const seleccionInicial = {};
-          const gruposQueYaTenia = data.grupos_inscritos || [];
+      escanearCatalogo(data.materias_regulares, false);
+      escanearCatalogo(data.materias_recursamiento, true);
 
-          const escanearCatalogo = (catalogo, isRetake) => {
-            catalogo.forEach(mat => {
-              mat.grupos_disponibles.forEach(g => {
-                if (gruposQueYaTenia.includes(g.group_id)) {
-                  seleccionInicial[mat.subject_id] = { group_id: g.group_id, is_retake: isRetake };
-                }
-              });
-            });
-          };
+      setSeleccion(seleccionInicial);
+      setSeleccionOriginal(seleccionInicial);
+      setInscripcionesOriginales(gruposQueYaTenia);
 
-          escanearCatalogo(data.materias_regulares, false);
-          escanearCatalogo(data.materias_recursamiento, true);
-
-          setSeleccion(seleccionInicial);
-          setSeleccionOriginal(seleccionInicial);
-          setInscripcionesOriginales(gruposQueYaTenia);
-        }
-
-      } catch (error) {
-        if (isMounted && !Swal.isVisible()) {
-          Swal.fire({ 
-            icon: 'error', 
-            title: 'Acceso Restringido', 
-            text: error.response?.data?.detail || 'No cuenta con los privilegios para acceder a este módulo.',
-            confirmButtonColor: '#1A237E',
-            allowOutsideClick: false
-          }).then(() => {
-            navigate('/alumno/horario'); 
-          });
-        }
-      } finally {
-        if (isMounted) setCargando(false);
+    } catch (error) {
+      if (!Swal.isVisible()) {
+        Swal.fire({ 
+          icon: 'error', 
+          title: 'Acceso Restringido', 
+          text: error.response?.data?.detail || 'No cuenta con los privilegios para acceder a este módulo.',
+          confirmButtonColor: '#1A237E',
+          allowOutsideClick: false
+        }).then(() => {
+          navigate('/alumno/horario'); 
+        });
       }
-    };
+    } finally {
+      setCargando(false);
+    }
+  }, [navigate]);
 
-    cargarDatosDelAlumno();
-    
-    return () => { isMounted = false; };
-  }, [user, navigate]);
+  useEffect(() => {
+    const matriculaActiva = user?.identifier || user?.matricula || '20240001';
+    cargarDatosDelAlumno(matriculaActiva);
+  }, [user, cargarDatosDelAlumno]);
 
-  // funcion de verificacion de choques de horario entre las nueva seleccion y la seleccion actual 
   const verificarChoquesFront = (grupoEvaluar, seleccionActual) => {
     const sesionesEvaluar = grupoEvaluar.horario_raw || [];
     const seleccionIds = Object.values(seleccionActual).map(s => s.group_id);
@@ -192,16 +181,11 @@ const MiCargaAcademica = () => {
               usuario_id: user?.identifier || user?.email || "Autoservicio Alumno"
           });
           
-          setSeleccion(nuevaSeleccion);
-          setSeleccionOriginal(nuevaSeleccion); 
-          setInscripcionesOriginales(materiasPayload.map(m => m.group_id));
+          await Swal.fire({ icon: 'success', title: 'Operación exitosa', text: 'Baja registrada en el sistema.', confirmButtonColor: '#1A237E' });
           
-          // Sincronizacion de dependencias para actualizar cupos y horarios tras la baja
-          const resCatalogo = await client.get(`/asignacion/autoservicio/${alumnoInfo.matricula}/disponibles`);
-          setMateriasRegulares(resCatalogo.data.materias_regulares);
-          setMateriasRecursamiento(resCatalogo.data.materias_recursamiento);
-
-          Swal.fire({ icon: 'success', title: 'Operación exitosa', text: 'Baja registrada en el sistema.', confirmButtonColor: '#1A237E' });
+          // Sincronización automática de cupos tras la baja
+          await cargarDatosDelAlumno(alumnoInfo.matricula);
+          
         } catch (error) {
           Swal.fire({ icon: 'error', title: 'Fallo de operación', text: error.response?.data?.detail || 'Imposible completar la transacción.', confirmButtonColor: '#1A237E' });
         }
@@ -261,20 +245,15 @@ const MiCargaAcademica = () => {
         usuario_id: user?.identifier || user?.email || "Autoservicio Alumno"
       });
       
-      // sincronizacion de dependencias para actualizar cupos y horarios
-      const resCatalogo = await client.get(`/asignacion/autoservicio/${alumnoInfo.matricula}/disponibles`);
-      setMateriasRegulares(resCatalogo.data.materias_regulares);
-      setMateriasRecursamiento(resCatalogo.data.materias_recursamiento);
-
-      setSeleccionOriginal(seleccion);
-      setInscripcionesOriginales(materiasPayload.map(m => m.group_id));
-
       await Swal.fire({
         icon: 'success',
         title: 'Transacción Confirmada',
         text: response.data.message,
         confirmButtonColor: '#1A237E'
       });
+
+      // Sincronización automática de cupos tras la inscripción
+      await cargarDatosDelAlumno(alumnoInfo.matricula);
 
     } catch (error) {
       Swal.fire({
@@ -412,7 +391,6 @@ const MiCargaAcademica = () => {
                     </p>
                   </div>
                 </div>
-    
               </div>
 
               {materiasRecursamiento.length > 0 && (
@@ -447,12 +425,10 @@ const MiCargaAcademica = () => {
                   ))}
                 </div>
               )}
-
             </div>
 
             <div className="lg:col-span-4">
               <div className="bg-white border border-gray-200 rounded-lg shadow-sm sticky top-6">
-                
                 <div className="p-4 border-b border-gray-200 bg-gray-50 rounded-t-lg">
                   <h3 className="text-sm font-bold text-gray-800 flex items-center gap-2">
                     <Calendar className="w-4 h-4 text-[#1A237E]" />
