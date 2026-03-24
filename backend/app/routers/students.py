@@ -102,6 +102,7 @@ def listar_alumnos(
     busqueda: Optional[str] = Query(None, min_length=3, max_length=50, pattern=r"^[a-zA-Z0-9 áéíóúÁÉÍÓÚñÑ]+$"),
     carrera_id: Optional[int] = Query(None),
     cuatrimestre: Optional[int] = Query(None),
+    nivel_academico_id: Optional[int] = Query(None),
     db: Session = Depends(get_db)
 ):
     query = db.query(Student).outerjoin(StudentAcademicProfile)
@@ -120,6 +121,9 @@ def listar_alumnos(
 
     if cuatrimestre:
         query = query.filter(StudentAcademicProfile.quarter_actual_id == cuatrimestre)
+
+    if nivel_academico_id:
+        query = query.filter(StudentAcademicProfile.nivel_id == nivel_academico_id)
 
     query = query.distinct()
     

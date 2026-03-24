@@ -59,10 +59,13 @@ const ListadoAlumnos = () => {
   const [busquedaAlumno, setBusquedaAlumno] = useState('');
   const [filtroCarrera, setFiltroCarrera] = useState('');
   const [filtroCuatrimestre, setFiltroCuatrimestre] = useState('');
+  const [filtroNivelAcademico, setFiltroNivelAcademico] = useState('');
+  const [nivelesAcademicos, setNivelesAcademicos] = useState([]);
 
   // --- CATÁLOGO DE ESTATUS DESDE API ---
   useEffect(() => {
     client.get('/catalogos/estatus').then(res => setEstatusCatalogo(res.data)).catch(() => {});
+    client.get('/catalogos/niveles-academicos').then(res => setNivelesAcademicos(res.data)).catch(() => {});
   }, []);
 
   // --- FUNCIÓN PARA OBTENER ALUMNOS ---
@@ -77,6 +80,7 @@ const ListadoAlumnos = () => {
       if (terminoBusqueda) params.append('busqueda', terminoBusqueda);
       if (filtroCarrera) params.append('carrera_id', filtroCarrera);
       if (filtroCuatrimestre) params.append('cuatrimestre', filtroCuatrimestre);
+      if (filtroNivelAcademico) params.append('nivel_academico_id', filtroNivelAcademico);
 
       const response = await client.get(`/alumnos/listado?${params.toString()}`);
       setAlumnos(response.data.data);
@@ -93,7 +97,7 @@ const ListadoAlumnos = () => {
       fetchAlumnos();
     }, 400); 
     return () => clearTimeout(retardoBusqueda);
-  }, [pagina, busquedaAlumno, filtroCarrera, filtroCuatrimestre]);
+  }, [pagina, busquedaAlumno, filtroCarrera, filtroCuatrimestre, filtroNivelAcademico]);
 
   // --- MANEJADORES DE FILTROS (JORGE) ---
   const handleCambioFiltro = (setter, valor) => {
@@ -105,10 +109,11 @@ const ListadoAlumnos = () => {
     setBusquedaAlumno('');
     setFiltroCarrera('');
     setFiltroCuatrimestre('');
+    setFiltroNivelAcademico('');
     setPagina(1);
   };
 
-  const hayFiltrosActivos = busquedaAlumno || filtroCarrera || filtroCuatrimestre;
+  const hayFiltrosActivos = busquedaAlumno || filtroCarrera || filtroCuatrimestre || filtroNivelAcademico;
 
   const getStatusColor = (status) => {
     const s = status?.toLowerCase() || '';
@@ -288,7 +293,7 @@ const ListadoAlumnos = () => {
 
           <div className="w-40">
             <label className="block text-xs font-semibold text-gray-600 mb-1">Cuatrimestre</label>
-            <select 
+            <select
               value={filtroCuatrimestre}
               onChange={(e) => handleCambioFiltro(setFiltroCuatrimestre, e.target.value)}
               className="w-full px-4 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:border-blue-500 bg-white cursor-pointer"
@@ -296,6 +301,20 @@ const ListadoAlumnos = () => {
               <option value="">Todos</option>
               {[1,2,3,4,5,6,7,8,9].map(num => (
                 <option key={num} value={num}>{num}º Cuatrimestre</option>
+              ))}
+            </select>
+          </div>
+
+          <div className="w-44">
+            <label className="block text-xs font-semibold text-gray-600 mb-1">Nivel Académico</label>
+            <select
+              value={filtroNivelAcademico}
+              onChange={(e) => handleCambioFiltro(setFiltroNivelAcademico, e.target.value)}
+              className="w-full px-4 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:border-blue-500 bg-white cursor-pointer"
+            >
+              <option value="">Todos</option>
+              {nivelesAcademicos.map(n => (
+                <option key={n.id} value={n.id}>{n.name}</option>
               ))}
             </select>
           </div>
