@@ -48,7 +48,7 @@ const getAverage = (p1, p2, p3, gradeValues) => {
   const exact = val1 + val2 + val3;
   
   if (hasValue(n1) && hasValue(n2) && hasValue(n3)) return Math.round(exact);
-  return exact.toFixed(2);
+  return Math.round(exact);
 };
 
 const normalize = (v) => (v === null || v === undefined ? '' : v);
