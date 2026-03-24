@@ -329,7 +329,7 @@ const handleUnlockUser = async (identifier) => {
     doc.save(`Audit_Logs_${filtros.fecha_desde}_${filtros.fecha_hasta}.pdf`);
   };
 
-  const isPdfHabilitado = filtros.fecha_desde && filtros.fecha_hasta;
+  const isPdfHabilitado = filtros.fecha_desde && filtros.fecha_hasta && logs.length > 0;
 
   return (
     <div className="min-h-screen bg-[#F8F9FA] p-6 font-sans">

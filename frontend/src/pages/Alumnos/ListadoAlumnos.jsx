@@ -59,8 +59,12 @@ const ListadoAlumnos = () => {
 
   const [resumenEstatus, setResumenEstatus] = useState({ activo: 0, baja: 0, baja_temporal: 0, egresado: 0 });
 
-  useEffect(() => {
+  const fetchResumenEstatus = () => {
     client.get('/alumnos/resumen-estatus').then(res => setResumenEstatus(res.data)).catch(() => {});
+  };
+
+  useEffect(() => {
+    fetchResumenEstatus();
   }, []);
 
   const [busquedaAlumno, setBusquedaAlumno] = useState('');
@@ -187,6 +191,7 @@ const ListadoAlumnos = () => {
 
       setModalEstatusOpen(false);
       fetchAlumnos();
+      fetchResumenEstatus();
     } catch (error) {
       Swal.fire({
         icon: 'error',

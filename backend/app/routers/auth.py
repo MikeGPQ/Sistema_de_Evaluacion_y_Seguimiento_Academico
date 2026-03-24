@@ -331,7 +331,7 @@ def admin_force_password(data: AdminForcePasswordRequest, db: Session = Depends(
         raise HTTPException(status_code=404, detail="Usuario no encontrado")
 
     user.password_hash = get_password_hash(data.new_password)
-    user.is_temp_password = True
+    user.is_temp_password = False
 
     user.is_locked = False
     user.locked_at = None
@@ -344,7 +344,7 @@ def admin_force_password(data: AdminForcePasswordRequest, db: Session = Depends(
         entity_name="users",
         entity_id=data.identifier,
         old_values=None,
-        new_values={"evento": "Contraseña forzada por administrador", "is_temp_password": True}
+        new_values={"evento": "Contraseña forzada por administrador", "is_temp_password": False}
     )
 
     db.commit()

@@ -510,15 +510,14 @@ def get_student_detail(matricula: str, db: Session = Depends(get_db)):
         StudentAddress.student_matricula == matricula
     ).first()
 
-    # Calcular promedio general histórico
-    enrollments = db.query(StudentEnrollment).filter(
-        StudentEnrollment.student_matricula == matricula,
-        StudentEnrollment.calificacion_final != None
-    ).all()
-    
+    # Calcular promedio general histórico desde student_period_gpa
     promedio_general = 0.0
-    if enrollments:
-        promedio_general = round(sum(e.calificacion_final for e in enrollments) / len(enrollments), 2)
+    if perfil:
+        period_gpas = db.query(StudentPeriodGpa).filter(
+            StudentPeriodGpa.academic_profile_id == perfil.id
+        ).all()
+        if period_gpas:
+            promedio_general = round(sum(float(g.gpa) for g in period_gpas) / len(period_gpas), 2)
 
     return {
         "student": {
