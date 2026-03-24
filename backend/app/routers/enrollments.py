@@ -109,7 +109,9 @@ def obtener_grupos_disponibles(matricula: str, db: Session = Depends(get_db)):
 
         materias_dict[materia.id]["grupos_disponibles"].append({
             "group_id": grupo.id,
+            "external_id": grupo.external_id,
             "nombre": grupo.sigad_group.identificador if grupo.sigad_group else str(grupo.id),
+            "aula": grupo.classroom.nombre_codigo if grupo.classroom else None,
             "cupo_disponible": cupos_libres,
             "horario": horario_texto,
             "horario_raw": sesiones_puras
@@ -211,7 +213,9 @@ def obtener_grupos_autoservicio(matricula: str, db: Session = Depends(get_db)):
 
         dict_destino[materia.id]["grupos_disponibles"].append({
             "group_id": grupo.id,
+            "external_id": grupo.external_id,
             "nombre": grupo.sigad_group.identificador if grupo.sigad_group else str(grupo.id),
+            "aula": grupo.classroom.nombre_codigo if grupo.classroom else None,
             "cupo_disponible": cupos_libres,
             "horario": horario_texto,
             "horario_raw": sesiones_puras
