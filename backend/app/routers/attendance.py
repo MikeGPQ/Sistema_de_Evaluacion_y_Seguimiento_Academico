@@ -15,6 +15,7 @@ from app.models.subject import Subject
 from app.models.academic_period import AcademicPeriod
 from app.models.teacher import Teacher 
 from app.services.audit_service import log_audit_event
+from app.models.student_academic_profile import StudentAcademicProfile;
 
 router = APIRouter(prefix="/asistencia", tags=["Asistencia Docente"])
 
@@ -256,6 +257,12 @@ def get_student_attendance(student_id: str, period: str, db: Session = Depends(g
     if not period_obj:
         return []
 
+    perfil = db.query(StudentAcademicProfile).filter(
+        StudentAcademicProfile.student_matricula == student_id
+    ).order_by(StudentAcademicProfile.id.desc()).first()
+    
+    carrera_alumno = perfil.career.name if perfil and getattr(perfil, 'career', None) else "Desconocida"
+
     inscripciones = db.query(StudentEnrollment).join(AcademicGroup).filter(
         StudentEnrollment.student_matricula == student_id,
         AcademicGroup.period_id == period_obj.id
@@ -295,6 +302,7 @@ def get_student_attendance(student_id: str, period: str, db: Session = Depends(g
                 "groupCode": crn,
                 "teacherName": docente_nombre,
                 "studentName": alumno_nombre,
+                "careerName": carrera_alumno, 
                 "classDates": class_dates,
                 "attendanceData": attendance_map,
                 "justifications": justification_map
