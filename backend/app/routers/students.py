@@ -95,6 +95,22 @@ def set_base_id(nueva_matricula: str = Form(...), db: Session = Depends(get_db))
         db.rollback()
         raise HTTPException(status_code=500, detail=f"Error al fijar ID: {str(e)}")
 
+@router.get("/resumen-estatus", response_model=dict)
+def resumen_estatus_alumnos(db: Session = Depends(get_db)):
+    resultados = (
+        db.query(StudentStatus.name, func.count(StudentAcademicProfile.id))
+        .join(StudentAcademicProfile, StudentAcademicProfile.status_id == StudentStatus.id)
+        .group_by(StudentStatus.name)
+        .all()
+    )
+    conteos = {nombre: total for nombre, total in resultados}
+    return {
+        "activo": conteos.get("activo", 0),
+        "baja": conteos.get("baja", 0),
+        "baja_temporal": conteos.get("baja_temporal", 0),
+        "egresado": conteos.get("egresado", 0),
+    }
+
 @router.get("/listado", response_model=dict)
 def listar_alumnos(
     skip: int = 0,

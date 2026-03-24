@@ -55,6 +55,13 @@ const ListadoAlumnos = () => {
 
   const limite = 10;
 
+  // --- ESTADOS KPI ---
+  const [resumenEstatus, setResumenEstatus] = useState({ activo: 0, baja: 0, baja_temporal: 0, egresado: 0 });
+
+  useEffect(() => {
+    client.get('/alumnos/resumen-estatus').then(res => setResumenEstatus(res.data)).catch(() => {});
+  }, []);
+
   // --- ESTADOS DE FILTROS DE JORGE (HU-25a) ---
   const [busquedaAlumno, setBusquedaAlumno] = useState('');
   const [filtroCarrera, setFiltroCarrera] = useState('');
@@ -243,6 +250,28 @@ const ListadoAlumnos = () => {
           <button onClick={handleAgregarAlumno} className="flex items-center gap-2 bg-[#1A237E] text-white px-4 py-2 rounded-lg text-sm font-bold hover:bg-[#283593] transition-colors shadow-sm">
             <Plus className="w-4 h-4" /> Agregar Alumno
           </button>
+        </div>
+      </div>
+
+      {/* --- KPI CARDS --- */}
+      <div className="grid grid-cols-2 gap-4 mb-6">
+        <div className="bg-white rounded-xl border border-gray-200 shadow-sm px-6 py-4 flex items-center gap-4">
+          <div className="bg-green-100 p-3 rounded-xl">
+            <CheckCircle className="w-6 h-6 text-green-600" />
+          </div>
+          <div>
+            <p className="text-xs font-bold text-gray-500 uppercase tracking-wider">Alumnos Activos</p>
+            <p className="text-3xl font-black text-green-600">{resumenEstatus.activo}</p>
+          </div>
+        </div>
+        <div className="bg-white rounded-xl border border-gray-200 shadow-sm px-6 py-4 flex items-center gap-4">
+          <div className="bg-red-100 p-3 rounded-xl">
+            <XCircle className="w-6 h-6 text-red-600" />
+          </div>
+          <div>
+            <p className="text-xs font-bold text-gray-500 uppercase tracking-wider">Alumnos en Baja</p>
+            <p className="text-3xl font-black text-red-600">{resumenEstatus.baja}</p>
+          </div>
         </div>
       </div>
 
