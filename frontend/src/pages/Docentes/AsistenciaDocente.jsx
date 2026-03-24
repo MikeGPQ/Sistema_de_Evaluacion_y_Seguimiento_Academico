@@ -444,9 +444,10 @@ const AsistenciaDocente = () => {
 
       doc.setTextColor(50); doc.setFont("helvetica", "bold");
       const nombreMateriaStr = materiasOptions.find(o => o.id === materiaSeleccionada)?.label || "";
-      const codigoMateria = nombreMateriaStr.split('-')[0]?.trim() || "00000";
-      const nombreMatLimpio = nombreMateriaStr.split('-')[1]?.split('(')[0]?.trim().toUpperCase() || "S/A";
-      const grupoLimpio = nombreMateriaStr.match(/\(([^)]+)\)/)?.[1] || "S/A";
+      const partes = nombreMateriaStr.split(' - ');
+      const nombreMatLimpio = partes[0] ? partes[0].trim().toUpperCase() : "S/A";
+      const grupoLimpio = partes[1] ? partes[1].trim() : "S/A";
+      const codigoMateria = nombreMatLimpio.substring(0, 5);
       
       doc.text(nombreMatLimpio, 14, 40);
       doc.text(grupoLimpio, 120, 40);

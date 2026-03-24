@@ -44,8 +44,8 @@ def obtener_grupos_docente(docente_id: str, db: Session = Depends(get_db)):
         resultados.append({
             "id": g.id,
             "materia_nombre": g.subject.nombre if g.subject else "Sin Materia",
-            "identificador": g.identificador_grupo,
-            "acta_status": g.acta_status,
+            "identificador": g.sigad_group.identificador if g.sigad_group else str(g.id),
+            "acta_status": g.estatus_acta.lower() if g.estatus_acta else "abierta",
             "total_alumnos": total_alumnos
         })
         
@@ -60,10 +60,10 @@ def validar_acta_grupo(grupo_id: int, db: Session = Depends(get_db)):
 
     materia = grupo.subject
     docente = grupo.teacher
-    programa = materia.academic_program if materia else None
+    programa = materia.career if materia else None
     periodo = grupo.period
 
-    cuatrimestre_val = materia.quarter.numero if materia and materia.quarter else getattr(materia, 'cuatrimestre', 1)
+    cuatrimestre_val = materia.quarter.external_id if materia and getattr(materia, 'quarter', None) else getattr(materia, 'quarter_id', 1)
 
     inscripciones = db.query(StudentEnrollment).filter(StudentEnrollment.academic_group_id == grupo_id).all()
     
@@ -92,11 +92,11 @@ def validar_acta_grupo(grupo_id: int, db: Session = Depends(get_db)):
         "codigo_materia": f"MAT-{materia.id if materia else '000'}",
         "campus": "San Francisco - Campeche",
         "cuatrimestre": cuatrimestre_val,
-        "periodo": periodo.period_name if periodo else "Desconocido",
-        "grupo": grupo.identificador_grupo,
+        "periodo": periodo.codigo if periodo else "Desconocido",
+        "grupo": grupo.sigad_group.identificador if grupo.sigad_group else str(grupo.id),
         "materia_nombre": materia.nombre if materia else "Sin Materia",
         "docente_nombre": f"{docente.nombre} {docente.apellido_paterno}" if docente else "Sin Docente",
-        "acta_status": grupo.acta_status,
+        "acta_status": grupo.estatus_acta.lower() if grupo.estatus_acta else "abierta",
         "captura_completa": captura_completa,
         "alumnos": alumnos
     }
@@ -110,12 +110,12 @@ def cerrar_acta_oficial(grupo_id: int, payload: dict, db: Session = Depends(get_
     if not grupo:
         raise HTTPException(status_code=404, detail="Grupo no encontrado.")
         
-    if grupo.acta_status == 'cerrada':
+    if grupo.estatus_acta == 'CERRADA':
         raise HTTPException(status_code=400, detail="El acta ya se encuentra cerrada y congelada.")
 
     try:
-        old_status = grupo.acta_status
-        grupo.acta_status = 'cerrada'
+        old_status = grupo.estatus_acta
+        grupo.estatus_acta = 'CERRADA'
         
         log_audit_event(
             db=db,
@@ -123,8 +123,8 @@ def cerrar_acta_oficial(grupo_id: int, payload: dict, db: Session = Depends(get_
             action="UPDATE",
             entity_name="academic_groups",
             entity_id=str(grupo.id),
-            old_values={"acta_status": old_status},
-            new_values={"acta_status": "cerrada"}
+            old_values={"estatus_acta": old_status},
+            new_values={"estatus_acta": "CERRADA"}
         )
 
         db.commit()

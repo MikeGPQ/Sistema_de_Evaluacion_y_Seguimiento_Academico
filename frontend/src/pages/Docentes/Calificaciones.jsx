@@ -10,30 +10,44 @@ const CUATRIMESTRE_LABEL = {
 };
 
 // ─── Helpers ───────────────────────────────────────────────
-const getProgress = (p1, p2, p3) => {
-  const hasValue = (v) => v !== '' && v !== null && v !== undefined;
+const getNumericValue = (valStr, gradeValues) => {
+  if (valStr === '' || valStr === null || valStr === undefined) return null;
+  const gv = gradeValues.find(g => g.value === String(valStr));
+  return gv ? gv.numeric_value : 0;
+};
+
+const getProgress = (p1, p2, p3, gradeValues) => {
+  const n1 = getNumericValue(p1, gradeValues);
+  const n2 = getNumericValue(p2, gradeValues);
+  const n3 = getNumericValue(p3, gradeValues);
+  const hasValue = (v) => v !== null;
+  
   let percent = 0;
-  if (hasValue(p1)) percent += (parseInt(p1, 10) / 10) * 30;
-  if (hasValue(p2)) percent += (parseInt(p2, 10) / 10) * 30;
-  if (hasValue(p3)) percent += (parseInt(p3, 10) / 10) * 40;
+  if (hasValue(n1)) percent += (n1 / 10) * 30;
+  if (hasValue(n2)) percent += (n2 / 10) * 30;
+  if (hasValue(n3)) percent += (n3 / 10) * 40;
   percent = Math.round(percent);
 
   let color = 'bg-gray-200';
   if (percent > 0 && percent < 50)  color = 'bg-yellow-400';
   else if (percent >= 50 && percent < 70) color = 'bg-[#D99000]';
   else if (percent >= 70) color = 'bg-green-600';
-
   return { percent, color };
 };
 
-const getAverage = (p1, p2, p3) => {
-  const hasValue = (v) => v !== '' && v !== null && v !== undefined;
-  if (!hasValue(p1) && !hasValue(p2) && !hasValue(p3)) return '-';
-  const val1 = hasValue(p1) ? parseInt(p1, 10) * 0.3 : 0;
-  const val2 = hasValue(p2) ? parseInt(p2, 10) * 0.3 : 0;
-  const val3 = hasValue(p3) ? parseInt(p3, 10) * 0.4 : 0;
+const getAverage = (p1, p2, p3, gradeValues) => {
+  const n1 = getNumericValue(p1, gradeValues);
+  const n2 = getNumericValue(p2, gradeValues);
+  const n3 = getNumericValue(p3, gradeValues);
+  const hasValue = (v) => v !== null;
+  
+  if (!hasValue(n1) && !hasValue(n2) && !hasValue(n3)) return '-';
+  const val1 = hasValue(n1) ? n1 * 0.3 : 0;
+  const val2 = hasValue(n2) ? n2 * 0.3 : 0;
+  const val3 = hasValue(n3) ? n3 * 0.4 : 0;
   const exact = val1 + val2 + val3;
-  if (hasValue(p1) && hasValue(p2) && hasValue(p3)) return Math.round(exact);
+  
+  if (hasValue(n1) && hasValue(n2) && hasValue(n3)) return Math.round(exact);
   return exact.toFixed(2);
 };
 
@@ -42,6 +56,8 @@ const normalize = (v) => (v === null || v === undefined ? '' : v);
 // ─── Component ─────────────────────────────────────────────
 const Calificaciones = () => {
   const { user } = useAuth();
+
+  const [gradeValues, setGradeValues] = useState([]);
 
   // Justification catalog (from DB) — filtered (for dropdown) and all (for tooltips)
   const [justificaciones, setJustificaciones] = useState([]);
@@ -73,26 +89,28 @@ const Calificaciones = () => {
 
   // ── Fetch periods + justification catalog on mount ─────────
   useEffect(() => {
-    const fetchInitialData = async () => {
-      try {
-        const [periodRes, statusRes, allStatusRes] = await Promise.all([
-          client.get('/docente/periodos'),
-          client.get('/docente/grade-statuses'),
-          client.get('/docente/grade-statuses?all=true'),
-        ]);
-        setPeriods(periodRes.data);
-        const active = periodRes.data.find(p => p.is_active);
-        setSelectedPeriod(active ? active.period_name : periodRes.data[0]?.period_name ?? null);
-        setJustificaciones(statusRes.data);
-        setAllStatuses(allStatusRes.data);
-      } catch (err) {
-        console.error('Error cargando datos iniciales:', err);
-      } finally {
-        setLoadingPeriods(false);
-      }
-    };
-    fetchInitialData();
-  }, []);
+      const fetchInitialData = async () => {
+        try {
+          const [periodRes, statusRes, allStatusRes, gradesRes] = await Promise.all([
+            client.get('/docente/periodos'),
+            client.get('/docente/grade-statuses'),
+            client.get('/docente/grade-statuses?all=true'),
+            client.get('/docente/grade-values'), 
+          ]);
+          setPeriods(periodRes.data);
+          const active = periodRes.data.find(p => p.is_active);
+          setSelectedPeriod(active ? active.codigo : periodRes.data[0]?.codigo ?? null);
+          setJustificaciones(statusRes.data);
+          setAllStatuses(allStatusRes.data);
+          setGradeValues(gradesRes.data); 
+        } catch (err) {
+          console.error('Error cargando datos iniciales:', err);
+        } finally {
+          setLoadingPeriods(false);
+        }
+      };
+      fetchInitialData();
+    }, []);
 
   // ── Fetch teacher groups when period or user changes ───────
   useEffect(() => {
@@ -149,12 +167,7 @@ const Calificaciones = () => {
 
   // ── Grade change handler ───────────────────────────────────
   const handleChange = (groupId, matricula, pKey, value) => {
-    if (value === '') {
-      updateScore(groupId, matricula, pKey, '');
-      return;
-    }
-    const num = parseInt(value, 10);
-    if (!isNaN(num) && num >= 0 && num <= 10) updateScore(groupId, matricula, pKey, num);
+    updateScore(groupId, matricula, pKey, value);
   };
 
   const updateScore = (groupId, matricula, pKey, score) => {
@@ -206,26 +219,33 @@ const Calificaciones = () => {
 
     try {
       const payload = {
-        docente_id: teacherId || 0,
-        students: students.map(s => {
-          const orig = originalStudents.find(o => o.matricula === s.matricula);
-          const getJust = (pKey) => justifications.find(j => j.id === `${s.matricula}-${pKey}`);
-          const resolveStatus = (pKey, sKey) => {
-            const just = getJust(pKey);
-            if (just) return just.code;
-            const isNew = s[pKey] !== '' && s[pKey] !== null && (orig[pKey] === '' || orig[pKey] === null);
-            return isNew ? 'OE' : (s[sKey] || 'OE');
-          };
+      docente_id: teacherId || 0,
+      students: students.map(s => {
+        const orig = originalStudents.find(o => o.matricula === s.matricula);
+        const getJust = (pKey) => justifications.find(j => j.id === `${s.matricula}-${pKey}`);
+        
+        const resolveStatus = (pKey, sKey) => {
+          const just = getJust(pKey);
+          if (just) return just.code;
+          const isNew = s[pKey] !== '' && s[pKey] !== null && (orig[pKey] === '' || orig[pKey] === null);
+          return isNew ? 'OE' : (s[sKey] || 'OE');
+        };
 
-          return {
-            student_matricula: s.matricula,
-            parcial_1: s.p1 === '' ? null : parseInt(s.p1, 10),
-            status_parcial_1: resolveStatus('p1', 's1'),
-            parcial_2: s.p2 === '' ? null : parseInt(s.p2, 10),
-            status_parcial_2: resolveStatus('p2', 's2'),
-            parcial_3: s.p3 === '' ? null : parseInt(s.p3, 10),
-            status_parcial_3: resolveStatus('p3', 's3'),
-          };
+        const getIdForValue = (valStr) => {
+          if (valStr === '' || valStr === null || valStr === undefined) return null;
+          const gv = gradeValues.find(g => g.value === String(valStr));
+          return gv ? gv.id : null;
+        };
+
+        return {
+          student_matricula: s.matricula,
+          parcial_1: getIdForValue(s.p1),
+          status_parcial_1: resolveStatus('p1', 's1'),
+          parcial_2: getIdForValue(s.p2),
+          status_parcial_2: resolveStatus('p2', 's2'),
+          parcial_3: getIdForValue(s.p3),
+          status_parcial_3: resolveStatus('p3', 's3'),
+        };
         }),
       };
 
@@ -252,7 +272,7 @@ const Calificaciones = () => {
   };
 
   // ── Period active check ───────────────────────────────────
-  const isPeriodActive = periods.find(p => p.period_name === selectedPeriod)?.is_active ?? false;
+  const isPeriodActive = periods.find(p => p.codigo === selectedPeriod)?.is_active ?? false;
 
   // ── Group groups by cuatrimestre ──────────────────────────
   const byCuatrimestre = groups.reduce((acc, g) => {
@@ -286,14 +306,17 @@ const Calificaciones = () => {
   const renderPartialCell = (groupId, student, pKey, sKey, isReadOnly) => (
     <td className="py-4 px-2 border-l border-gray-100">
       <div className="flex justify-center items-center gap-4">
-        <input
-          type="number"
-          value={student[pKey]}
+        <select
+          value={student[pKey] === null ? '' : student[pKey]}
           disabled={isReadOnly}
-          onKeyDown={handleKeyDown}
           onChange={(e) => handleChange(groupId, student.matricula, pKey, e.target.value)}
-          className="w-12 h-8 text-center border border-gray-300 rounded focus:ring-2 focus:ring-[#D99000] outline-none font-semibold text-sm disabled:bg-gray-100 disabled:text-gray-400 disabled:cursor-not-allowed"
-        />
+          className="w-16 h-8 text-center border border-gray-300 rounded focus:ring-2 focus:ring-[#D99000] outline-none font-semibold text-sm disabled:bg-gray-100 disabled:text-gray-400 disabled:cursor-not-allowed cursor-pointer"
+        >
+          <option value="" disabled hidden>-</option>
+          {gradeValues.map(gv => (
+            <option key={gv.id} value={gv.value}>{gv.value}</option>
+          ))}
+        </select>
         <div className="w-16 flex justify-center">
           {renderBadge(student[pKey] !== '' && student[pKey] !== null ? student[sKey] : null)}
         </div>
@@ -322,7 +345,7 @@ const Calificaciones = () => {
           className="px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm font-medium text-gray-800 focus:ring-2 focus:ring-[#1A237E] outline-none shadow-sm"
         >
           {periods.map(p => (
-            <option key={p.period_name} value={p.period_name}>{p.period_name}</option>
+            <option key={p.codigo} value={p.codigo}>{p.codigo}</option>
           ))}
         </select>
         {periods.find(p => p.period_name === selectedPeriod)?.is_active && (
@@ -381,9 +404,6 @@ const Calificaciones = () => {
                   className="w-full p-4 flex items-center justify-between border-b border-gray-100 hover:bg-gray-50 transition-colors"
                 >
                   <div className="flex items-center gap-4">
-                    <div className="w-10 h-10 bg-[#0B172A] text-white rounded-full flex items-center justify-center font-bold text-sm shrink-0">
-                      {group.identificador_grupo}
-                    </div>
                     <div className="text-left">
                       <h2 className="text-sm font-bold text-[#0B172A]">{group.subject_nombre}</h2>
                       <p className="text-xs text-gray-500">{group.horario}</p>
@@ -432,7 +452,7 @@ const Calificaciones = () => {
                             </thead>
                             <tbody className="divide-y divide-gray-100">
                               {gd.students.map((student, index) => {
-                                const progress = getProgress(student.p1, student.p2, student.p3);
+                                const progress = getProgress(student.p1, student.p2, student.p3, gradeValues);
                                 return (
                                   <tr key={student.matricula} className="hover:bg-gray-50/50 transition-colors">
                                     <td className="py-4 px-6 text-sm text-gray-400 text-center">{index + 1}</td>
@@ -441,7 +461,7 @@ const Calificaciones = () => {
                                     {renderPartialCell(group.group_id, student, 'p2', 's2', isReadOnly || student.p1 === '' || student.p1 === null || student.p1 === undefined)}
                                     {renderPartialCell(group.group_id, student, 'p3', 's3', isReadOnly || student.p2 === '' || student.p2 === null || student.p2 === undefined)}
                                     <td className="py-4 px-6 text-center font-bold text-gray-800 border-l border-gray-100">
-                                      {getAverage(student.p1, student.p2, student.p3)}
+                                      {getAverage(student.p1, student.p2, student.p3, gradeValues)}
                                     </td>
                                     <td className="py-4 px-6">
                                       <div className="flex items-center gap-3">
