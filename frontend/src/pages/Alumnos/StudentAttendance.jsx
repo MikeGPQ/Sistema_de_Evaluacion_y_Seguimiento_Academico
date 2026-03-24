@@ -229,6 +229,13 @@ const handleExportPDF = () => {
       doc.save(`Historial_Asistencia_${selectedSubject.groupCode}.pdf`);
     } catch (error) { Swal.fire('Error', 'No se pudo generar el documento PDF.', 'error'); }
   };
+
+  const hasAttendanceRecords = selectedSubject && selectedSubject.classDates.some(date => {
+    if (date > todayDate) return false; 
+    const status = selectedSubject.attendanceData[date];
+    return ['P', 'F', 'R', 'J'].includes(status);
+  });
+
   return (
     <div className="min-h-screen bg-[#F8F9FA] p-6 font-sans relative">
       <div className="max-w-[1200px] mx-auto bg-white rounded-xl shadow-sm border border-gray-200 p-6 relative z-10">
@@ -272,7 +279,15 @@ const handleExportPDF = () => {
           
           <div className="flex flex-col shrink-0 mt-2 md:mt-0">
             <label className="text-[11px] font-bold text-transparent uppercase tracking-wider mb-1 hidden md:block">.</label>
-            <button onClick={handleExportPDF} disabled={!selectedSubject || !Object.values(selectedSubject?.attendanceData || {}).some(s => ['P','F','R','J'].includes(s))} className="h-[38px] flex items-center px-5 py-2 bg-[#1A237E] text-white rounded-lg text-sm font-bold hover:bg-[#283593] transition-colors shadow-sm disabled:opacity-50">
+            <button 
+              onClick={handleExportPDF} 
+              disabled={!hasAttendanceRecords} 
+              className={`h-[38px] flex items-center px-5 py-2 rounded-lg text-sm font-bold shadow-sm transition-colors ${
+                hasAttendanceRecords 
+                  ? 'bg-[#1A237E] text-white hover:bg-[#283593]' 
+                  : 'bg-gray-300 text-gray-500 cursor-not-allowed opacity-60'
+              }`}
+            >
               <Download className="w-4 h-4 mr-2" /> Descargar PDF
             </button>
           </div>

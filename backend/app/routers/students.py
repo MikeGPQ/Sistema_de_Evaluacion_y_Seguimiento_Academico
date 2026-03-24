@@ -148,16 +148,20 @@ def listar_alumnos(
 
     data = []
     for alumno in alumnos:
-        perfil = db.query(StudentAcademicProfile).filter(StudentAcademicProfile.student_matricula == alumno.matricula).order_by(StudentAcademicProfile.id.desc()).first()
+        perfil = db.query(StudentAcademicProfile).filter(
+            StudentAcademicProfile.student_matricula == alumno.matricula
+        ).order_by(StudentAcademicProfile.id.desc()).first()
         
         carrera_nombre = perfil.career.name if perfil and perfil.career else "Sin Carrera"
         estatus_nombre = perfil.status.name if perfil and perfil.status else "Sin Estatus"
+        nivel_nombre = perfil.nivel.name if perfil and getattr(perfil, 'nivel', None) else "Sin Nivel"
         
         data.append({
             "matricula": alumno.matricula,
             "nombre_completo": f"{alumno.nombre} {alumno.apellido_paterno} {alumno.apellido_materno or ''}".strip(),
             "carrera": carrera_nombre,
-            "estatus": estatus_nombre
+            "estatus": estatus_nombre,
+            "nivel_academico": nivel_nombre 
         })
 
     return {"total": total, "data": data}
@@ -496,8 +500,23 @@ def get_student_detail(matricula: str, db: Session = Depends(get_db)):
     if not student:
         raise HTTPException(status_code=404, detail="Alumno no encontrado")
 
-    perfil = db.query(StudentAcademicProfile).filter(StudentAcademicProfile.student_matricula == matricula).order_by(StudentAcademicProfile.id.desc()).first()
-    address = db.query(StudentAddress).filter(StudentAddress.student_matricula == matricula).first()
+    perfil = db.query(StudentAcademicProfile).filter(
+        StudentAcademicProfile.student_matricula == matricula
+    ).order_by(StudentAcademicProfile.id.desc()).first()
+    
+    address = db.query(StudentAddress).filter(
+        StudentAddress.student_matricula == matricula
+    ).first()
+
+    # Calcular promedio general histórico
+    enrollments = db.query(StudentEnrollment).filter(
+        StudentEnrollment.student_matricula == matricula,
+        StudentEnrollment.calificacion_final != None
+    ).all()
+    
+    promedio_general = 0.0
+    if enrollments:
+        promedio_general = round(sum(e.calificacion_final for e in enrollments) / len(enrollments), 2)
 
     return {
         "student": {
@@ -509,14 +528,13 @@ def get_student_detail(matricula: str, db: Session = Depends(get_db)):
             "email_personal": student.email_personal,
             "email_institucional": student.email_institucional,
             "career_id": perfil.career_id if perfil else None,
+            "carrera_nombre": perfil.career.name if perfil and getattr(perfil, 'career', None) else "Sin Carrera",
             "origin_school_id": perfil.origin_school_id if perfil else None,
             "promedio_procedencia": perfil.promedio_procedencia if perfil else None,
             "status_id": perfil.status_id if perfil else None,
             "status": perfil.status.name if perfil and perfil.status else None,
             "foto_id": student.foto_id,
-            "foto_nombre": student.foto_perfil.file_name if student.foto_perfil else None,
-            "certificado_id": perfil.certificado_id if perfil else None,
-            "certificado_nombre": perfil.certificado_file.file_name if perfil and perfil.certificado_file else None
+            "promedio_general": promedio_general
         },
         "address": {
             "calle": address.calle if address else '',
