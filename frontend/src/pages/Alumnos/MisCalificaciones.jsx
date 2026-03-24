@@ -65,6 +65,37 @@ const MisCalificaciones = () => {
       const primary = [11, 23, 42];
       const gold = [217, 144, 0];
 
+      // ── ENCABEZADO COMPACTO (páginas 2+) ───────────────────
+      const drawCompactHeader = () => {
+        doc.setFillColor(primary[0], primary[1], primary[2]);
+        doc.roundedRect(margin, 8, 10, 10, 1.5, 1.5, 'F');
+        doc.setTextColor(255, 255, 255);
+        doc.setFontSize(7);
+        doc.setFont(undefined, 'bold');
+        doc.text("U", margin + 5, 14.5, { align: 'center' });
+
+        doc.setTextColor(primary[0], primary[1], primary[2]);
+        doc.setFontSize(12);
+        doc.setFont(undefined, 'bold');
+        doc.text("UNID", margin + 14, 14);
+        doc.setFontSize(5.5);
+        doc.setFont(undefined, 'normal');
+        doc.text("UNIVERSIDAD INTERAMERICANA PARA EL DESARROLLO", margin + 14, 18);
+
+        doc.setFontSize(11);
+        doc.setFont(undefined, 'bold');
+        doc.setTextColor(primary[0], primary[1], primary[2]);
+        doc.text("REPORTE DE CALIFICACIONES", pageWidth - margin, 13, { align: 'right' });
+        doc.setFontSize(7);
+        doc.setFont(undefined, 'normal');
+        doc.setTextColor(120, 120, 120);
+        doc.text(`${capitalizarNombre(user?.nombre_completo)}  ·  ${periodoSeleccionado}`, pageWidth - margin, 18, { align: 'right' });
+
+        doc.setDrawColor(gold[0], gold[1], gold[2]);
+        doc.setLineWidth(1.2);
+        doc.line(margin, 22, pageWidth - margin, 22);
+      };
+
       // ── 1. ENCABEZADO ──────────────────────────────────────
       // Icono cuadrado "U"
       doc.setFillColor(primary[0], primary[1], primary[2]);
@@ -148,7 +179,8 @@ const MisCalificaciones = () => {
       calificaciones.forEach((materia) => {
         if (currentY > 240) {
           doc.addPage();
-          currentY = 20;
+          drawCompactHeader();
+          currentY = 28;
         }
 
         doc.setFontSize(10);
@@ -167,6 +199,9 @@ const MisCalificaciones = () => {
             materia.calificacion_final ?? '-',
           ]],
           theme: 'plain',
+          didDrawPage: (data) => {
+            if (data.pageNumber > 1) drawCompactHeader();
+          },
           headStyles: {
             textColor: [160, 160, 160],
             fontSize: 7,
@@ -197,7 +232,7 @@ const MisCalificaciones = () => {
         currentY = cardEnd + 10;
       });
 
-      if (currentY > 245) { doc.addPage(); currentY = 20; }
+      if (currentY > 245) { doc.addPage(); drawCompactHeader(); currentY = 28; }
       currentY += 5;
 
       const labelW = 52;
