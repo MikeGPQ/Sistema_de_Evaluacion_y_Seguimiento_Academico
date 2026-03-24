@@ -30,6 +30,8 @@ from app.models.academic_program import AcademicProgram
 from app.models.academic_level import AcademicLevel
 from app.models.origin_school import OriginSchool
 from app.models.grade_value import GradeValue
+from app.models.student_period_gpa import StudentPeriodGpa
+from sqlalchemy import case
 from app.models.user import User
 from app.models.role import Role
 from app.schemas.student import StudentCreate, OptionsResponse
@@ -677,4 +679,94 @@ def get_my_grades(
             status=r.status,
         )
         for r in resultados
+    ]
+
+@router.post("/calcular-gpas", response_model=dict)
+def calcular_gpas(period_id: Optional[int] = None, db: Session = Depends(get_db)):
+    """
+    Calcula y persiste el GPA por alumno/periodo en student_period_gpa.
+    Solo considera calificaciones de grupos con estatus_acta = 'CERRADA'.
+    Si se pasa period_id recalcula solo ese periodo; si no, recalcula todos.
+    """
+    query = (
+        db.query(
+            StudentEnrollment.academic_profile_id,
+            StudentEnrollment.period_id,
+            func.round(func.avg(StudentEnrollment.calificacion_final), 2).label("gpa"),
+            func.count(StudentEnrollment.id).label("total"),
+            func.sum(case((StudentEnrollment.status == 'aprobada', 1), else_=0)).label("aprobadas"),
+            func.sum(case((StudentEnrollment.status == 'reprobada', 1), else_=0)).label("reprobadas"),
+        )
+        .join(AcademicGroup, StudentEnrollment.academic_group_id == AcademicGroup.id)
+        .filter(
+            AcademicGroup.estatus_acta == 'CERRADA',
+            StudentEnrollment.calificacion_final.isnot(None),
+        )
+        .group_by(StudentEnrollment.academic_profile_id, StudentEnrollment.period_id)
+    )
+
+    if period_id:
+        query = query.filter(StudentEnrollment.period_id == period_id)
+
+    resultados = query.all()
+
+    upserted = 0
+    for r in resultados:
+        existing = db.query(StudentPeriodGpa).filter(
+            StudentPeriodGpa.academic_profile_id == r.academic_profile_id,
+            StudentPeriodGpa.period_id == r.period_id,
+        ).first()
+
+        if existing:
+            existing.gpa = float(r.gpa)
+            existing.total_subjects = r.total
+            existing.approved_subjects = int(r.aprobadas or 0)
+            existing.failed_subjects = int(r.reprobadas or 0)
+        else:
+            db.add(StudentPeriodGpa(
+                academic_profile_id=r.academic_profile_id,
+                period_id=r.period_id,
+                gpa=float(r.gpa),
+                total_subjects=r.total,
+                approved_subjects=int(r.aprobadas or 0),
+                failed_subjects=int(r.reprobadas or 0),
+            ))
+        upserted += 1
+
+    db.commit()
+    return {"message": f"GPA calculado para {upserted} registros.", "total": upserted}
+
+
+@router.get("/historial-gpa/{matricula}", response_model=list)
+def get_historial_gpa(matricula: str, db: Session = Depends(get_db)):
+    """
+    Retorna el historial de GPAs por periodo para un alumno.
+    """
+    perfil = (
+        db.query(StudentAcademicProfile)
+        .filter(StudentAcademicProfile.student_matricula == matricula)
+        .order_by(StudentAcademicProfile.id.desc())
+        .first()
+    )
+    if not perfil:
+        raise HTTPException(status_code=404, detail="Perfil académico no encontrado.")
+
+    registros = (
+        db.query(StudentPeriodGpa, AcademicPeriod.codigo)
+        .join(AcademicPeriod, StudentPeriodGpa.period_id == AcademicPeriod.id)
+        .filter(StudentPeriodGpa.academic_profile_id == perfil.id)
+        .order_by(AcademicPeriod.fecha_inicio.asc())
+        .all()
+    )
+
+    return [
+        {
+            "periodo": codigo,
+            "gpa": float(gpa_rec.gpa),
+            "total_materias": gpa_rec.total_subjects,
+            "aprobadas": gpa_rec.approved_subjects,
+            "reprobadas": gpa_rec.failed_subjects,
+            "calculado_en": gpa_rec.calculated_at.isoformat() if gpa_rec.calculated_at else None,
+        }
+        for gpa_rec, codigo in registros
     ]
