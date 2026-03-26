@@ -151,53 +151,97 @@ const handleUnlockUser = async (identifier) => {
     (user.email && user.email.toLowerCase().includes(searchLockedUser.toLowerCase()))
   );
 
-  // 5. Visualización y PDF
-  const verDetalleJson = (oldValues, newValues) => {
+  const verDetalleJson = (oldValues, newValues, action) => {
     let htmlContent = '';
     const safeOld = typeof oldValues === 'object' && oldValues !== null ? oldValues : {};
     const safeNew = typeof newValues === 'object' && newValues !== null ? newValues : {};
 
-    const allKeys = Array.from(new Set([...Object.keys(safeOld), ...Object.keys(safeNew)]));
-    
-    const changes = [];
+    const formatVal = (v) => {
+      if (v === null || v === undefined) return '<span style="color: #9ca3af; font-style: italic;">(vacío)</span>';
+      if (typeof v === 'boolean') return v ? 'Sí' : 'No';
+      if (Array.isArray(v)) return `[${v.join(', ')}]`;
+      if (typeof v === 'object') return JSON.stringify(v);
+      return v;
+    };
 
-    allKeys.forEach(key => {
-      const oldVal = safeOld[key];
-      const newVal = safeNew[key];
+    const isCreate = action === 'CREATE';
+    const isDelete = action === 'DELETE';
 
-      const formatVal = (v) => {
-        if (v === null || v === undefined) return '<span style="color: #9ca3af; font-style: italic;">(vacío)</span>';
-        if (typeof v === 'boolean') return v ? 'Sí' : 'No';
-        if (Array.isArray(v)) return `[${v.join(', ')}]`;
-        if (typeof v === 'object') return JSON.stringify(v);
-        return v;
-      };
-
-      if (JSON.stringify(oldVal) !== JSON.stringify(newVal)) {
-        if (oldVal === undefined) {
-          changes.push(`<li>Campo <b>${key}</b> fue agregado con valor: <span style="color: #22c55e;">${formatVal(newVal)}</span></li>`);
-        } else if (newVal === undefined) {
-           changes.push(`<li>Campo <b>${key}</b> fue eliminado. Valor anterior: <span style="color: #ef4444;">${formatVal(oldVal)}</span></li>`);
-        } else {
-           changes.push(`<li><b>${key}:</b> cambió de <span style="color: #ef4444; text-decoration: line-through;">${formatVal(oldVal)}</span> a <span style="color: #22c55e; font-weight: bold;">${formatVal(newVal)}</span></li>`);
-        }
-      }
-    });
-
-    if (changes.length > 0) {
-      htmlContent = `<ul style="text-align: left; font-size: 14px; line-height: 1.6; padding-left: 20px;">${changes.join('')}</ul>`;
-    } else if (Object.keys(safeOld).length === 0 && Object.keys(safeNew).length > 0) {
-       htmlContent = `<p style="text-align: left; font-size: 14px;">Se creó el registro con los siguientes datos:</p>
-                      <ul style="text-align: left; font-size: 14px; line-height: 1.6; padding-left: 20px;">
-                        ${Object.entries(safeNew).map(([k, v]) => `<li><b>${k}:</b> ${formatVal(v)}</li>`).join('')}
-                      </ul>`;
-    } else if (Object.keys(safeOld).length > 0 && Object.keys(safeNew).length === 0) {
-        htmlContent = `<p style="text-align: left; font-size: 14px;">Se eliminó el registro. Datos anteriores:</p>
-                      <ul style="text-align: left; font-size: 14px; line-height: 1.6; padding-left: 20px;">
-                        ${Object.entries(safeOld).map(([k, v]) => `<li><b>${k}:</b> ${formatVal(v)}</li>`).join('')}
-                      </ul>`;
+    if (isCreate) {
+      htmlContent = `
+        <div style="text-align: left;">
+          <span style="color: #22c55e; font-weight: bold; display: block; margin-bottom: 10px; font-size: 15px;">
+            Se dio de alta un registro con los siguientes datos:
+          </span>
+          <ul style="padding-left: 20px; list-style-type: disc; font-size: 14px; line-height: 1.6;">
+            ${Object.entries(safeNew).map(([k, v]) => `<li><b>${k}:</b> ${formatVal(v)}</li>`).join('')}
+          </ul>
+        </div>`;
+        
+    } else if (isDelete) {
+      htmlContent = `
+        <div style="text-align: left;">
+          <span style="color: #ef4444; font-weight: bold; display: block; margin-bottom: 10px; font-size: 15px;">
+            Se eliminó el registro. Datos anteriores:
+          </span>
+          <ul style="padding-left: 20px; list-style-type: disc; font-size: 14px; line-height: 1.6;">
+            ${Object.entries(safeOld).map(([k, v]) => `<li><b>${k}:</b> ${formatVal(v)}</li>`).join('')}
+          </ul>
+        </div>`;
+        
     } else {
-      htmlContent = '<p style="text-align: center; color: #6b7280;">No se detectaron cambios en los valores.</p>';
+      const allKeys = Array.from(new Set([...Object.keys(safeOld), ...Object.keys(safeNew)]));
+      const changes = [];
+
+      allKeys.forEach(key => {
+        const oldVal = safeOld[key];
+        const newVal = safeNew[key];
+
+        if (JSON.stringify(oldVal) !== JSON.stringify(newVal)) {
+          let handledCustom = false;
+          
+          switch (key) {
+            case 'is_locked':
+              if (oldVal === false && newVal === true) {
+                changes.push(`<li><span style="color: #ef4444; font-weight: bold;">El usuario fue bloqueado.</span></li>`);
+                handledCustom = true;
+              } else if (oldVal === true && newVal === false) {
+                changes.push(`<li><span style="color: #22c55e; font-weight: bold;">El usuario fue desbloqueado.</span></li>`);
+                handledCustom = true;
+              }
+              break;
+          }
+
+          if (handledCustom) return;
+
+          if (oldVal === undefined) {
+            let handledAddition = false;
+            switch (key) {
+              case 'motivo':
+              case 'evento':
+                const label = key.charAt(0).toUpperCase() + key.slice(1);
+                changes.push(`<li><b>${label}:</b> <span style="color: #22c55e;">${formatVal(newVal)}</span></li>`);
+                handledAddition = true;
+                break;
+            }
+
+            if (!handledAddition) {
+              changes.push(`<li>Campo <b>${key}</b> fue agregado con valor: <span style="color: #22c55e;">${formatVal(newVal)}</span></li>`);
+            }
+            
+          } else if (newVal === undefined) {
+             changes.push(`<li>Campo <b>${key}</b> fue eliminado. Valor anterior: <span style="color: #ef4444;">${formatVal(oldVal)}</span></li>`);
+          } else {
+             changes.push(`<li><b>${key}:</b> cambió de <span style="color: #ef4444; text-decoration: line-through;">${formatVal(oldVal)}</span> a <span style="color: #22c55e; font-weight: bold;">${formatVal(newVal)}</span></li>`);
+          }
+        } 
+      });
+
+      if (changes.length > 0) {
+        htmlContent = `<ul style="text-align: left; font-size: 14px; line-height: 1.6; padding-left: 20px;">${changes.join('')}</ul>`;
+      } else {
+        htmlContent = '<p style="text-align: center; color: #6b7280;">No se detectaron cambios en los valores.</p>';
+      }
     }
     
     Swal.fire({
@@ -443,7 +487,7 @@ const handleUnlockUser = async (identifier) => {
                       <td className="p-3 font-mono text-gray-600 text-xs">{log.entity_name}</td>
                       <td className="p-3 text-center">
                         <button 
-                          onClick={() => verDetalleJson(log.old_values, log.new_values)}
+                          onClick={() => verDetalleJson(log.old_values, log.new_values, log.action)}
                           className="text-gray-400 hover:text-[#1A237E] transition-colors"
                           title="Ver cambios exactos"
                         >

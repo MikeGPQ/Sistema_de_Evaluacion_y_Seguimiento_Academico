@@ -241,7 +241,6 @@ def register_admin(admin_data: AdminCreate, db: Session = Depends(get_db)):
                 "apellido_materno": admin_data.apellido_materno,
                 "email_personal": admin_data.email_personal,
                 "email_institucional": admin_data.email_institucional,
-                "is_active": True
             }
         )
 

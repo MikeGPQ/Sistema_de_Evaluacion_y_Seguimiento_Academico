@@ -88,8 +88,8 @@ def login(data: LoginRequest, db: Session = Depends(get_db)):
                 action="UPDATE",
                 entity_name="users",
                 entity_id=user.identifier,
-                old_values={"is_locked": False, "failed_login_attempts": attempts - 1},
-                new_values={"is_locked": True, "failed_login_attempts": attempts, "motivo": "Exceso de intentos fallidos"}
+                old_values={"is_locked": False},
+                new_values={"is_locked": True, "motivo": "Exceso de intentos fallidos"}
             )
 
             db.commit()
@@ -344,7 +344,7 @@ def admin_force_password(data: AdminForcePasswordRequest, db: Session = Depends(
         entity_name="users",
         entity_id=data.identifier,
         old_values=None,
-        new_values={"evento": "Contraseña forzada por administrador", "is_temp_password": False}
+        new_values={"evento": f"Contraseña forzada para el usuario {data.identifier}"}
     )
 
     db.commit()
