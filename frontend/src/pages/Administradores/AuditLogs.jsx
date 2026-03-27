@@ -214,11 +214,42 @@ const handleUnlockUser = async (identifier) => {
 
           if (handledCustom) return;
 
+          if (Array.isArray(oldVal) || Array.isArray(newVal)) {
+            const oldArray = Array.isArray(oldVal) ? oldVal : [];
+            const newArray = Array.isArray(newVal) ? newVal : [];
+            const label = key.charAt(0).toUpperCase() + key.slice(1).replace(/_/g, ' ');
+
+            const renderList = (arr, textColor) => {
+              if (arr.length === 0) return `<span style="color: ${textColor}; font-style: italic; font-size: 12px;">(Vacío)</span>`;
+              return `<ul style="margin: 0; padding-left: 15px; list-style-type: disc; color: ${textColor}; font-size: 13px; line-height: 1.5;">${arr.map(item => `<li>${item}</li>`).join('')}</ul>`;
+            };
+
+            changes.push(`
+              <li style="margin-bottom: 16px; list-style: none; margin-left: -20px; width: calc(100% + 20px);">
+                <div style="font-weight: bold; color: #374151; margin-bottom: 8px;">${label}</div>
+                <div style="display: flex; gap: 12px;">
+                  <div style="flex: 1; background-color: #fef2f2; padding: 10px; border-radius: 6px; border-left: 4px solid #ef4444;">
+                    <span style="color: #991b1b; font-size: 10px; font-weight: bold; text-transform: uppercase; letter-spacing: 0.5px; display: block; margin-bottom: 6px;">Valor Anterior</span>
+                    ${renderList(oldArray, '#7f1d1d')}
+                  </div>
+                  <div style="flex: 1; background-color: #f0fdf4; padding: 10px; border-radius: 6px; border-left: 4px solid #22c55e;">
+                    <span style="color: #166534; font-size: 10px; font-weight: bold; text-transform: uppercase; letter-spacing: 0.5px; display: block; margin-bottom: 6px;">Valor Nuevo</span>
+                    ${renderList(newArray, '#14532d')}
+                  </div>
+                </div>
+              </li>
+            `);
+            return; 
+          }
+
           if (oldVal === undefined) {
             let handledAddition = false;
             switch (key) {
               case 'motivo':
               case 'evento':
+              case 'Fechas afectadas':
+              case 'Total de registros modificados':
+              case 'Alumnos con nuevas observaciones':
                 const label = key.charAt(0).toUpperCase() + key.slice(1);
                 changes.push(`<li><b>${label}:</b> <span style="color: #22c55e;">${formatVal(newVal)}</span></li>`);
                 handledAddition = true;

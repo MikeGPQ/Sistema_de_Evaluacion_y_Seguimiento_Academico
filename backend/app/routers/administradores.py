@@ -57,13 +57,12 @@ def update_admin(numero_empleado: str, admin_data: AdminUpdate, db: Session = De
     if not admin:
         raise HTTPException(status_code=404, detail="Administrador no encontrado.")
 
-    old_values = {
-        "nombre": admin.nombre,
-        "apellido_paterno": admin.apellido_paterno,
-        "apellido_materno": admin.apellido_materno,
-        "email_personal": admin.email_personal,
-        "email_institucional": admin.email_institucional,
-        "is_active": admin.is_active
+    old_nombre_completo = " ".join(filter(None, [admin.nombre, admin.apellido_paterno, admin.apellido_materno])).strip()
+    old_state = {
+        "Nombre completo": old_nombre_completo,
+        "Correo personal": admin.email_personal,
+        "Correo institucional": admin.email_institucional,
+        "Estatus Activo": admin.is_active
     }
 
     if admin_data.email_personal != admin.email_personal:
@@ -90,24 +89,32 @@ def update_admin(numero_empleado: str, admin_data: AdminUpdate, db: Session = De
         if user:
             user.email = admin_data.email_institucional if admin_data.email_institucional else admin_data.email_personal
 
-        new_values = {
-            "nombre": admin.nombre,
-            "apellido_paterno": admin.apellido_paterno,
-            "apellido_materno": admin.apellido_materno,
-            "email_personal": admin.email_personal,
-            "email_institucional": admin.email_institucional,
-            "is_active": admin.is_active
+        new_nombre_completo = " ".join(filter(None, [admin.nombre, admin.apellido_paterno, admin.apellido_materno])).strip()
+        new_state = {
+            "Nombre completo": new_nombre_completo,
+            "Correo personal": admin.email_personal,
+            "Correo institucional": admin.email_institucional,
+            "Estatus Activo": admin.is_active
         }
 
-        log_audit_event(
-            db=db,
-            user_identifier=admin_data.usuario_id,
-            action="UPDATE",
-            entity_name="administrators",
-            entity_id=numero_empleado,
-            old_values=old_values,
-            new_values=new_values
-        )
+        old_values_log = {}
+        new_values_log = {}
+
+        for key in old_state:
+            if old_state[key] != new_state[key]:
+                old_values_log[key] = old_state[key]
+                new_values_log[key] = new_state[key]
+
+        if new_values_log:
+            log_audit_event(
+                db=db,
+                user_identifier=admin_data.usuario_id,
+                action="UPDATE",
+                entity_name="administrators",
+                entity_id=numero_empleado,
+                old_values=old_values_log,
+                new_values=new_values_log
+            )
 
         db.commit()
         return {
@@ -227,6 +234,8 @@ def register_admin(admin_data: AdminCreate, db: Session = Depends(get_db)):
         )
         db.add(new_admin)
 
+        nombreCompleto = admin_data.nombre + " " + admin_data.apellido_paterno + " " +  admin_data.apellido_materno
+
         log_audit_event(
             db=db,
             user_identifier=admin_data.usuario_id,
@@ -236,11 +245,9 @@ def register_admin(admin_data: AdminCreate, db: Session = Depends(get_db)):
             old_values=None,
             new_values={
                 "numero_empleado": nuevo_numero_empleado,
-                "nombre": admin_data.nombre,
-                "apellido_paterno": admin_data.apellido_paterno,
-                "apellido_materno": admin_data.apellido_materno,
-                "email_personal": admin_data.email_personal,
-                "email_institucional": admin_data.email_institucional,
+                "nombre": nombreCompleto,
+                "email personal": admin_data.email_personal,
+                "email institucional": admin_data.email_institucional,
             }
         )
 

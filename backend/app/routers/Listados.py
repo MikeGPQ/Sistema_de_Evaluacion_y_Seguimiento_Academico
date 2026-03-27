@@ -178,9 +178,11 @@ def cambiar_estatus(
                 user_identifier=usuario_id,
                 action="UPDATE",
                 entity_name="student_academic_profiles",
-                entity_id=str(perfil.id),
-                old_values=old_status_values,
-                new_values={"status_id": status_id, "estatus_nombre": nuevo_estatus.name}
+                entity_id=matricula, 
+                old_values=None,   
+                new_values={
+                    "evento": f"El estatus del alumno {matricula} cambió a: {nuevo_estatus.name.replace('_', ' ').capitalize()}"
+                }
             )
 
         db.commit()

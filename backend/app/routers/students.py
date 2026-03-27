@@ -14,6 +14,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import func, or_
 from passlib.context import CryptContext
 from typing import Optional
+from sqlalchemy import cast, Integer
 
 from app.models.enrollment import StudentEnrollment
 from app.models.academic_group import AcademicGroup
@@ -181,8 +182,15 @@ def register_student(
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Error en datos: {str(e)}")
 
-    max_m = db.query(func.max(Student.matricula)).scalar()
-    final_matricula = str(int(max_m) + 1) if max_m and max_m.isdigit() else "20240001"
+    ultimo_registro = db.query(Student.matricula)\
+    .filter(Student.matricula.op('REGEXP')('^[0-9]+$'))\
+    .order_by(Student.matricula.desc())\
+    .first()
+
+    if ultimo_registro:
+        final_matricula = str(int(ultimo_registro[0]) + 1)
+    else:
+        final_matricula = "20240001"
 
     alumno_existente = db.query(Student).filter(
         (Student.curp == student_in.curp) |
@@ -273,6 +281,31 @@ def register_student(
         )
         db.add(new_user)
 
+        nivel_obj = db.query(AcademicLevel).filter(AcademicLevel.id == student_in.nivel_id).first()
+        nivel_nombre = nivel_obj.name if nivel_obj else "Desconocido"
+
+        carrera_obj = db.query(AcademicProgram).filter(AcademicProgram.id == student_in.career_id).first()
+        carrera_nombre = carrera_obj.name if carrera_obj else "Desconocido"
+
+        escuela_obj = db.query(OriginSchool).filter(OriginSchool.id == student_in.origin_school_id).first()
+        escuela_nombre = escuela_obj.name if escuela_obj else "Desconocida"
+
+        partes_nombre = [student_in.nombre, student_in.apellido_paterno, student_in.apellido_materno]
+        nombre_completo = " ".join(filter(None, partes_nombre)).strip()
+
+        addr = student_in.address
+        partes_direccion = [
+            f"{addr.calle} {addr.numero_domicilio}".strip(),
+            addr.colonia,
+            addr.codigo_postal,
+            addr.municipio,
+            addr.estado
+        ]
+        direccion_completa = ", ".join(filter(None, partes_direccion))
+
+        estado_foto = "Sí" if foto_perfil else "No"
+        estado_certificado = "Sí" if cert_file_id else "No"
+
         log_audit_event(
             db=db,
             user_identifier=data_dict.get('usuario_id', 'Sistema'),
@@ -280,7 +313,20 @@ def register_student(
             entity_name="students",
             entity_id=final_matricula,
             old_values=None,
-            new_values={"matricula": final_matricula, "nombre": student_in.nombre, "curp": student_in.curp}
+            new_values={
+                "Nombre completo": nombre_completo,
+                "student_matricula": final_matricula,
+                "nivel_academico": nivel_nombre,
+                "CURP": student_in.curp,
+                "Programa académico": carrera_nombre,
+                "Escuela de procedencia": escuela_nombre,
+                "Promedio de procedencia": student_in.promedio_procedencia,
+                "Dirección completa": direccion_completa,
+                "Correo personal": student_in.email_personal,
+                "Correo institucional": student_in.email_institucional,
+                "Foto de perfil subida": estado_foto,
+                "Certificado subido": estado_certificado
+            }
         )
 
         db.commit()
@@ -493,6 +539,20 @@ async def importar_alumnos(file: UploadFile = File(...), usuario_id: str = Form(
         db.rollback()
         return JSONResponse(status_code=400, content={"detail": f"Las filas {', '.join([str(e['fila']) for e in errores_validacion])} tienen errores.", "errores_detalle": errores_validacion})
 
+    if registros_nuevos > 0:
+        log_audit_event(
+            db=db,
+            user_identifier=usuario_id, 
+            action="CREATE",
+            entity_name="students",
+            entity_id="Importación Masiva", 
+            old_values=None,
+            new_values={
+                "evento": f"Importación masiva de {registros_nuevos} alumno(s)"
+            }
+        )
+
+
     db.commit()
     return {"message": f"{registros_nuevos} alumnos creados correctamente.", "data": credenciales_generadas}
 
@@ -575,6 +635,24 @@ def update_student(
     if db.query(Student).filter(Student.email_personal == nuevo_email, Student.matricula != matricula).first():
         raise HTTPException(status_code=400, detail="Este correo personal ya está en uso por otro alumno.")
 
+    old_career = db.query(AcademicProgram).filter(AcademicProgram.id == perfil.career_id).first() if perfil else None
+    old_career_name = old_career.name if old_career else "Desconocido"
+
+    old_school = db.query(OriginSchool).filter(OriginSchool.id == perfil.origin_school_id).first() if perfil else None
+    old_school_name = old_school.name if old_school else "Desconocida"
+
+    old_state = {
+        "Nombre completo": " ".join(filter(None, [student.nombre, student.apellido_paterno, student.apellido_materno])).strip(),
+        "CURP": student.curp,
+        "Correo personal": student.email_personal,
+        "Correo institucional": student.email_institucional,
+        "Programa académico": old_career_name,
+        "Escuela de procedencia": old_school_name,
+        "Dirección completa": ", ".join(filter(None, [f"{address.calle} {address.numero_domicilio}".strip(), address.colonia, address.codigo_postal, address.municipio, address.estado])) if address else "",
+        "Foto de perfil subida": "Sí" if student.foto_id else "No",
+        "Certificado subido": "Sí" if (perfil and perfil.certificado_id) else "No"
+    }
+
     student.nombre = data_dict.get('nombre', student.nombre)
     student.apellido_paterno = data_dict.get('apellido_paterno', student.apellido_paterno)
     student.apellido_materno = data_dict.get('apellido_materno', student.apellido_materno)
@@ -609,8 +687,44 @@ def update_student(
         db.flush()
         perfil.certificado_id = cert_file.id
 
+    new_career = db.query(AcademicProgram).filter(AcademicProgram.id == perfil.career_id).first() if perfil else None
+    new_career_name = new_career.name if new_career else "Desconocido"
+
+    new_school = db.query(OriginSchool).filter(OriginSchool.id == perfil.origin_school_id).first() if perfil else None
+    new_school_name = new_school.name if new_school else "Desconocida"
+
+    new_state = {
+        "Nombre completo": " ".join(filter(None, [student.nombre, student.apellido_paterno, student.apellido_materno])).strip(),
+        "CURP": student.curp,
+        "Correo personal": student.email_personal,
+        "Correo institucional": student.email_institucional,
+        "Programa académico": new_career_name,
+        "Escuela de procedencia": new_school_name,
+        "Dirección completa": ", ".join(filter(None, [f"{address.calle} {address.numero_domicilio}".strip(), address.colonia, address.codigo_postal, address.municipio, address.estado])) if address else "",
+        "Foto de perfil subida": "Sí" if student.foto_id else "No",
+        "Certificado subido": "Sí" if (perfil and perfil.certificado_id) else "No"
+    }
+
+    old_values_log = {}
+    new_values_log = {}
+
+    for key in old_state:
+        if old_state[key] != new_state[key]:
+            old_values_log[key] = old_state[key]
+            new_values_log[key] = new_state[key]
+
     try:
-        log_audit_event(db=db, user_identifier=data_dict.get('usuario_id', 'Sistema'), action="UPDATE", entity_name="students", entity_id=matricula, old_values={}, new_values={"matricula": matricula, "actualizacion": True})
+        if new_values_log:
+            log_audit_event(
+                db=db, 
+                user_identifier=data_dict.get('usuario_id', 'Sistema'), 
+                action="UPDATE", 
+                entity_name="students", 
+                entity_id=matricula, 
+                old_values=old_values_log, 
+                new_values=new_values_log
+            )
+        
         db.commit()
         return {"status": "success", "message": "Alumno actualizado correctamente"}
     except Exception as e:

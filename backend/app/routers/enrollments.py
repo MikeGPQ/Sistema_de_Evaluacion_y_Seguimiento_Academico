@@ -288,15 +288,20 @@ def guardar_carga_academica(matricula: str, request: GuardarCargaRequest, db: Se
             StudentEnrollment.academic_profile_id == perfil.id
         ).all()
         
+        materias_viejas = []
+        for insc in inscripciones_viejas:
+            materia_nombre = insc.academic_group.subject.nombre if insc.academic_group and insc.academic_group.subject else f"Grupo {insc.academic_group_id}"
+            materias_viejas.append(materia_nombre)
+            
         old_values = {
-            "grupos_inscritos": [insc.academic_group_id for insc in inscripciones_viejas]
+            "Materias inscritas": materias_viejas
         }
         
         db.query(StudentEnrollment).filter(
             StudentEnrollment.academic_profile_id == perfil.id
         ).delete()
 
-        nuevos_grupos = []
+        materias_nuevas = []
         for materia in request.materias:
             nueva_inscripcion = StudentEnrollment(
                 student_matricula=matricula,
@@ -306,21 +311,25 @@ def guardar_carga_academica(matricula: str, request: GuardarCargaRequest, db: Se
                 is_retake=materia.is_retake
             )
             db.add(nueva_inscripcion)
-            nuevos_grupos.append(materia.group_id)
+            
+            grupo_obj = next((g for g in grupos_a_inscribir if g.id == materia.group_id), None)
+            materia_nom = grupo_obj.subject.nombre if grupo_obj and grupo_obj.subject else f"Grupo {materia.group_id}"
+            materias_nuevas.append(materia_nom)
 
         new_values = {
-            "grupos_inscritos": nuevos_grupos
+            "Materias inscritas": materias_nuevas
         }
 
-        log_audit_event(
-            db=db,
-            user_identifier=request.usuario_id,
-            action="UPDATE",
-            entity_name="student_enrollments",
-            entity_id=matricula,
-            old_values=old_values,
-            new_values=new_values
-        )
+        if sorted(materias_viejas) != sorted(materias_nuevas):
+            log_audit_event(
+                db=db,
+                user_identifier=request.usuario_id,
+                action="UPDATE",
+                entity_name="student_enrollments",
+                entity_id=matricula,
+                old_values=old_values,
+                new_values=new_values
+            )
 
         db.commit()
     except Exception as e:
