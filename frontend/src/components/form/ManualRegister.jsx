@@ -66,6 +66,7 @@ const calcularLetrasCURP = (nombre, paterno, materno) => {
 };
 
 export default function ManualRegister({ isOpen, onClose, alumnoAEditar }) {
+   const [levels, setLevels] = useState([]);
   const { user } = useAuth();
   const [careers, setCareers] = useState([]);
   const [schools, setSchools] = useState([]);
@@ -82,14 +83,22 @@ export default function ManualRegister({ isOpen, onClose, alumnoAEditar }) {
   const [formData, setFormData] = useState({
     matricula: '', 
     nombre: '', apellido_paterno: '', apellido_materno: '',
-    curp: '', email_personal: '', email_institucional: '', career_id: '',
-    origin_school_id: '', promedio_procedencia: '',
+    curp: '', email_personal: '', email_institucional: '', 
+    nivel_id: '', 
+    career_id: '', origin_school_id: '', promedio_procedencia: '',
+    estatus_titulacion: '', 
+    folio_certificado: '', 
     calle: '', numero_domicilio: '', colonia: '',
     codigo_postal: '', municipio: '', estado: 'Campeche',
     status: 'activo',
     foto_id: null, foto_nombre: null,
     certificado_id: null, certificado_nombre: null
   });
+
+  const estatusTitulacionOptions = [
+    { value: 'Licenciatura terminada', label: 'Licenciatura terminada' },
+    { value: 'Opción a titulación', label: 'Maestría como opción a titulación de licenciatura' }
+  ];
 
   const customSelectStyles = {
     control: (base, state) => ({
@@ -128,6 +137,7 @@ export default function ManualRegister({ isOpen, onClose, alumnoAEditar }) {
       client.get('/alumnos/options').then(res => {
         setCareers(res.data.careers || []);
         setSchools(res.data.schools || []);
+        setLevels(res.data.levels || []); 
       }).catch(err => console.error("Error al cargar catálogos:", err));
 
       if (alumnoAEditar) {
@@ -161,9 +171,12 @@ export default function ManualRegister({ isOpen, onClose, alumnoAEditar }) {
                 curp: student.curp,
                 email_personal: student.email_personal,
                 email_institucional: email_inst_limpio,
+                nivel_id: student.nivel_id || '', 
                 career_id: student.career_id,
                 origin_school_id: student.origin_school_id,
                 promedio_procedencia: promedioValor,
+                estatus_titulacion: student.estatus_titulacion || '', 
+                folio_certificado: student.folio_certificado || '', 
                 calle: address.calle,
                 numero_domicilio: address.numero_domicilio,
                 colonia: address.colonia,
@@ -270,6 +283,11 @@ export default function ManualRegister({ isOpen, onClose, alumnoAEditar }) {
     if (typeof finalValue === 'string') {
       finalValue = finalValue.replace(/^\s+/, '');
       finalValue = finalValue.replace(/\s{2,}/g, ' ');
+    }
+
+    if (name === 'folio_certificado') {
+      finalValue = finalValue.replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
+      if (finalValue.length > 8) return; 
     }
 
     if (name === 'nombre' || name === 'apellido_paterno' || name === 'apellido_materno') {
@@ -412,7 +430,17 @@ export default function ManualRegister({ isOpen, onClose, alumnoAEditar }) {
 
   const handleSelectChange = (selectedOption, actionMeta) => {
     const { name } = actionMeta;
-    setFormData(prev => ({ ...prev, [name]: selectedOption ? selectedOption.value : '' }));
+    setFormData(prev => {
+      const newState = { ...prev, [name]: selectedOption ? selectedOption.value : '' };
+     
+      if (name === 'nivel_id') {
+        newState.career_id = '';
+        newState.origin_school_id = '';
+        newState.estatus_titulacion = '';
+        newState.folio_certificado = '';
+      }
+      return newState;
+    });
   };
 
 const handleFileChange = (e) => {
@@ -557,6 +585,30 @@ const handleFileChange = (e) => {
         return Swal.fire('Falta la Fotografía', 'La fotografía es obligatoria para alumnos activos. Este alumno no tiene una foto registrada.', 'warning');
     }
 
+    if (!formData.nivel_id) return Swal.fire('Falta Nivel', 'Debes seleccionar un nivel académico.', 'warning');
+
+    const nivelSeleccionadoForm = levels.find(l => l.id === formData.nivel_id);
+    const isMaestriaSubmit = nivelSeleccionadoForm?.name?.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").includes('maestria');
+
+    if (isMaestriaSubmit) {
+      if (!formData.estatus_titulacion) {
+        return Swal.fire('Falta Estatus', 'Para maestría, debes definir el estatus de titulación.', 'warning');
+      }
+      
+      if (!formData.folio_certificado || formData.folio_certificado.length < 8) {
+        return Swal.fire('Falta Folio', 'El Folio de Certificado es obligatorio para maestría y debe tener entre 8 alfanuméricos.', 'warning');
+      }
+      
+      const tieneCertificadoPrevio = !!formData.certificado_id;
+      if (!files.certificado && !tieneCertificadoPrevio) {
+         return Swal.fire('Falta Certificado', 'El archivo del certificado es obligatorio para ingresos a maestría.', 'warning');
+      }
+    }
+
+    if (isMaestria && !formData.estatus_titulacion) {
+      return Swal.fire('Falta Estatus', 'Para maestría, debes definir el estatus de titulación.', 'warning');
+    }
+
     setIsLoading(true);
 
     let finalEmailInstitucional = null;
@@ -569,9 +621,12 @@ const handleFileChange = (e) => {
     const dataPayload = {
       ...restFormData,
       usuario_id: user?.identifier || user?.email || "Admin Local",
+      nivel_id: parseInt(formData.nivel_id), 
       career_id: parseInt(formData.career_id),
       origin_school_id: parseInt(formData.origin_school_id),
       promedio_procedencia: parseInt(formData.promedio_procedencia, 10),
+      estatus_titulacion: isMaestria ? formData.estatus_titulacion : null, 
+      folio_certificado: isMaestria ? formData.folio_certificado : null,
       email_institucional: finalEmailInstitucional,
       cuatrimestre: 1,
       address: {
@@ -601,9 +656,25 @@ const handleFileChange = (e) => {
     }
   };
 
-  const careerOptions = careers.map(c => ({ value: c.id, label: c.name }));
-  const schoolOptions = schools.map(s => ({ value: s.id, label: s.name }));
   const coloniaOptions = coloniasAPI.map(col => ({ value: col, label: col }));
+  const nivelSeleccionado = levels.find(l => l.id === formData.nivel_id);
+  const nombreNivelNormalizado = nivelSeleccionado?.name?.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+  const isMaestria = nombreNivelNormalizado?.includes('maestria');
+
+  const careerOptions = careers
+    .filter(c => {
+      if (!formData.nivel_id) return true; 
+      const nivelCarrera = c.nivel_academico?.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+      return nivelCarrera === (isMaestria ? 'maestria' : 'licenciatura');
+    })
+    .map(c => ({ value: c.id, label: c.name }));
+
+  const schoolOptions = schools
+    .filter(s => {
+      if (!formData.nivel_id) return true;
+      return s.tipo === (isMaestria ? 'universidad' : 'preparatoria');
+    })
+    .map(s => ({ value: s.id, label: s.name }));
 
   return (
     <Modal isOpen={isOpen} onClose={onClose}>
@@ -681,14 +752,29 @@ const handleFileChange = (e) => {
             Información Académica
           </h4>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+
+          <div className="md:col-span-2">
+            <label className="block text-xs font-bold text-gray-600 mb-1">Nivel Académico <span className="text-red-500">*</span></label>
+            <Select 
+              name="nivel_id" 
+              options={levels.map(l => ({ value: l.id, label: l.name }))} 
+              onChange={handleSelectChange} 
+              value={levels.map(l => ({ value: l.id, label: l.name })).find(opt => opt.value === formData.nivel_id) || null} 
+              placeholder="Seleccione el nivel..." 
+              styles={customSelectStyles} 
+            />
+          </div>
+
             <div className="md:col-span-2">
               <label className="block text-xs font-bold text-gray-600 mb-1">Programa Académico <span className="text-red-500">*</span></label>
               <Select name="career_id" options={careerOptions} onChange={handleSelectChange} value={careerOptions.find(opt => opt.value === formData.career_id) || null} placeholder="Seleccione una carrera..." styles={customSelectStyles} />
             </div>
+
             <div className="md:col-span-2">
               <label className="block text-xs font-bold text-gray-600 mb-1">Escuela de Procedencia <span className="text-red-500">*</span></label>
               <Select name="origin_school_id" options={schoolOptions} onChange={handleSelectChange} value={schoolOptions.find(opt => opt.value === formData.origin_school_id) || null} placeholder="Seleccione..." styles={customSelectStyles} />
             </div>
+
             <div className="md:col-span-2">
               <label className="block text-xs font-bold text-gray-600 mb-1">Promedio General <span className="text-red-500">*</span></label>
               <input
@@ -699,6 +785,34 @@ const handleFileChange = (e) => {
               {erroresEnVivo.promedio && <p className="text-xs text-red-600 mt-1.5 font-bold animate-pulse">{erroresEnVivo.promedio}</p>}
               {validacionExitosa.promedio && !erroresEnVivo.promedio && <p className="text-xs text-blue-600 mt-1.5 font-medium">✓ Promedio correcto</p>}
             </div>
+
+            {isMaestria && (
+                <>
+                  <div className="md:col-span-1">
+                    <label className="block text-xs font-bold text-gray-600 mb-1">Estatus de Titulación <span className="text-red-500">*</span></label>
+                    <Select 
+                      name="estatus_titulacion" 
+                      options={estatusTitulacionOptions} 
+                      onChange={handleSelectChange} 
+                      value={estatusTitulacionOptions.find(opt => opt.value === formData.estatus_titulacion) || null} 
+                      placeholder="Seleccione estatus..." 
+                      styles={customSelectStyles} 
+                    />
+                  </div>
+                  <div className="md:col-span-1">
+                    <label className="block text-xs font-bold text-gray-600 mb-1">
+                      Folio de Certificado <span className="text-red-500">*</span>
+                    </label>
+                    <input 
+                      name="folio_certificado" 
+                      value={formData.folio_certificado} 
+                      onChange={handleChange} 
+                      className="w-full border border-gray-300 rounded-md p-2.5 text-sm uppercase focus:border-[#1e3a8a] outline-none" 
+                      placeholder="Ingrese el folio" 
+                    />
+                  </div>
+                </>
+              )}
           </div>
         </div>
 
@@ -773,7 +887,7 @@ const handleFileChange = (e) => {
                       ? `✅ ${files.foto.name}`
                       : alumnoAEditar
                         ? formData.foto_id
-                          ? formData.foto_nombre ? `📷 ${formData.foto_nombre}` : "Actualizar Fotografía (Opcional)"
+                          ? "Actualizar Fotografía (Opcional)"
                           : formData.status?.toLowerCase().includes('baja') ? "Agregar Fotografía (Opcional)" : "Agregar Fotografía *"
                         : "Subir Fotografía *"}
                 </span>
@@ -787,9 +901,9 @@ const handleFileChange = (e) => {
                       ? `✅ ${files.certificado.name}`
                       : alumnoAEditar
                         ? formData.certificado_id
-                          ? formData.certificado_nombre ? `📄 ${formData.certificado_nombre}` : "Actualizar Certificado (Opcional)"
-                          : "Agregar Certificado (Opcional)"
-                        : "Subir Certificado"}
+                          ? "Actualizar Certificado"
+                          : (isMaestria ? "Agregar Certificado *" : "Agregar Certificado (Opcional)")
+                        : (isMaestria ? "Subir Certificado *" : "Subir Certificado (Opcional)")}
                 </span>
               </label>
             </div>
@@ -803,7 +917,7 @@ const handleFileChange = (e) => {
               Cancelar
             </button>
             {(() => {
-              const camposEditables = ['nombre', 'apellido_paterno', 'apellido_materno', 'curp', 'email_personal', 'email_institucional', 'career_id', 'origin_school_id', 'calle', 'numero_domicilio', 'colonia', 'codigo_postal', 'municipio', 'estado'];
+              const camposEditables = ['nombre', 'apellido_paterno', 'apellido_materno', 'curp', 'email_personal', 'email_institucional', 'nivel_id', 'career_id', 'origin_school_id', 'estatus_titulacion', 'folio_certificado', 'calle', 'numero_domicilio', 'colonia', 'codigo_postal', 'municipio', 'estado'];
               const sinCambios = !!(alumnoAEditar && datosOriginales && !camposEditables.some(c => String(formData[c] ?? '') !== String(datosOriginales[c] ?? '')) && !files.foto && !files.certificado);
               const deshabilitado = isLoading || !!erroresEnVivo.curp || !!erroresEnVivo.email || !!erroresEnVivo.promedio || sinCambios;
               return (

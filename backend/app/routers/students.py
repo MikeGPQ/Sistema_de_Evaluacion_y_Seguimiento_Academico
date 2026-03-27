@@ -38,6 +38,7 @@ from app.models.role import Role
 from app.schemas.student import StudentCreate, OptionsResponse
 from app.core.security import get_password_hash
 from app.services.audit_service import log_audit_event
+from app.models.titulation_status import TitulationStatus
 
 pwd_context = CryptContext(
     schemes=["bcrypt"],
@@ -243,16 +244,26 @@ def register_student(
         activo_status = db.query(StudentStatus).filter(StudentStatus.name == 'activo').first()
         periodo_activo = db.query(AcademicPeriod).filter(AcademicPeriod.is_active == True).first()
 
+        estatus_titulacion_id = None
+        if getattr(student_in, 'estatus_titulacion', None):
+            estatus_obj = db.query(TitulationStatus).filter(
+                TitulationStatus.description == student_in.estatus_titulacion
+            ).first()
+            if estatus_obj:
+                estatus_titulacion_id = estatus_obj.id
+
         new_profile = StudentAcademicProfile(
             student_matricula=final_matricula,
-            nivel_id=1,
+            nivel_id=student_in.nivel_id,  
             career_id=student_in.career_id,
             origin_school_id=student_in.origin_school_id,
             period_id=periodo_activo.id if periodo_activo else 1,
             quarter_actual_id=1,
             status_id=data_dict.get('status_id') or (activo_status.id if activo_status else 1),
             promedio_procedencia=student_in.promedio_procedencia,
-            certificado_id=cert_file_id
+            certificado_id=cert_file_id,
+            folio_certificado=getattr(student_in, 'folio_certificado', None),
+            estatus_titulacion_id=estatus_titulacion_id
         )
         db.add(new_profile)
 
@@ -588,13 +599,19 @@ def get_student_detail(matricula: str, db: Session = Depends(get_db)):
             "curp": student.curp,
             "email_personal": student.email_personal,
             "email_institucional": student.email_institucional,
+            "nivel_id": perfil.nivel_id if perfil else None,
             "career_id": perfil.career_id if perfil else None,
             "carrera_nombre": perfil.career.name if perfil and getattr(perfil, 'career', None) else "Sin Carrera",
             "origin_school_id": perfil.origin_school_id if perfil else None,
             "promedio_procedencia": perfil.promedio_procedencia if perfil else None,
+            "estatus_titulacion": perfil.estatus_titulacion.description if perfil and getattr(perfil, 'estatus_titulacion', None) else None,
+            "folio_certificado": perfil.folio_certificado if perfil else None,
             "status_id": perfil.status_id if perfil else None,
             "status": perfil.status.name if perfil and perfil.status else None,
             "foto_id": student.foto_id,
+            "foto_nombre": student.foto_perfil.file_name if student.foto_perfil else None, 
+            "certificado_id": perfil.certificado_id if perfil else None, 
+            "certificado_nombre": perfil.certificado_file.file_name if perfil and getattr(perfil, 'certificado_file', None) else None, 
             "promedio_general": promedio_general
         },
         "address": {
@@ -663,6 +680,21 @@ def update_student(
     if perfil:
         perfil.career_id = data_dict.get('career_id', perfil.career_id)
         perfil.origin_school_id = data_dict.get('origin_school_id', perfil.origin_school_id)
+        
+        if 'nivel_id' in data_dict:
+            perfil.nivel_id = int(data_dict['nivel_id'])
+            
+        if 'folio_certificado' in data_dict:
+            perfil.folio_certificado = data_dict['folio_certificado']
+            
+        if 'estatus_titulacion' in data_dict:
+            if data_dict['estatus_titulacion']:
+                estatus_obj = db.query(TitulationStatus).filter(
+                    TitulationStatus.description == data_dict['estatus_titulacion']
+                ).first()
+                perfil.estatus_titulacion_id = estatus_obj.id if estatus_obj else perfil.estatus_titulacion_id
+            else:
+                perfil.estatus_titulacion_id = None
 
     if address:
         addr_data = data_dict.get('address', {})
