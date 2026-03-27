@@ -754,14 +754,17 @@ const handleFileChange = (e) => {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
 
           <div className="md:col-span-2">
-            <label className="block text-xs font-bold text-gray-600 mb-1">Nivel Académico <span className="text-red-500">*</span></label>
+            <label className="block text-xs font-bold text-gray-600 mb-1">
+              Nivel Académico <span className="text-red-500">*</span>
+            </label>
             <Select 
               name="nivel_id" 
               options={levels.map(l => ({ value: l.id, label: l.name }))} 
               onChange={handleSelectChange} 
               value={levels.map(l => ({ value: l.id, label: l.name })).find(opt => opt.value === formData.nivel_id) || null} 
               placeholder="Seleccione el nivel..." 
-              styles={customSelectStyles} 
+              styles={customSelectStyles}
+              isDisabled={!!alumnoAEditar} 
             />
           </div>
 
