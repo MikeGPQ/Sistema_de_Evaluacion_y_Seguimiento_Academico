@@ -8,6 +8,7 @@ import { useNavigate } from 'react-router-dom';
 import client from '../../lib/axios';
 import { useAuth } from '../../hooks/AuthContext';
 import ManualRegister from '../../components/form/ManualRegister';
+import KardexModal from './KardexModal';
 import Swal from 'sweetalert2';
 
 const ListadoAlumnos = () => {
@@ -21,6 +22,7 @@ const ListadoAlumnos = () => {
   
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [alumnoAEditar, setAlumnoAEditar] = useState(null);
+  const [kardexMatricula, setKardexMatricula] = useState(null);
 
   const [modalEstatusOpen, setModalEstatusOpen] = useState(false);
   const [alumnoSeleccionado, setAlumnoSeleccionado] = useState(null);
@@ -405,9 +407,17 @@ const ListadoAlumnos = () => {
                             <Eye className="w-4 h-4" />
                           </button>
 
-                          <button 
-                            onClick={() => handleEditarAlumno(alumno)} 
-                            className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors border border-transparent hover:border-blue-100" 
+                          <button
+                            onClick={() => setKardexMatricula(alumno.matricula)}
+                            className="p-1.5 text-gray-400 hover:text-purple-600 hover:bg-purple-50 rounded-lg transition-colors border border-transparent hover:border-purple-100"
+                            title="Ver Kárdex"
+                          >
+                            <BookOpen className="w-4 h-4" />
+                          </button>
+
+                          <button
+                            onClick={() => handleEditarAlumno(alumno)}
+                            className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors border border-transparent hover:border-blue-100"
                             title="Editar"
                           >
                             <Edit2 className="w-4 h-4" />
@@ -457,11 +467,18 @@ const ListadoAlumnos = () => {
         )}
       </div>
 
-      <ManualRegister 
-        isOpen={isModalOpen} 
-        onClose={handleCerrarModal} 
-        alumnoAEditar={alumnoAEditar} 
+      <ManualRegister
+        isOpen={isModalOpen}
+        onClose={handleCerrarModal}
+        alumnoAEditar={alumnoAEditar}
       />
+
+      {kardexMatricula && (
+        <KardexModal
+          matricula={kardexMatricula}
+          onClose={() => setKardexMatricula(null)}
+        />
+      )}
 
       {modalEstatusOpen && alumnoSeleccionado && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in">
