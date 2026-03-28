@@ -25,11 +25,18 @@ class PeriodSelect(BaseModel):
     is_active: bool
     model_config = ConfigDict(from_attributes=True)
 
+#  Nuevo esquema para Estatus de Titulación
+class TitulationStatusSelect(BaseModel):
+    id: int
+    description: str
+    model_config = ConfigDict(from_attributes=True)
+
 class OptionsResponse(BaseModel):
     careers: List[CareerSelect]
     schools: List[SchoolSelect]
     levels: List[LevelSelect]
     periods: List[PeriodSelect]
+    titulation_statuses: List[TitulationStatusSelect] = [] 
 
 class AddressCreate(BaseModel):
     calle: str
@@ -48,7 +55,8 @@ class StudentCreate(BaseModel):
     email_personal: EmailStr
     email_institucional: Optional[str] = None
 
-    nivel_id: Optional[int] = None
+    nivel_id: int = 1 #   Por defecto es 1 (Licenciatura)
+    titulation_status_id: Optional[int] = None #   Exclusivo de maestría
     career_id: int
     origin_school_id: int
     promedio_procedencia: int

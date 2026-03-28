@@ -31,6 +31,8 @@ from app.models.academic_level import AcademicLevel
 from app.models.origin_school import OriginSchool
 from app.models.grade_value import GradeValue
 from app.models.student_period_gpa import StudentPeriodGpa
+from app.models.titulation_status import TitulationStatus 
+
 from sqlalchemy import case
 from app.models.user import User
 from app.models.role import Role
@@ -52,7 +54,14 @@ def get_form_options(db: Session = Depends(get_db)):
     schools = db.query(OriginSchool).filter(OriginSchool.is_active == True).all()
     levels = db.query(AcademicLevel).all()
     periods = db.query(AcademicPeriod).all()
-    return {"careers": careers, "schools": schools, "levels": levels, "periods": periods}
+    titulaciones = db.query(TitulationStatus).all()
+    return {
+        "careers": careers, 
+        "schools": schools, 
+        "levels": levels, 
+        "periods": periods, 
+        "titulation_statuses": titulaciones
+    }
 
 @router.post("/set-base-id")
 def set_base_id(nueva_matricula: str = Form(...), db: Session = Depends(get_db)):
@@ -171,7 +180,7 @@ def listar_alumnos(
 @router.post("/register", status_code=status.HTTP_201_CREATED)
 def register_student(
     student_data: str = Form(...),
-    foto_perfil: UploadFile = File(...),
+    foto_perfil: UploadFile = File(None),
     certificado: UploadFile = File(None),
     db: Session = Depends(get_db)
 ):
@@ -181,31 +190,61 @@ def register_student(
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Error en datos: {str(e)}")
 
-    max_m = db.query(func.max(Student.matricula)).scalar()
-    final_matricula = str(int(max_m) + 1) if max_m and max_m.isdigit() else "20240001"
-
-    alumno_existente = db.query(Student).filter(
-        (Student.curp == student_in.curp) |
-        (Student.email_personal == student_in.email_personal)
-    ).first()
+    #  REGLA 6.4 - LÓGICA DE DUPLICADOS PARA MAESTRÍA
+    alumno_existente = db.query(Student).filter(Student.curp == student_in.curp).first()
+    es_nuevo_usuario = True
+    final_matricula = None
 
     if alumno_existente:
-        if alumno_existente.curp == student_in.curp:
-            raise HTTPException(status_code=400, detail="Esta CURP ya se encuentra registrada.")
-        if alumno_existente.email_personal == student_in.email_personal:
+        if student_in.nivel_id == 2:
+            # Es Maestría y ya existe: Conservamos la cuenta y su matrícula
+            final_matricula = alumno_existente.matricula
+            es_nuevo_usuario = False
+            alumno_existente.nombre = student_in.nombre
+            alumno_existente.apellido_paterno = student_in.apellido_paterno
+            alumno_existente.apellido_materno = student_in.apellido_materno
+        else:
+            raise HTTPException(status_code=400, detail="Esta CURP ya se encuentra registrada en otra Licenciatura.")
+    else:
+        # Validar el correo solo si es un alumno completamente nuevo
+        correo_existente = db.query(Student).filter(Student.email_personal == student_in.email_personal).first()
+        if correo_existente:
             raise HTTPException(status_code=400, detail="Este correo personal ya está en uso.")
+            
+        # Generar nueva matrícula solo si es nuevo
+        max_m = db.query(func.max(Student.matricula)).scalar()
+        final_matricula = str(int(max_m) + 1) if max_m and max_m.isdigit() else "20240001"
 
     try:
-        foto_content = foto_perfil.file.read()
-        foto_file = FileModel(
-            file_name=foto_perfil.filename,
-            mime_type=foto_perfil.content_type or "image/jpeg",
-            size_bytes=len(foto_content),
-            file_content=foto_content
-        )
-        db.add(foto_file)
-        db.flush()
+        foto_file_id = None
+        # SOLO CREAMOS LA FOTO Y EL ALUMNO SI ES NUEVO
+        if es_nuevo_usuario:
+            if foto_perfil:
+                foto_content = foto_perfil.file.read()
+                foto_file = FileModel(
+                    file_name=foto_perfil.filename,
+                    mime_type=foto_perfil.content_type or "image/jpeg",
+                    size_bytes=len(foto_content),
+                    file_content=foto_content
+                )
+                db.add(foto_file)
+                db.flush()
+                foto_file_id = foto_file.id
 
+            new_student = Student(
+                matricula=final_matricula,
+                nombre=student_in.nombre,
+                apellido_paterno=student_in.apellido_paterno,
+                apellido_materno=student_in.apellido_materno,
+                curp=student_in.curp,
+                email_personal=student_in.email_personal,
+                email_institucional=student_in.email_institucional,
+                foto_id=foto_file_id
+            )
+            db.add(new_student)
+            db.flush()
+        
+        # EL PERFIL ACADÉMICO Y CERTIFICADO SE CREAN SIEMPRE (Nuevo o Maestría)
         cert_file_id = None
         if certificado:
             cert_content = certificado.file.read()
@@ -219,25 +258,13 @@ def register_student(
             db.flush()
             cert_file_id = cert_file.id
 
-        new_student = Student(
-            matricula=final_matricula,
-            nombre=student_in.nombre,
-            apellido_paterno=student_in.apellido_paterno,
-            apellido_materno=student_in.apellido_materno,
-            curp=student_in.curp,
-            email_personal=student_in.email_personal,
-            email_institucional=student_in.email_institucional,
-            foto_id=foto_file.id
-        )
-        db.add(new_student)
-        db.flush()
-        
         activo_status = db.query(StudentStatus).filter(StudentStatus.name == 'activo').first()
         periodo_activo = db.query(AcademicPeriod).filter(AcademicPeriod.is_active == True).first()
 
         new_profile = StudentAcademicProfile(
             student_matricula=final_matricula,
-            nivel_id=1,
+            nivel_id=student_in.nivel_id, 
+            titulation_status_id=getattr(student_in, 'titulation_status_id', None), 
             career_id=student_in.career_id,
             origin_school_id=student_in.origin_school_id,
             period_id=periodo_activo.id if periodo_activo else 1,
@@ -248,81 +275,92 @@ def register_student(
         )
         db.add(new_profile)
 
-        new_address = StudentAddress(
-            student_matricula=final_matricula,
-            calle=student_in.address.calle,
-            numero_domicilio=student_in.address.numero_domicilio,
-            colonia=student_in.address.colonia,
-            codigo_postal=student_in.address.codigo_postal,
-            municipio=student_in.address.municipio,
-            estado=student_in.address.estado
-        )
-        db.add(new_address)
+        # DIRECCIÓN, USUARIO, CONTRASEÑA Y AUDITORÍA SOLO SE CREAN SI ES NUEVO
+        raw_pass = None
+        if es_nuevo_usuario:
+            new_address = StudentAddress(
+                student_matricula=final_matricula,
+                calle=student_in.address.calle,
+                numero_domicilio=student_in.address.numero_domicilio,
+                colonia=student_in.address.colonia,
+                codigo_postal=student_in.address.codigo_postal,
+                municipio=student_in.address.municipio,
+                estado=student_in.address.estado
+            )
+            db.add(new_address)
 
-        alphabet = string.ascii_letters + string.digits
-        raw_pass = ''.join(secrets.choice(alphabet) for _ in range(10))
-        hashed_pw = get_password_hash(raw_pass)
+            alphabet = string.ascii_letters + string.digits
+            raw_pass = ''.join(secrets.choice(alphabet) for _ in range(10))
+            hashed_pw = get_password_hash(raw_pass)
 
-        alumno_role = db.query(Role).filter(Role.name == 'alumno').first()
-        new_user = User(
-            identifier=final_matricula,
-            email=student_in.email_personal,
-            password_hash=hashed_pw,
-            role_id=alumno_role.id if alumno_role else 3,
-            is_temp_password=True
-        )
-        db.add(new_user)
+            alumno_role = db.query(Role).filter(Role.name == 'alumno').first()
+            new_user = User(
+                identifier=final_matricula,
+                email=student_in.email_personal,
+                password_hash=hashed_pw,
+                role_id=alumno_role.id if alumno_role else 3,
+                is_temp_password=True
+            )
+            db.add(new_user)
 
-        log_audit_event(
-            db=db,
-            user_identifier=data_dict.get('usuario_id', 'Sistema'),
-            action="CREATE",
-            entity_name="students",
-            entity_id=final_matricula,
-            old_values=None,
-            new_values={"matricula": final_matricula, "nombre": student_in.nombre, "curp": student_in.curp}
-        )
+            log_audit_event(
+                db=db,
+                user_identifier=data_dict.get('usuario_id', 'Sistema'),
+                action="CREATE",
+                entity_name="students",
+                entity_id=final_matricula,
+                old_values=None,
+                new_values={"matricula": final_matricula, "nombre": student_in.nombre, "curp": student_in.curp}
+            )
 
         db.commit()
 
-        try:
-            remitente = "sesacorp10@gmail.com"
-            password_aplicacion = "enecpjvwkoseedip"
-            msg = MIMEMultipart()
-            msg['From'] = remitente
-            msg['To'] = student_in.email_personal
-            msg['Subject'] = "¡Bienvenido a SESA! Tu alta ha sido exitosa"
+        # ENVÍO DE EMAIL SOLO SI ES NUEVO
+        if es_nuevo_usuario and raw_pass:
+            try:
+                remitente = "sesacorp10@gmail.com"
+                password_aplicacion = "enecpjvwkoseedip"
+                msg = MIMEMultipart()
+                msg['From'] = remitente
+                msg['To'] = student_in.email_personal
+                msg['Subject'] = "¡Bienvenido a SESA! Tu alta ha sido exitosa"
 
-            cuerpo_html = f"""
-            <!DOCTYPE html>
-            <html>
-            <body style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f4f7f6; margin: 0; padding: 20px;">
-                <div style="max-width: 600px; margin: 0 auto; background-color: #ffffff; border-radius: 8px; overflow: hidden; box-shadow: 0 4px 10px rgba(0,0,0,0.1);">
-                    <div style="background-color: #4f46e5; padding: 25px; text-align: center;">
-                        <h1 style="margin: 0; font-size: 24px; color: #ffffff;">Sistema Escolar SESA</h1>
-                    </div>
-                    <div style="padding: 30px; color: #374151; line-height: 1.6;">
-                        <h2 style="margin-top: 0; font-size: 20px; color: #111827;">¡Hola, {student_in.nombre}!</h2>
-                        <p style="font-size: 16px;">Tu alta se ha procesado exitosamente.</p>
-                        <div style="background-color: #f8fafc; border-left: 5px solid #4f46e5; padding: 20px; margin: 30px 0;">
-                            <p style="margin: 8px 0; font-size: 16px;"><strong>Matrícula:</strong> {final_matricula}</p>
-                            <p style="margin: 8px 0; font-size: 16px;"><strong>Contraseña:</strong> {raw_pass}</p>
+                cuerpo_html = f"""
+                <!DOCTYPE html>
+                <html>
+                <body style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f4f7f6; margin: 0; padding: 20px;">
+                    <div style="max-width: 600px; margin: 0 auto; background-color: #ffffff; border-radius: 8px; overflow: hidden; box-shadow: 0 4px 10px rgba(0,0,0,0.1);">
+                        <div style="background-color: #4f46e5; padding: 25px; text-align: center;">
+                            <h1 style="margin: 0; font-size: 24px; color: #ffffff;">Sistema Escolar SESA</h1>
+                        </div>
+                        <div style="padding: 30px; color: #374151; line-height: 1.6;">
+                            <h2 style="margin-top: 0; font-size: 20px; color: #111827;">¡Hola, {student_in.nombre}!</h2>
+                            <p style="font-size: 16px;">Tu alta se ha procesado exitosamente.</p>
+                            <div style="background-color: #f8fafc; border-left: 5px solid #4f46e5; padding: 20px; margin: 30px 0;">
+                                <p style="margin: 8px 0; font-size: 16px;"><strong>Matrícula:</strong> {final_matricula}</p>
+                                <p style="margin: 8px 0; font-size: 16px;"><strong>Contraseña:</strong> {raw_pass}</p>
+                            </div>
                         </div>
                     </div>
-                </div>
-            </body>
-            </html>
-            """
-            msg.attach(MIMEText(cuerpo_html, 'html'))
-            server = smtplib.SMTP('smtp.gmail.com', 587)
-            server.starttls()
-            server.login(remitente, password_aplicacion)
-            server.sendmail(remitente, student_in.email_personal, msg.as_string())
-            server.quit()
-        except Exception as email_err:
-            pass 
+                </body>
+                </html>
+                """
+                msg.attach(MIMEText(cuerpo_html, 'html'))
+                server = smtplib.SMTP('smtp.gmail.com', 587)
+                server.starttls()
+                server.login(remitente, password_aplicacion)
+                server.sendmail(remitente, student_in.email_personal, msg.as_string())
+                server.quit()
+            except Exception as email_err:
+                pass 
 
-        return {"status": "success", "matricula": final_matricula, "temporal_password": raw_pass}
+        mensaje_exito = "Alumno y Perfil guardados correctamente" if es_nuevo_usuario else "Perfil de Maestría agregado a alumno existente (Regla 6.4)"
+        return {
+            "status": "success", 
+            "message": mensaje_exito,
+            "matricula": final_matricula, 
+            "temporal_password": raw_pass if es_nuevo_usuario else "Mantiene su contraseña anterior"
+        }
 
     except Exception as e:
         db.rollback()
@@ -528,6 +566,8 @@ def get_student_detail(matricula: str, db: Session = Depends(get_db)):
             "curp": student.curp,
             "email_personal": student.email_personal,
             "email_institucional": student.email_institucional,
+            "nivel_id": perfil.nivel_id if perfil else None, # 🌟 SPRINT 8
+            "titulation_status_id": getattr(perfil, 'titulation_status_id', None) if perfil else None, # 🌟 SPRINT 8
             "career_id": perfil.career_id if perfil else None,
             "carrera_nombre": perfil.career.name if perfil and getattr(perfil, 'career', None) else "Sin Carrera",
             "origin_school_id": perfil.origin_school_id if perfil else None,
@@ -734,7 +774,6 @@ def calcular_gpas(period_id: Optional[int] = None, db: Session = Depends(get_db)
 
     db.commit()
     return {"message": f"GPA calculado para {upserted} registros.", "total": upserted}
-
 
 @router.get("/historial-gpa/{matricula}", response_model=list)
 def get_historial_gpa(matricula: str, db: Session = Depends(get_db)):
