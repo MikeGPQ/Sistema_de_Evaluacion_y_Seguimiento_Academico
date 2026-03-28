@@ -1,7 +1,7 @@
 import json
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
-from sqlalchemy import or_ 
+from sqlalchemy import or_, and_
 from app.db.database import get_db
 from app.schemas.enrollment import GuardarCargaRequest
 from app.models.student import Student
@@ -39,6 +39,8 @@ def obtener_grupos_disponibles(matricula: str, db: Session = Depends(get_db)):
     if not perfil:
         raise HTTPException(status_code=404, detail="El alumno no tiene un perfil académico activo.")
 
+    nivel_alumno = perfil.nivel.name.lower() if perfil.nivel else "licenciatura"
+    es_maestria = nivel_alumno == "maestria"
     estado_alumno = perfil.status.name.lower() if perfil.status else "activo"
     
     if estado_alumno in ["baja", "baja_temporal", "egresado"]:
@@ -53,43 +55,51 @@ def obtener_grupos_disponibles(matricula: str, db: Session = Depends(get_db)):
     cuatrimestre_actual_num = int(perfil.quarter_actual.external_id) if perfil.quarter_actual and str(perfil.quarter_actual.external_id).isdigit() else 1
     bloquear_grupo_base = cuatrimestre_actual_num > 1
 
-    inscripciones_db = db.query(StudentEnrollment).filter(
-        StudentEnrollment.academic_profile_id == perfil.id
-    ).all()
+    inscripciones_db = db.query(StudentEnrollment).filter(StudentEnrollment.academic_profile_id == perfil.id).all()
     grupos_inscritos = [inscripcion.academic_group_id for inscripcion in inscripciones_db]
+
+    quarter_filter = Subject.quarter_id >= perfil.quarter_actual_id if es_maestria else Subject.quarter_id == perfil.quarter_actual_id
 
     grupos_db = (
         db.query(AcademicGroup)
         .join(Subject, AcademicGroup.subject_id == Subject.id)
         .filter(
-            Subject.quarter_id == perfil.quarter_actual_id,
+            quarter_filter,
             or_(
                 Subject.career_id == perfil.career_id,
-                Subject.career_id.is_(None)
+                and_(
+                    Subject.career_id.is_(None),
+                    Subject.nivel_academico == nivel_alumno 
+                )
             )
         )
         .all()
     )
     
     materias_dict = {}
+    materias_adelanto_dict = {}
     
     for grupo in grupos_db:
         materia = grupo.subject 
         if not materia: continue
             
         es_tronco_comun = materia.career_id is None
+        es_regular = materia.quarter_id == perfil.quarter_actual_id
+        es_adelanto = materia.quarter_id > perfil.quarter_actual_id and es_maestria
 
-        if materia.id not in materias_dict:
-            materias_dict[materia.id] = {
+        if not (es_regular or es_adelanto):
+            continue
+
+        dict_destino = materias_adelanto_dict if es_adelanto else materias_dict
+
+        if materia.id not in dict_destino:
+            dict_destino[materia.id] = {
                 "subject_id": materia.id, "nombre": materia.nombre, 
                 "tipo": "Tronco Común" if es_tronco_comun else "Carrera", 
                 "grupos_disponibles": []
             }
             
-        alumnos_inscritos = db.query(StudentEnrollment).filter(
-            StudentEnrollment.academic_group_id == grupo.id
-        ).count()
-        
+        alumnos_inscritos = db.query(StudentEnrollment).filter(StudentEnrollment.academic_group_id == grupo.id).count()
         cupos_libres = max(0, (grupo.subject.cupo_maximo or 30) - alumnos_inscritos)
 
         horario_texto = "Horario por definir"
@@ -107,7 +117,7 @@ def obtener_grupos_disponibles(matricula: str, db: Session = Depends(get_db)):
             
             horario_texto = " y ".join(horarios_formateados)
 
-        materias_dict[materia.id]["grupos_disponibles"].append({
+        dict_destino[materia.id]["grupos_disponibles"].append({
             "group_id": grupo.id,
             "external_id": grupo.external_id,
             "nombre": grupo.sigad_group.identificador if grupo.sigad_group else str(grupo.id),
@@ -121,8 +131,11 @@ def obtener_grupos_disponibles(matricula: str, db: Session = Depends(get_db)):
         "alumno_matricula": alumno.matricula, "alumno_nombre": nombre_completo.strip().upper(),
         "alumno_cuatrimestre": cuatrimestre_actual_num, "carrera": nombre_carrera,
         "grupo_base_bloqueado": bloquear_grupo_base, "grupo_base": f"{cuatrimestre_actual_num}A" if bloquear_grupo_base else None,
-        "grupos_inscritos": grupos_inscritos, "materias_regulares": list(materias_dict.values()),
-        "materias_recursamiento": [] 
+        "grupos_inscritos": grupos_inscritos,
+        "es_maestria": es_maestria,
+        "materias_regulares": list(materias_dict.values()),
+        "materias_recursamiento": [],
+        "materias_adelanto": list(materias_adelanto_dict.values())
     }
 
 @router.get("/autoservicio/{matricula}/disponibles")
@@ -148,9 +161,7 @@ def obtener_grupos_autoservicio(matricula: str, db: Session = Depends(get_db)):
     nombre_carrera = perfil.career.name if perfil.career else "Sin programa"
     nombre_completo = f"{alumno.nombre} {alumno.apellido_paterno} {alumno.apellido_materno}"
 
-    inscripciones_vigentes = db.query(StudentEnrollment).filter(
-        StudentEnrollment.academic_profile_id == perfil.id
-    ).all()
+    inscripciones_vigentes = db.query(StudentEnrollment).filter(StudentEnrollment.academic_profile_id == perfil.id).all()
     grupos_inscritos = [i.academic_group_id for i in inscripciones_vigentes]
     
     subject_ids_reprobados = [] 
@@ -191,9 +202,7 @@ def obtener_grupos_autoservicio(matricula: str, db: Session = Depends(get_db)):
                 "grupos_disponibles": []
             }
             
-        alumnos_inscritos = db.query(StudentEnrollment).filter(
-            StudentEnrollment.academic_group_id == grupo.id
-        ).count()
+        alumnos_inscritos = db.query(StudentEnrollment).filter(StudentEnrollment.academic_group_id == grupo.id).count()
         cupos_libres = max(0, (grupo.subject.cupo_maximo or 30) - alumnos_inscritos)
 
         horario_texto = "Horario por definir"
@@ -235,15 +244,14 @@ def guardar_carga_academica(matricula: str, request: GuardarCargaRequest, db: Se
     perfil = db.query(StudentAcademicProfile).filter(StudentAcademicProfile.student_matricula == matricula).order_by(StudentAcademicProfile.id.desc()).first()
     if not perfil:
         raise HTTPException(status_code=404, detail="El alumno no tiene un perfil académico activo.")
+        
+    es_maestria = perfil.nivel.name.lower() == "maestria" if perfil.nivel else False
 
     grupos_seleccionados = [m.group_id for m in request.materias]
     grupos_a_inscribir = db.query(AcademicGroup).filter(AcademicGroup.id.in_(grupos_seleccionados)).all()
     
     for grupo in grupos_a_inscribir:
-        inscritos = db.query(StudentEnrollment).filter(
-            StudentEnrollment.academic_group_id == grupo.id
-        ).count()
-        
+        inscritos = db.query(StudentEnrollment).filter(StudentEnrollment.academic_group_id == grupo.id).count()
         ya_estaba_inscrito = db.query(StudentEnrollment).filter(
             StudentEnrollment.academic_group_id == grupo.id,
             StudentEnrollment.academic_profile_id == perfil.id
@@ -253,40 +261,39 @@ def guardar_carga_academica(matricula: str, request: GuardarCargaRequest, db: Se
             identificador = grupo.sigad_group.identificador if grupo.sigad_group else str(grupo.id)
             raise HTTPException(status_code=400, detail=f"El grupo '{identificador}' ya está lleno.")
 
-    horarios_ocupados = [] 
-    for grupo in grupos_a_inscribir:
-        nombre_materia_actual = grupo.subject.nombre if grupo.subject else f"Grupo {grupo.identificador_grupo}"
+    if not es_maestria:
+        horarios_ocupados = [] 
+        for grupo in grupos_a_inscribir:
+            nombre_materia_actual = grupo.subject.nombre if grupo.subject else f"Grupo {grupo.id}"
 
-        for s in grupo.schedules:
-            dia_actual = DIAS_MAP.get(s.dia_semana, "Desconocido")
-            ini_a = time_to_minutes(s.hora_inicio)
-            fin_a = time_to_minutes(s.hora_fin)
+            for s in grupo.schedules:
+                dia_actual = DIAS_MAP.get(s.dia_semana, "Desconocido")
+                ini_a = time_to_minutes(s.hora_inicio)
+                fin_a = time_to_minutes(s.hora_fin)
 
-            for o in horarios_ocupados:
-                if o['dia'].lower() == dia_actual.lower():
-                    ini_b = o['inicio_min']
-                    fin_b = o['fin_min']
-                    
-                    if not (fin_a <= ini_b or ini_a >= fin_b):
-                        mensaje_error = (
-                            f"Cruce de horarios el {dia_actual.capitalize()}: "
-                            f"'{nombre_materia_actual}' ({s.hora_inicio.strftime('%H:%M')} a {s.hora_fin.strftime('%H:%M')}) "
-                            f"choca con '{o['materia']}' ({o['inicio_txt']} a {o['fin_txt']})."
-                        )
-                        raise HTTPException(status_code=400, detail=mensaje_error)
-            
-            horarios_ocupados.append({
-                'dia': dia_actual, 
-                'inicio_min': ini_a, 'fin_min': fin_a, 
-                'inicio_txt': s.hora_inicio.strftime("%H:%M") if s.hora_inicio else "", 
-                'fin_txt': s.hora_fin.strftime("%H:%M") if s.hora_fin else "",
-                'materia': nombre_materia_actual
-            })
+                for o in horarios_ocupados:
+                    if o['dia'].lower() == dia_actual.lower():
+                        ini_b = o['inicio_min']
+                        fin_b = o['fin_min']
+                        
+                        if not (fin_a <= ini_b or ini_a >= fin_b):
+                            mensaje_error = (
+                                f"Cruce de horarios el {dia_actual.capitalize()}: "
+                                f"'{nombre_materia_actual}' ({s.hora_inicio.strftime('%H:%M')} a {s.hora_fin.strftime('%H:%M')}) "
+                                f"choca con '{o['materia']}' ({o['inicio_txt']} a {o['fin_txt']})."
+                            )
+                            raise HTTPException(status_code=400, detail=mensaje_error)
+                
+                horarios_ocupados.append({
+                    'dia': dia_actual, 
+                    'inicio_min': ini_a, 'fin_min': fin_a, 
+                    'inicio_txt': s.hora_inicio.strftime("%H:%M") if s.hora_inicio else "", 
+                    'fin_txt': s.hora_fin.strftime("%H:%M") if s.hora_fin else "",
+                    'materia': nombre_materia_actual
+                })
 
     try:
-        inscripciones_viejas = db.query(StudentEnrollment).filter(
-            StudentEnrollment.academic_profile_id == perfil.id
-        ).all()
+        inscripciones_viejas = db.query(StudentEnrollment).filter(StudentEnrollment.academic_profile_id == perfil.id).all()
         
         materias_viejas = []
         for insc in inscripciones_viejas:
@@ -297,9 +304,7 @@ def guardar_carga_academica(matricula: str, request: GuardarCargaRequest, db: Se
             "Materias inscritas": materias_viejas
         }
         
-        db.query(StudentEnrollment).filter(
-            StudentEnrollment.academic_profile_id == perfil.id
-        ).delete()
+        db.query(StudentEnrollment).filter(StudentEnrollment.academic_profile_id == perfil.id).delete()
 
         materias_nuevas = []
         for materia in request.materias:
@@ -308,13 +313,16 @@ def guardar_carga_academica(matricula: str, request: GuardarCargaRequest, db: Se
                 academic_profile_id=perfil.id,
                 academic_group_id=materia.group_id,
                 period_id=perfil.period_id,
-                is_retake=materia.is_retake
+                is_retake=materia.is_retake,
+                es_adelanto=materia.es_adelanto
             )
             db.add(nueva_inscripcion)
             
             grupo_obj = next((g for g in grupos_a_inscribir if g.id == materia.group_id), None)
             materia_nom = grupo_obj.subject.nombre if grupo_obj and grupo_obj.subject else f"Grupo {materia.group_id}"
-            materias_nuevas.append(materia_nom)
+
+            etiqueta_extra = "[ADELANTO]" if materia.es_adelanto else ""
+            materias_nuevas.append(f"{materia_nom} {etiqueta_extra}".strip())
 
         new_values = {
             "Materias inscritas": materias_nuevas
