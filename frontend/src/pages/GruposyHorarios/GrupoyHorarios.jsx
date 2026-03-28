@@ -486,109 +486,133 @@ await Swal.fire({
     }
   };
 
-const handleDownloadPDF = async () => {
+  const handleDownloadPDF = async () => {
     const input = document.getElementById('horario-imprimible');
     if (!input || !alumnoInfo) return;
 
     Swal.fire({ 
       title: 'Generando PDF', 
-      text: 'Procesando documento...', 
+      text: 'Procesando paginación...', 
       allowOutsideClick: false, 
       didOpen: () => Swal.showLoading() 
     });
 
-    // 1. Respaldar el estado íntegro del nodo
     const originalClasses = input.className;
     const originalStyle = input.getAttribute('style') || '';
-    
-    // Manejo del contenedor horizontal (Licenciatura)
     const scrollableDiv = input.querySelector('.overflow-x-auto');
     const originalOverflowX = scrollableDiv ? scrollableDiv.style.overflowX : '';
-    if (scrollableDiv) { 
-      scrollableDiv.style.overflowX = 'visible'; 
-    }
 
     try {
-      // Evitar recortes causados por la posición actual del scroll del cliente
       window.scrollTo(0, 0);
-
-      // 2. Extraer la clase restrictiva de Tailwind
       input.className = input.className.replace('overflow-hidden', '');
-      
-      // Permitir que el navegador pinte el nuevo layout
-      await new Promise(resolve => setTimeout(resolve, 200));
+      if (scrollableDiv) scrollableDiv.style.overflowX = 'visible';
 
-      // 3. Extraer dimensiones reales post-renderizado
+      await new Promise(resolve => setTimeout(resolve, 300));
+
       const exactWidth = input.scrollWidth;
-      const exactHeight = input.scrollHeight + 20; // 20px de seguridad para márgenes colapsados
+      const exactHeight = input.scrollHeight + 20;
       
-      // Forzar dimensiones estáticas en el nodo original previo a la clonación
       input.style.width = `${exactWidth}px`;
       input.style.height = `${exactHeight}px`;
       input.style.maxHeight = 'none';
 
-      // 4. Ejecutar renderizado delegando el modelo de caja a las dimensiones exactas
       const dataUrl = await toJpeg(input, { 
-        quality: 0.85, 
+        quality: 0.9, 
         backgroundColor: '#ffffff', 
-        pixelRatio: 1.5,
+        pixelRatio: 2,
         width: exactWidth,
         height: exactHeight
       });
+
+      const pdf = new jsPDF('p', 'mm', 'a4');
+      const pdfWidth = pdf.internal.pageSize.getWidth();
+      const pdfHeight = pdf.internal.pageSize.getHeight();
       
-      const pdfWidth = 280; 
-      const pdfHeight = (exactHeight * pdfWidth) / exactWidth;
+      const margin = 10;
+      const contentWidth = pdfWidth - (margin * 2);
+      const imgScaledHeight = (exactHeight * contentWidth) / exactWidth;
+      
+      const headerAreaHeight = 58; 
+      const footerAreaHeight = 15; 
+      const contentHeightPerPage = pdfHeight - headerAreaHeight - footerAreaHeight;
+      
+      let heightLeft = imgScaledHeight;
+      let position = 0;
+      let pageNumber = 1;
 
-      const pdf = new jsPDF({ 
-        orientation: 'p', 
-        unit: 'mm', 
-        format: [pdfWidth + 20, pdfHeight + 70] 
-      });
+      const renderizarHeader = (doc) => {
+        doc.setFillColor(255, 255, 255);
+        doc.rect(0, 0, pdfWidth, headerAreaHeight - 2, 'F');
 
-      pdf.setFillColor(15, 23, 42);
-      pdf.roundedRect(15, 15, 14, 14, 2, 2, 'F');
-      pdf.setTextColor(255, 255, 255);
-      pdf.setFont("helvetica", "bold");
-      pdf.setFontSize(16);
-      pdf.text("U", 22, 24.5, { align: "center" });
+        doc.setFillColor(15, 23, 42);
+        doc.roundedRect(15, 15, 14, 14, 2, 2, 'F');
+        doc.setTextColor(255, 255, 255);
+        doc.setFont("helvetica", "bold");
+        doc.setFontSize(16);
+        doc.text("U", 22, 24.5, { align: "center" });
 
-      pdf.setTextColor(15, 23, 42);
-      pdf.setFontSize(22);
-      pdf.text("UNID", 33, 22);
+        doc.setTextColor(15, 23, 42);
+        doc.setFontSize(22);
+        doc.text("UNID", 33, 22);
 
-      pdf.setTextColor(100, 116, 139);
-      pdf.setFontSize(10);
-      pdf.setFont("helvetica", "normal");
-      pdf.text("Universidad Interamericana para el", 33, 27);
-      pdf.text("Desarrollo", 33, 31.5);
+        doc.setTextColor(100, 116, 139);
+        doc.setFontSize(10);
+        doc.setFont("helvetica", "normal");
+        doc.text("Universidad Interamericana para el Desarrollo", 33, 27);
 
-      pdf.setTextColor(15, 23, 42);
-      pdf.setFontSize(15);
-      pdf.setFont("helvetica", "bold");
-      pdf.text("HORARIO ESCOLAR OFICIAL", pdfWidth + 5, 25, { align: "right" });
+        doc.setTextColor(15, 23, 42);
+        doc.setFontSize(15);
+        doc.setFont("helvetica", "bold");
+        doc.text("HORARIO ESCOLAR OFICIAL", pdfWidth - 15, 25, { align: "right" });
 
-      pdf.setDrawColor(242, 169, 0);
-      pdf.setLineWidth(1.5);
-      pdf.line(15, 36, pdfWidth + 5, 36);
+        doc.setDrawColor(242, 169, 0);
+        doc.setLineWidth(1.5);
+        doc.line(15, 36, pdfWidth - 15, 36);
 
-      pdf.setFontSize(11);
-      pdf.setTextColor(100, 100, 100);
-      pdf.setFont("helvetica", "normal");
-      pdf.text(`Alumno: ${alumnoInfo.nombre} | Matrícula: ${alumnoInfo.matricula}`, 15, 45);
+        doc.setFontSize(10);
+        doc.setTextColor(80, 80, 80);
+        doc.setFont("helvetica", "normal");
+        doc.text(`Alumno: ${alumnoInfo.nombre} | Matrícula: ${alumnoInfo.matricula}`, 15, 45);
+        doc.text(`Periodo: 2026-1 | Carrera: ${alumnoInfo.carrera}`, 15, 50);
+      };
 
-      pdf.addImage(dataUrl, 'JPEG', 10, 58, pdfWidth, pdfHeight);
+      const renderizarFooter = (doc, pNum) => {
+        doc.setFillColor(255, 255, 255);
+        doc.rect(0, pdfHeight - footerAreaHeight, pdfWidth, footerAreaHeight, 'F');
+        
+        doc.setFontSize(8); 
+        doc.setTextColor(150, 150, 150);
+        doc.setFont("helvetica", "italic");
+        doc.text(`Generado el: ${new Date().toLocaleDateString()}`, 15, pdfHeight - 8);
+        doc.text(`Página ${pNum}`, pdfWidth - 15, pdfHeight - 8, { align: "right" });
+      };
+
+      while (heightLeft > 0) {
+        if (pageNumber > 1) pdf.addPage();
+
+        pdf.addImage(
+          dataUrl, 'JPEG', 
+          margin, headerAreaHeight - position, 
+          contentWidth, imgScaledHeight
+        );
+
+        renderizarHeader(pdf);
+        renderizarFooter(pdf, pageNumber);
+
+        heightLeft -= contentHeightPerPage;
+        position += contentHeightPerPage;
+        pageNumber++;
+      }
+
       pdf.save(`Horario_${alumnoInfo.matricula}.pdf`);
       
     } catch (error) { 
       console.error(error);
-      Swal.fire('Error de Procesamiento', 'Fallo al estructurar el blob de imagen.', 'error'); 
+      Swal.fire('Error', 'No se pudo generar el archivo segmentado.', 'error'); 
     } finally {
-      // 5. Revertir el DOM a su estado inicial
       input.className = originalClasses;
       input.setAttribute('style', originalStyle);
-      if (scrollableDiv) { 
-        scrollableDiv.style.overflowX = originalOverflowX; 
-      }
+      if (scrollableDiv) scrollableDiv.style.overflowX = originalOverflowX;
       Swal.close();
     }
   };
