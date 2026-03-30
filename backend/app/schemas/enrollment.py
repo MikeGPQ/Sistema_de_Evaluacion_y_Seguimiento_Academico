@@ -5,6 +5,7 @@ class MateriaSeleccionada(BaseModel):
     subject_id: int
     group_id: int
     is_retake: Optional[bool] = False
+    es_adelanto: bool = False
 
 class GuardarCargaRequest(BaseModel):
     profile_id: Optional[int] = None

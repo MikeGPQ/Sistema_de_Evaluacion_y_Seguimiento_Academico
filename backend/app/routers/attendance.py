@@ -177,23 +177,8 @@ def guardar_cambios_asistencia(datos: GuardarCambiosRequest, request: Request, d
 
             if registro_existente:
                 if registro_existente.estado != estado_bd or registro_existente.notas_justificacion != cambio.notas_justificacion:
-                    old_vals = {
-                        "estado": registro_existente.estado, 
-                        "notas_justificacion": registro_existente.notas_justificacion
-                    }
-                    
                     registro_existente.estado = estado_bd
                     registro_existente.notas_justificacion = cambio.notas_justificacion
-
-                    log_audit_event(
-                        db=db,
-                        user_identifier=datos.usuario_id,
-                        action="UPDATE",
-                        entity_name="attendance_records",
-                        entity_id=str(registro_existente.id),
-                        old_values=old_vals,
-                        new_values={"estado": estado_bd, "notas_justificacion": cambio.notas_justificacion}
-                    )
                     registros_actualizados += 1
             else:
                 nuevo_registro = AttendanceRecord(
@@ -204,21 +189,6 @@ def guardar_cambios_asistencia(datos: GuardarCambiosRequest, request: Request, d
                 )
                 db.add(nuevo_registro)
                 db.flush() 
-                
-                log_audit_event(
-                    db=db,
-                    user_identifier=datos.usuario_id,
-                    action="CREATE",
-                    entity_name="attendance_records",
-                    entity_id=str(nuevo_registro.id),
-                    old_values=None,
-                    new_values={
-                        "enrollment_id": enroll_id,
-                        "fecha_clase": str(cambio.fecha),
-                        "estado": estado_bd,
-                        "notas_justificacion": cambio.notas_justificacion
-                    }
-                )
                 registros_actualizados += 1
 
         if datos.observaciones_alumnos:
@@ -227,20 +197,35 @@ def guardar_cambios_asistencia(datos: GuardarCambiosRequest, request: Request, d
                 if enroll_id:
                     insc_record = db.query(StudentEnrollment).filter(StudentEnrollment.id == enroll_id).first()
                     if insc_record and insc_record.observaciones != obs.observaciones:
-                        old_obs = {"observaciones": insc_record.observaciones}
                         insc_record.observaciones = obs.observaciones
-                        
-                        log_audit_event(
-                            db=db,
-                            user_identifier=datos.usuario_id,
-                            action="UPDATE",
-                            entity_name="student_enrollments",
-                            entity_id=str(insc_record.id),
-                            old_values=old_obs,
-                            new_values={"observaciones": obs.observaciones}
-                        )
                         registros_actualizados += 1
         
+        if registros_actualizados > 0:
+            materia_nombre = grupo.subject.nombre if grupo.subject else "Sin Materia"
+            identificador_grupo = grupo.sigad_group.identificador if grupo.sigad_group else str(grupo.id)
+
+            nuevos_valores = {
+                "evento": f"Actualización de asistencia u observaciones para {materia_nombre}",
+                "Total de registros modificados": registros_actualizados
+            }
+
+            fechas_unicas = list(set([c.fecha.strftime("%d/%m/%Y") for c in datos.cambios]))
+            if fechas_unicas:
+                nuevos_valores["Fechas afectadas"] = ", ".join(fechas_unicas)
+
+            if datos.observaciones_alumnos:
+                nuevos_valores["Alumnos con nuevas observaciones"] = len(datos.observaciones_alumnos)
+
+            log_audit_event(
+                db=db,
+                user_identifier=datos.usuario_id,
+                action="UPDATE",
+                entity_name="attendance_records",
+                entity_id=identificador_grupo, 
+                old_values=None,
+                new_values=nuevos_valores
+            )
+
         db.commit()
         return {"message": "Cambios guardados", "total_cambios": registros_actualizados}
     except HTTPException: raise
