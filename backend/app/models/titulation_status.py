@@ -3,7 +3,6 @@ from sqlalchemy.orm import relationship
 from app.db.database import Base
 
 class TitulationStatus(Base):
-
     __tablename__ = "titulation_statuses"
 
     id = Column(Integer, primary_key=True, index=True)

@@ -2,6 +2,7 @@ import os
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.gzip import GZipMiddleware
 from dotenv import load_dotenv
 from sqlalchemy import text
 from app.db.database import engine
@@ -17,6 +18,7 @@ from app.routers import (
     attendance,
     logs,
     reportcards,
+    api_salida_router,
 )
 
 load_dotenv()
@@ -50,6 +52,8 @@ if not origins:
         "http://127.0.0.1:5174",
     ]
 
+app.add_middleware(GZipMiddleware, minimum_size=500)
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=origins,
@@ -69,6 +73,7 @@ app.include_router(attendance.router)
 app.include_router(reportcards.router)
 app.include_router(files_router.router)
 app.include_router(logs.router)
+app.include_router(api_salida_router.router)
 
 
 @app.get("/", tags=["Salud del Sistema"])
