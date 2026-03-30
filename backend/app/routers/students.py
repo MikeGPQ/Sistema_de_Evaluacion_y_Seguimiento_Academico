@@ -270,7 +270,7 @@ def register_student(
         new_profile = StudentAcademicProfile(
             student_matricula=final_matricula,
             nivel_id=student_in.nivel_id,
-            titulation_status_id=getattr(student_in, 'titulation_status_id', None),
+            estatus_titulacion_id=getattr(student_in, 'titulation_status_id', None),
             career_id=student_in.career_id,
             origin_school_id=student_in.origin_school_id,
             period_id=periodo_activo.id if periodo_activo else 1,

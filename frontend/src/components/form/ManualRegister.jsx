@@ -649,8 +649,7 @@ export default function ManualRegister({ isOpen, onClose, alumnoAEditar }) {
               </div>
             </div>
 
-            <div className="bg-white rounded-lg p-6 shadow-sm border border-amber-100 relative overflow-hidden">
-              <div className="absolute top-0 right-0 bg-amber-50 text-amber-700 text-[10px] font-bold px-3 py-1 rounded-bl-lg">Configuración Académica</div>
+            <div className="bg-white rounded-lg p-6 shadow-sm border border-gray-100">
               <h4 className="flex items-center text-[#1e3a8a] font-bold mb-6 text-base">
                 <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-blue-50 text-blue-600 mr-3">🎓</div>
                 Información Académica
