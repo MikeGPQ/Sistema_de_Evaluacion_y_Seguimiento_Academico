@@ -75,7 +75,16 @@ def login(data: LoginRequest, db: Session = Depends(get_db)):
 
     if not verify_password(data.password, user.password_hash):
 
+        ahora = datetime.now(ZoneInfo("America/Merida")).replace(tzinfo=None)
+        if (
+            user.last_failed_attempt_at
+            and (ahora - user.last_failed_attempt_at) >= timedelta(hours=24)
+            and not user.is_locked
+        ):
+            user.failed_login_attempts = 0
+
         user.failed_login_attempts = (user.failed_login_attempts or 0) + 1
+        user.last_failed_attempt_at = ahora
         attempts = user.failed_login_attempts
 
         if attempts >= 5:

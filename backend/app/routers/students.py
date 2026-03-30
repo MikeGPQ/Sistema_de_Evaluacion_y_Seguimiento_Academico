@@ -808,3 +808,74 @@ def get_historial_gpa(matricula: str, db: Session = Depends(get_db)):
         }
         for gpa_rec, codigo in registros
     ]
+
+
+@router.get("/{matricula}/kardex", response_model=dict)
+def get_kardex(matricula: str, db: Session = Depends(get_db)):
+    alumno = db.query(Student).filter(Student.matricula == matricula).first()
+    if not alumno:
+        raise HTTPException(status_code=404, detail="Alumno no encontrado.")
+
+    perfil = (
+        db.query(StudentAcademicProfile)
+        .filter(StudentAcademicProfile.student_matricula == matricula)
+        .order_by(StudentAcademicProfile.id.desc())
+        .first()
+    )
+
+    carrera = perfil.career.name if perfil and perfil.career else "N/A"
+    nivel = perfil.nivel.name if perfil and getattr(perfil, 'nivel', None) else "Licenciatura"
+
+    # Todas las inscripciones con acta cerrada, ordenadas por periodo
+    inscripciones = (
+        db.query(
+            AcademicPeriod.codigo.label("periodo"),
+            AcademicPeriod.fecha_inicio.label("fecha_inicio"),
+            Subject.nombre.label("materia"),
+            Subject.creditos.label("creditos"),
+            StudentEnrollment.calificacion_final.label("calificacion_final"),
+            StudentEnrollment.status.label("status"),
+            StudentEnrollment.is_retake.label("is_retake"),
+        )
+        .join(AcademicGroup, StudentEnrollment.academic_group_id == AcademicGroup.id)
+        .join(Subject, AcademicGroup.subject_id == Subject.id)
+        .join(AcademicPeriod, AcademicGroup.period_id == AcademicPeriod.id)
+        .filter(
+            StudentEnrollment.student_matricula == matricula,
+            AcademicGroup.estatus_acta == 'CERRADA',
+            StudentEnrollment.calificacion_final.isnot(None),
+        )
+        .order_by(AcademicPeriod.fecha_inicio.asc(), Subject.nombre.asc())
+        .all()
+    )
+
+    # Agrupar por periodo
+    periodos_dict = {}
+    for r in inscripciones:
+        if r.periodo not in periodos_dict:
+            periodos_dict[r.periodo] = {"periodo": r.periodo, "materias": []}
+        periodos_dict[r.periodo]["materias"].append({
+            "materia": r.materia,
+            "creditos": r.creditos or 0,
+            "calificacion_final": r.calificacion_final,
+            "status": r.status,
+            "is_retake": r.is_retake or False,
+        })
+
+    periodos = list(periodos_dict.values())
+
+    # Indicadores acumulados
+    todas = [r for p in periodos for r in p["materias"]]
+    total_creditos = sum(m["creditos"] for m in todas if m["status"] == "aprobada")
+    califs = [m["calificacion_final"] for m in todas if m["calificacion_final"] is not None]
+    promedio_general = round(sum(califs) / len(califs), 2) if califs else 0
+
+    return {
+        "matricula": matricula,
+        "nombre_completo": f"{alumno.nombre} {alumno.apellido_paterno} {alumno.apellido_materno or ''}".strip(),
+        "carrera": carrera,
+        "nivel": nivel,
+        "periodos": periodos,
+        "total_creditos_acumulados": total_creditos,
+        "promedio_general": promedio_general,
+    }
