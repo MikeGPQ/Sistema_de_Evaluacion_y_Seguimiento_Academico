@@ -317,8 +317,8 @@ const GruposYHorarios = () => {
   // funcion para manejar la carga automatica de materias, priorizando tronco comun y validando choques 
   const handleCargaAutomatica = async () => {
     const confirmacion = await Swal.fire({
-      title: 'Resolución Automática',
-      text: 'El sistema iterará sobre el catálogo priorizando las asignaturas de Tronco Común. ¿Desea proceder?',
+      title: 'Inscripción en Bloque (Nuevo Ingreso)',
+      text: 'El sistema asignará automáticamente el paquete oficial de 1er cuatrimestre correspondiente a la carrera del alumno. ¿Desea proceder?',
       icon: 'question',
       showCancelButton: true,
       confirmButtonText: 'Aceptar',
@@ -328,36 +328,30 @@ const GruposYHorarios = () => {
     
     if (!confirmacion.isConfirmed) return;
 
-    let nuevaSeleccion = { ...seleccion };
-    
-    // se ordena el catologo para que las materias de tronco comun se procesen primero
-    const materiasOrdenadas = [...materiasRegulares].sort((a, b) => {
-      if (a.tipo === 'Tronco Común' && b.tipo !== 'Tronco Común') return -1;
-      if (a.tipo !== 'Tronco Común' && b.tipo === 'Tronco Común') return 1;
-      return 0;
-    });
+    setGuardando(true);
+    try {
+      const response = await client.post(`/asignacion/${alumnoInfo.matricula}/carga-bloque-nuevo-ingreso`);
+      
+      await Swal.fire({ 
+        icon: 'success', 
+        title: 'Asignación Oficial Completada', 
+        text: response.data.message, 
+        confirmButtonColor: '#1A237E'
+      });
+      
+      // Recargamos el alumno para ver la carga oficial reflejada en pantalla y en el PDF
+      await buscarAlumno(alumnoInfo.matricula);
 
-    materiasOrdenadas.forEach(mat => {
-      if (nuevaSeleccion[mat.subject_id]) return; 
-
-      for (let i = 0; i < mat.grupos_disponibles.length; i++) {
-        const g = mat.grupos_disponibles[i];
-        if (g.cupo_disponible <= 0) continue; 
-        
-        const choque = verificarChoquesFront(g, nuevaSeleccion);
-        if (!choque.hayChoque) {
-          nuevaSeleccion[mat.subject_id] = { group_id: g.group_id, is_retake: false };
-          break; 
-        }
-      }
-    });
-
-    setSeleccion(nuevaSeleccion);
-    Swal.fire({ 
-      icon: 'success', title: 'Proceso Finalizado', 
-      text: 'Carga académica generada. Verifique y ejecute la confirmación para persistir.', 
-      timer: 3000, showConfirmButton: false 
-    });
+    } catch (error) {
+      Swal.fire({ 
+        icon: 'error', 
+        title: 'Error de Asignación', 
+        text: error.response?.data?.detail || 'No se pudo generar la carga en bloque automática.', 
+        confirmButtonColor: '#1A237E' 
+      });
+    } finally {
+      setGuardando(false);
+    }
   };
 
   // funcion para guardar la seleccion actual 
@@ -380,7 +374,7 @@ const GruposYHorarios = () => {
         usuario_id: user?.identifier || user?.email || "Admin Local"
       });
       
-await Swal.fire({
+      await Swal.fire({
         icon: 'success',
         title: 'Transacción Confirmada',
         text: response.data.message,
@@ -511,45 +505,57 @@ await Swal.fire({
         </div>
 
         <div className="space-y-2">
-          {materia.grupos_disponibles.map((grupo) => {
-            const isLleno = grupo.cupo_disponible === 0;
-            const isSelected = seleccion[materia.subject_id]?.group_id === grupo.group_id;
+          {/* mostrar informacion del grupo no disponible*/}
+          {materia.grupos_disponibles.length === 0 ? (
+            <div 
+              className="bg-gray-50 border border-gray-200 border-dashed rounded-md p-4 text-center cursor-help"
+              title="Por el momento no hay grupos abiertos para esta materia. Dirígete con la coordinadora académica."
+            >
+              <p className="text-xs text-gray-400 font-medium">
+                Sin grupos disponibles en este periodo
+              </p>
+            </div>
+          ) : (
+            materia.grupos_disponibles.map((grupo) => {
+              const isLleno = grupo.cupo_disponible === 0;
+              const isSelected = seleccion[materia.subject_id]?.group_id === grupo.group_id;
 
-            return (
-              <div 
-                key={grupo.group_id} 
-                onClick={() => {
-                  if (!isLleno) {
-                    handleSeleccionGrupo(materia.subject_id, grupo.group_id, isRetake);
-                  }
-                }}
-                className={`flex items-center justify-between p-2.5 rounded-md border cursor-pointer transition-all ${isLleno ? 'bg-gray-50 border-gray-200 opacity-60 cursor-not-allowed' : isSelected ? 'bg-blue-50 border-[#1A237E] ring-1 ring-[#1A237E]' : 'bg-white border-gray-300 hover:bg-gray-50'}`}
-              >
-                <div className="flex items-center gap-3">
-                  <input 
-                    type="radio" 
-                    checked={isSelected}
-                    readOnly
-                    className="w-4 h-4 text-[#1A237E] focus:ring-[#1A237E] pointer-events-none"
-                  />
-                  <div>
-                    <p className="text-sm font-bold text-gray-800">Grupo {grupo.external_id ?? grupo.nombre}</p>
-                    <p className="text-xs text-gray-500 flex items-center gap-1 mt-0.5">
-                      <Clock className="w-3 h-3" /> {grupo.horario}
-                    </p>
-                    {grupo.aula && (
-                      <p className="text-xs text-gray-400 mt-0.5">Aula: {grupo.aula}</p>
-                    )}
+              return (
+                <div 
+                  key={grupo.group_id} 
+                  onClick={() => {
+                    if (!isLleno) {
+                      handleSeleccionGrupo(materia.subject_id, grupo.group_id, isRetake);
+                    }
+                  }}
+                  className={`flex items-center justify-between p-2.5 rounded-md border cursor-pointer transition-all ${isLleno ? 'bg-gray-50 border-gray-200 opacity-60 cursor-not-allowed' : isSelected ? 'bg-blue-50 border-[#1A237E] ring-1 ring-[#1A237E]' : 'bg-white border-gray-300 hover:bg-gray-50'}`}
+                >
+                  <div className="flex items-center gap-3">
+                    <input 
+                      type="radio" 
+                      checked={isSelected}
+                      readOnly
+                      className="w-4 h-4 text-[#1A237E] focus:ring-[#1A237E] pointer-events-none"
+                    />
+                    <div>
+                      <p className="text-sm font-bold text-gray-800">Grupo {grupo.external_id ?? grupo.nombre}</p>
+                      <p className="text-xs text-gray-500 flex items-center gap-1 mt-0.5">
+                        <Clock className="w-3 h-3" /> {grupo.horario}
+                      </p>
+                      {grupo.aula && (
+                        <p className="text-xs text-gray-400 mt-0.5">Aula: {grupo.aula}</p>
+                      )}
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <span className={`text-xs font-bold ${isLleno ? 'text-red-500' : 'text-green-600'}`}>
+                      {isLleno ? 'Cupo Lleno' : `${grupo.cupo_disponible} lugares`}
+                    </span>
                   </div>
                 </div>
-                <div className="text-right">
-                  <span className={`text-xs font-bold ${isLleno ? 'text-red-500' : 'text-green-600'}`}>
-                    {isLleno ? 'Cupo Lleno' : `${grupo.cupo_disponible} lugares`}
-                  </span>
-                </div>
-              </div>
-            );
-          })}
+              );
+            })
+          )}
         </div>
       </div>
     );
@@ -828,4 +834,4 @@ await Swal.fire({
   );
 };
 
-export default GruposYHorarios;      
+export default GruposYHorarios;
