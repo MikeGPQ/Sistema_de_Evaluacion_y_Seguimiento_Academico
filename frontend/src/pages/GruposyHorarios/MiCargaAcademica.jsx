@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { 
   ArrowLeft, BookOpen, Clock, AlertTriangle, 
-  CheckCircle, Save, Calendar, User, Layers
+  CheckCircle, Save, Calendar, User, Layers, AlertCircle
 } from 'lucide-react';
 import client from '../../lib/axios';
 import Swal from 'sweetalert2';
@@ -23,6 +23,8 @@ const MiCargaAcademica = () => {
   const [alumnoInfo, setAlumnoInfo] = useState(null);
   const [materiasRegulares, setMateriasRegulares] = useState([]);
   const [materiasRecursamiento, setMateriasRecursamiento] = useState([]);
+  // declaracion del estado para almacenar localmente las materias atrasadas no cursadas
+  const [materiasPendientes, setMateriasPendientes] = useState([]);
   
   const [seleccion, setSeleccion] = useState({});
   const [seleccionOriginal, setSeleccionOriginal] = useState({}); 
@@ -65,9 +67,8 @@ const MiCargaAcademica = () => {
     }
   };
 
-  // Función unificada para obtener e hidratar todo el estado desde el backend
-  const cargarDatosDelAlumno = useCallback(async (matriculaActiva) => {
-    setCargando(true);
+  const cargarDatosDelAlumno = useCallback(async (matriculaActiva, recargaSilenciosa = false) => {
+    if (!recargaSilenciosa) setCargando(true);
     try {
       const response = await client.get(`/asignacion/autoservicio/${matriculaActiva}/disponibles`);
       const data = response.data;
@@ -83,6 +84,8 @@ const MiCargaAcademica = () => {
       
       setMateriasRegulares(data.materias_regulares);
       setMateriasRecursamiento(data.materias_recursamiento);
+      // volcado de las materias pendientes detectadas por el backend hacia el estado de React
+      setMateriasPendientes(data.materias_pendientes || []);
 
       const seleccionInicial = {};
       const gruposQueYaTenia = data.grupos_inscritos || [];
@@ -99,13 +102,15 @@ const MiCargaAcademica = () => {
 
       escanearCatalogo(data.materias_regulares, false);
       escanearCatalogo(data.materias_recursamiento, true);
+      // ejecucion de la busqueda de inscripciones previas tambien sobre la lista de atrasadas
+      escanearCatalogo(data.materias_pendientes || [], false);
 
       setSeleccion(seleccionInicial);
       setSeleccionOriginal(seleccionInicial);
       setInscripcionesOriginales(gruposQueYaTenia);
 
     } catch (error) {
-      if (!Swal.isVisible()) {
+      if (!Swal.isVisible() && !recargaSilenciosa) {
         Swal.fire({ 
           icon: 'error', 
           title: 'Acceso Restringido', 
@@ -117,7 +122,7 @@ const MiCargaAcademica = () => {
         });
       }
     } finally {
-      setCargando(false);
+      if (!recargaSilenciosa) setCargando(false);
     }
   }, [navigate]);
 
@@ -130,7 +135,8 @@ const MiCargaAcademica = () => {
     const sesionesEvaluar = grupoEvaluar.horario_raw || [];
     const seleccionIds = Object.values(seleccionActual).map(s => s.group_id);
 
-    for (const mat of [...materiasRegulares, ...materiasRecursamiento]) {
+    // integracion de la nueva lista a la iteracion de comprobacion para evitar cruces
+    for (const mat of [...materiasRegulares, ...materiasRecursamiento, ...materiasPendientes]) {
       for (const g of mat.grupos_disponibles) {
         if (seleccionIds.includes(g.group_id)) {
            const sesionesSel = g.horario_raw || [];
@@ -181,10 +187,16 @@ const MiCargaAcademica = () => {
               usuario_id: user?.identifier || user?.email || "Autoservicio Alumno"
           });
           
-          await Swal.fire({ icon: 'success', title: 'Operación exitosa', text: 'Baja registrada en el sistema.', confirmButtonColor: '#1A237E' });
+          await Swal.fire({ 
+            icon: 'success', 
+            title: 'Baja registrada', 
+            toast: true, 
+            position: 'top-end', 
+            showConfirmButton: false, 
+            timer: 2000 
+          });
           
-          // Sincronización automática de cupos tras la baja
-          await cargarDatosDelAlumno(alumnoInfo.matricula);
+          await cargarDatosDelAlumno(alumnoInfo.matricula, true);
           
         } catch (error) {
           Swal.fire({ icon: 'error', title: 'Fallo de operación', text: error.response?.data?.detail || 'Imposible completar la transacción.', confirmButtonColor: '#1A237E' });
@@ -200,7 +212,8 @@ const MiCargaAcademica = () => {
 
     } else {
       let grupoNuevo = null;
-      [...materiasRegulares, ...materiasRecursamiento].forEach(mat => {
+      // recorrido expandido que ahora evalua al hacer click los elementos del catalogo pendiente
+      [...materiasRegulares, ...materiasRecursamiento, ...materiasPendientes].forEach(mat => {
         if (mat.subject_id === subjectId) {
           const g = mat.grupos_disponibles.find(x => x.group_id === groupId);
           if (g) grupoNuevo = g;
@@ -252,8 +265,7 @@ const MiCargaAcademica = () => {
         confirmButtonColor: '#1A237E'
       });
 
-      // Sincronización automática de cupos tras la inscripción
-      await cargarDatosDelAlumno(alumnoInfo.matricula);
+      await cargarDatosDelAlumno(alumnoInfo.matricula, true);
 
     } catch (error) {
       Swal.fire({
@@ -267,11 +279,14 @@ const MiCargaAcademica = () => {
     }
   };
 
-  const TarjetaMateria = ({ materia, isRetake }) => {
+  // adicion de la propiedad isPending para inyectar una clase de color naranja al renderizar 
+  const TarjetaMateria = ({ materia, isRetake, isPending }) => {
     let colorEtiqueta = 'bg-blue-100 text-blue-800 border-blue-200'; 
     
     if (isRetake) {
       colorEtiqueta = 'bg-red-100 text-red-800 border-red-200'; 
+    } else if (isPending) {
+      colorEtiqueta = 'bg-orange-100 text-orange-800 border-orange-200';
     } else if (materia.tipo === 'Tronco Común') {
       colorEtiqueta = 'bg-amber-100 text-amber-800 border-amber-300'; 
     }
@@ -289,45 +304,59 @@ const MiCargaAcademica = () => {
         </div>
 
         <div className="space-y-2">
-          {materia.grupos_disponibles.map((grupo) => {
-            const isLleno = grupo.cupo_disponible === 0;
-            const isSelected = seleccion[materia.subject_id]?.group_id === grupo.group_id;
+          {/* validacion condicional: si no hay grupos abiertos, mostramos un mensaje de advertencia con tooltip para informar al usuario de la indisponibilidad y el paso a seguir */}
+          {materia.grupos_disponibles.length === 0 ? (
+            <div 
+              className="p-3 bg-gray-50 border border-dashed border-gray-300 rounded-md text-center cursor-help transition-all hover:bg-gray-100"
+              title="Por el momento no hay grupos abiertos para esta materia. Dirígete con la coordinadora académica."
+            >
+              <p className="text-xs text-gray-500 font-medium flex items-center justify-center gap-1.5">
+                <AlertCircle className="w-4 h-4 text-gray-400" />
+                Sin grupos disponibles en este periodo
+              </p>
+            </div>
+          ) : (
+            // si hay grupos disponibles, renderiza la lista normal con los radio buttons
+            materia.grupos_disponibles.map((grupo) => {
+              const isLleno = grupo.cupo_disponible === 0;
+              const isSelected = seleccion[materia.subject_id]?.group_id === grupo.group_id;
 
-            return (
-              <div 
-                key={grupo.group_id} 
-                onClick={() => {
-                  if (!isLleno) {
-                    handleSeleccionGrupo(materia.subject_id, grupo.group_id, isRetake);
-                  }
-                }}
-                className={`flex items-center justify-between p-2.5 rounded-md border cursor-pointer transition-all ${isLleno ? 'bg-gray-50 border-gray-200 opacity-60 cursor-not-allowed' : isSelected ? 'bg-blue-50 border-[#1A237E] ring-1 ring-[#1A237E]' : 'bg-white border-gray-300 hover:bg-gray-50'}`}
-              >
-                <div className="flex items-center gap-3">
-                  <input 
-                    type="radio" 
-                    checked={isSelected}
-                    readOnly
-                    className="w-4 h-4 text-[#1A237E] focus:ring-[#1A237E] pointer-events-none"
-                  />
-                  <div>
-                    <p className="text-sm font-bold text-gray-800">Grupo {grupo.external_id ?? grupo.nombre}</p>
-                    <p className="text-xs text-gray-500 flex items-center gap-1 mt-0.5">
-                      <Clock className="w-3 h-3" /> {grupo.horario}
-                    </p>
-                    {grupo.aula && (
-                      <p className="text-xs text-gray-400 mt-0.5">Aula: {grupo.aula}</p>
-                    )}
+              return (
+                <div 
+                  key={grupo.group_id} 
+                  onClick={() => {
+                    if (!isLleno) {
+                      handleSeleccionGrupo(materia.subject_id, grupo.group_id, isRetake);
+                    }
+                  }}
+                  className={`flex items-center justify-between p-2.5 rounded-md border cursor-pointer transition-all ${isLleno ? 'bg-gray-50 border-gray-200 opacity-60 cursor-not-allowed' : isSelected ? 'bg-blue-50 border-[#1A237E] ring-1 ring-[#1A237E]' : 'bg-white border-gray-300 hover:bg-gray-50'}`}
+                >
+                  <div className="flex items-center gap-3">
+                    <input 
+                      type="radio" 
+                      checked={isSelected}
+                      readOnly
+                      className="w-4 h-4 text-[#1A237E] focus:ring-[#1A237E] pointer-events-none"
+                    />
+                    <div>
+                      <p className="text-sm font-bold text-gray-800">Grupo {grupo.external_id ?? grupo.nombre}</p>
+                      <p className="text-xs text-gray-500 flex items-center gap-1 mt-0.5">
+                        <Clock className="w-3 h-3" /> {grupo.horario}
+                      </p>
+                      {grupo.aula && (
+                        <p className="text-xs text-gray-400 mt-0.5">Aula: {grupo.aula}</p>
+                      )}
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <span className={`text-xs font-bold ${isLleno ? 'text-red-500' : 'text-green-600'}`}>
+                      {isLleno ? 'Cupo Lleno' : `${grupo.cupo_disponible} lugares`}
+                    </span>
                   </div>
                 </div>
-                <div className="text-right">
-                  <span className={`text-xs font-bold ${isLleno ? 'text-red-500' : 'text-green-600'}`}>
-                    {isLleno ? 'Cupo Lleno' : `${grupo.cupo_disponible} lugares`}
-                  </span>
-                </div>
-              </div>
-            );
-          })}
+              );
+            })
+          )}
         </div>
       </div>
     );
@@ -403,6 +432,18 @@ const MiCargaAcademica = () => {
                   </h3>
                   {materiasRecursamiento.map(mat => (
                     <TarjetaMateria key={mat.subject_id} materia={mat} isRetake={true} />
+                  ))}
+                </div>
+              )}
+
+              {/* pintado del nuevo bloque visual para desplegar la coleccion de materias que nunca inscribio */}
+              {materiasPendientes.length > 0 && (
+                <div>
+                  <h3 className="text-sm font-bold text-orange-700 flex items-center gap-2 mb-3 border-b border-orange-200 pb-2">
+                    <Clock className="w-4 h-4" /> Materias Pendientes (No Cursadas)
+                  </h3>
+                  {materiasPendientes.map(mat => (
+                    <TarjetaMateria key={mat.subject_id} materia={mat} isRetake={false} isPending={true} />
                   ))}
                 </div>
               )}
