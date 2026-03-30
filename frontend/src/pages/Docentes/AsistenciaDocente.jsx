@@ -6,6 +6,8 @@ import autoTable from 'jspdf-autotable';
 import client from '../../lib/axios'; 
 import { useAuth } from '../../hooks/AuthContext'; 
 
+const NOMBRES_MESES = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
+
 const ESTADOS = {
   P: { label: '✓', color: 'text-green-600', bg: 'bg-green-50 border-green-200' },
   F: { label: 'X', color: 'text-red-600', bg: 'bg-red-50 border-red-200' },
@@ -62,8 +64,10 @@ const AsistenciaDocente = () => {
   const [cambiosPendientes, setCambiosPendientes] = useState({});
   const [modoEdicion, setModoEdicion] = useState(false);
   const [celdaEditando, setCeldaEditando] = useState(null); 
+
+  // 🌟 SPRINT 8: Pestañas por Mes
+  const [mesSeleccionado, setMesSeleccionado] = useState('');
   
-  // 🌟 ZONA HORARIA DE MÉRIDA PARA EVITAR BUGS DE FECHA
   const hoy = new Intl.DateTimeFormat('en-CA', { 
     timeZone: 'America/Merida', 
     year: 'numeric', 
@@ -72,7 +76,6 @@ const AsistenciaDocente = () => {
   }).format(new Date());
 
   const isSoloLectura = actaCerrada || !periodoActivo;
-  // 🌟 VALIDACIÓN DE PERIODO FUTURO
   const esPeriodoFuturo = fechasClase.length > 0 && fechasClase[0] > hoy;
 
   const handleBusquedaChange = (e) => {
@@ -124,6 +127,7 @@ const AsistenciaDocente = () => {
           setAlumnos([]);
           setAlumnosOriginales([]);
           setFechasClase([]);
+          setMesSeleccionado('');
           setCargando(false); 
         }
       } catch (error) { 
@@ -140,7 +144,22 @@ const AsistenciaDocente = () => {
       setCargando(true);
       try {
         const response = await client.get(`/asistencia/grupo/${materiaSeleccionada}?periodo=${periodoSeleccionado}`);
-        setFechasClase(response.data.fechas || []);
+        const fechas = response.data.fechas || [];
+        setFechasClase(fechas);
+        
+        // 🌟 Lógica para seleccionar el mes actual por defecto
+        if (fechas.length > 0) {
+            const mesActualNum = hoy.split('-')[1];
+            const mesesDisp = Array.from(new Set(fechas.map(f => f.split('-')[1]))).sort();
+            if (mesesDisp.includes(mesActualNum)) {
+                setMesSeleccionado(mesActualNum);
+            } else {
+                setMesSeleccionado(mesesDisp[0]);
+            }
+        } else {
+            setMesSeleccionado('');
+        }
+
         setActaCerrada(response.data.acta_cerrada);
         setPeriodoActivo(response.data.periodo_activo ?? true); 
         setInfoDias(response.data.dias_clase || '');
@@ -196,6 +215,10 @@ const AsistenciaDocente = () => {
     return a.nombre.toLowerCase().includes(busqueda.toLowerCase()) || a.matricula.includes(busqueda);
   });
   
+  // 🌟 Filtro de Fechas por Mes
+  const fechasDelMes = fechasClase.filter(f => f.split('-')[1] === mesSeleccionado);
+  const mesesDisponibles = Array.from(new Set(fechasClase.map(f => f.split('-')[1]))).sort();
+
   const totalAlumnos = alumnosFiltrados.length;
   const totalClases = fechasClase.length;
   
@@ -207,12 +230,11 @@ const AsistenciaDocente = () => {
                          ? cambiosPendientes[`${a.matricula}_${f}`].estado 
                          : a.asistencias[f];
         if (estFinal === 'F') faltasGlobales++;
-        if (estFinal === 'P') asistenciasGlobales++;
+        if (estFinal === 'P' || estFinal === 'J' || estFinal === 'R') asistenciasGlobales++;
       }
     });
   });
 
-  // 🌟 LÓGICA MEJORADA DE CAMBIOS PENDIENTES
   const tieneCambiosNotas = alumnos.some((a) => {
     const original = alumnosOriginales.find(orig => orig.id === a.id);
     return original && (original.observaciones || '') !== (a.observaciones || '');
@@ -236,7 +258,6 @@ const AsistenciaDocente = () => {
     }));
   };
 
-  // 🌟 ELIMINAR CAMBIO SI SE DESMARCA TODA LA COLUMNA
   const toggleColumna = (fecha, e) => {
     if (isSoloLectura) return;
     const isChecked = e.target.checked;
@@ -268,22 +289,17 @@ const AsistenciaDocente = () => {
           const input = Swal.getInput();
           input.addEventListener('input', () => {
             let val = input.value;
-            // Solo alfanuméricos y espacios
             val = val.replace(/[^a-zA-Z0-9áéíóúÁÉÍÓÚñÑüÜ\s]/g, '');
-            // No más de un espacio seguido
             val = val.replace(/\s{2,}/g, ' ');
-            // No permite iniciar con espacio
             if (val.startsWith(' ')) val = val.trimStart();
             input.value = val;
           });
         },
         inputValidator: (value) => { 
-          // Bloquea si son puros espacios o está vacío
           if (!value || value.trim() === '') return '¡Necesitas escribir un motivo válido!'; 
         }
       });
       if (motivo) {
-        // Guardamos con trim() para eliminar espacios sobrantes al final
         registrarCambio(alumno.matricula, fecha, 'J', motivo.trim());
         Swal.fire({
           toast: true, position: 'bottom-end', icon: 'info',
@@ -296,8 +312,7 @@ const AsistenciaDocente = () => {
     }
   };
 
-  // 🌟 BLOQUEO DE NOTAS EN MODO LECTURA
- const mostrarObservaciones = (alumno) => {
+  const mostrarObservaciones = (alumno) => {
     if (isSoloLectura) {
       Swal.fire({
         title: `Notas de ${alumno.nombre}`,
@@ -323,28 +338,19 @@ const AsistenciaDocente = () => {
       didOpen: () => {
         const input = Swal.getInput();
         const confirmButton = Swal.getConfirmButton();
-        
-        // 🌟 Nace apagado porque al abrirlo está igual que el original
         confirmButton.disabled = true;
 
         input.addEventListener('input', () => {
           let val = input.value;
-          
-          // Solo alfanuméricos y espacios (incluye saltos de línea)
           val = val.replace(/[^a-zA-Z0-9áéíóúÁÉÍÓÚñÑüÜ\s.,]/g, ''); 
-          // No más de un espacio seguido
           val = val.replace(/ {2,}/g, ' '); 
-          // No permite iniciar con espacio
           if (val.startsWith(' ')) val = val.trimStart();
-          
           input.value = val;
 
-          // 🌟 VALIDACIONES EN TIEMPO REAL
           const textoLimpio = val.trim();
           const estaVacio = textoLimpio === '';
           const esIgualAlOriginal = textoLimpio === notaOriginal;
 
-          // Si está vacío o no le cambió nada, el botón se bloquea
           if (estaVacio || esIgualAlOriginal) {
             confirmButton.disabled = true;
           } else {
@@ -417,27 +423,22 @@ const AsistenciaDocente = () => {
 
   const nombreDocentePDF = user?.full_name || user?.nombre_completo || user?.nombre || "DOCENTE TITULAR";
 
-  // 🌟 PDF CON 'U' BLANCA Y FLECHITAS/X PERFECTAS DE COLORES
   const handleExportPDF = () => {
     try {
       const doc = new jsPDF('landscape'); 
       const pageWidth = doc.internal.pageSize.getWidth();
       
-      // Cuadro Logo "U" y Letra Blanca
       doc.setFillColor(11, 23, 42); doc.rect(14, 15, 12, 12, 'F');
       doc.setTextColor(255, 255, 255); doc.setFontSize(16); doc.setFont("helvetica", "bold"); doc.text("U", 20, 23.5, { align: "center" }); 
       
-      // Títulos Izquierda
       doc.setTextColor(26, 35, 126); doc.setFontSize(16); doc.text("UNID", 30, 20);
       doc.setFontSize(8); doc.setTextColor(100); doc.setFont("helvetica", "normal"); doc.text("UNIVERSIDAD INTERAMERICANA PARA EL DESARROLLO", 30, 24);
       
-      // Títulos Derecha
       doc.setTextColor(26, 35, 126); doc.setFontSize(12); doc.setFont("helvetica", "bold"); doc.text("REPORTE DE ASISTENCIA DOCENTE", pageWidth - 14, 20, { align: "right" });
       doc.setFontSize(9); doc.setTextColor(100); doc.setFont("helvetica", "normal"); doc.text("Documento Oficial", pageWidth - 14, 24, { align: "right" });
 
       doc.setDrawColor(242, 169, 0); doc.setLineWidth(0.5); doc.line(14, 28, pageWidth - 14, 28);
       
-      // Headers de Datos
       doc.setFontSize(8); doc.setTextColor(150); doc.setFont("helvetica", "bold");
       doc.text("MATERIA", 14, 35); doc.text("GRUPO", 120, 35); doc.text("DOCENTE", 200, 35);
       doc.text("PERIODO ACADÉMICO", 14, 45); doc.text("FECHA DE GENERACIÓN", 120, 45); doc.text("ID REPORTE", 200, 45);
@@ -468,7 +469,6 @@ const AsistenciaDocente = () => {
           if (!estadoBD) return '-'; 
           clasesRegistradas++;
           if (estadoBD === 'F') faltasTotales++;
-          // Mandamos la letra original para procesarla abajo
           return estadoBD; 
         });
         const asistenciasTotal = clasesRegistradas - faltasTotales;
@@ -478,7 +478,7 @@ const AsistenciaDocente = () => {
  autoTable(doc, {
         head: [tableColumn], body: tableRows, startY: 55, theme: 'plain',
         horizontalPageBreak: true, 
-        horizontalPageBreakRepeat: 0, // 🌟 MAGIA: "0" significa amarrar solo la columna Matrícula
+        horizontalPageBreakRepeat: 0, 
         margin: { bottom: 25, top: 15, left: 10, right: 10 }, 
         styles: { fontSize: 6.5, cellPadding: 1, textColor: [80, 80, 80] }, 
         headStyles: { fillColor: [248, 249, 250], textColor: [26, 35, 126], fontStyle: 'bold', lineWidth: 0.1, lineColor: [230, 230, 230], halign: 'center', valign: 'middle' },
@@ -576,7 +576,6 @@ const AsistenciaDocente = () => {
 
       <div className="max-w-[1400px] mx-auto bg-white rounded-xl shadow-sm border border-gray-200 p-6 relative z-10">
         
-        {/* 🌟 MENSAJE PERIODO PASADO */}
         {!periodoActivo && !cargando && !esPeriodoFuturo && (
           <div className="mb-6 p-4 bg-amber-50 border border-amber-200 rounded-lg flex items-center text-amber-800 shadow-sm">
             <AlertTriangle className="w-5 h-5 mr-3 shrink-0" />
@@ -584,7 +583,6 @@ const AsistenciaDocente = () => {
           </div>
         )}
 
-        {/* 🌟 MENSAJE PERIODO FUTURO */}
         {!periodoActivo && !cargando && esPeriodoFuturo && (
           <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-lg flex items-center text-blue-800 shadow-sm">
             <AlertTriangle className="w-5 h-5 mr-3 shrink-0" />
@@ -692,7 +690,7 @@ const AsistenciaDocente = () => {
           </div>
         </div>
 
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
           <div className="bg-white border border-gray-200 p-4 rounded-xl flex justify-between items-center shadow-sm">
             <div><p className="text-xs text-gray-500 font-bold uppercase tracking-wider mb-1">Alumnos</p><p className="text-2xl font-black text-gray-800">{totalAlumnos}</p></div>
             <div className="bg-blue-50 p-3 rounded-xl text-[#1A237E]"><Users className="w-6 h-6" /></div>
@@ -711,6 +709,24 @@ const AsistenciaDocente = () => {
           </div>
         </div>
 
+        {/* 🌟 SPRINT 8: PESTAÑAS POR MES */}
+        <div className="mb-4">
+            <div className="flex items-center justify-between mb-2">
+                <h3 className="text-sm font-bold text-gray-800 flex items-center">Selecciona el mes a evaluar:</h3>
+                <div className="text-[11px] font-bold text-gray-500 flex items-center gap-1.5"><CalendarClock className="w-4 h-4 text-[#1A237E]" /> Horario: {infoDias || "Cargando..."}</div>
+            </div>
+            <div className="flex gap-2 border-b border-gray-200 overflow-x-auto custom-scrollbar">
+                {mesesDisponibles.map((mesNum) => {
+                    const isSelected = mesSeleccionado === mesNum;
+                    return (
+                        <button key={mesNum} onClick={() => setMesSeleccionado(mesNum)} className={`px-6 py-2.5 text-sm font-bold border-b-2 transition-colors ${isSelected ? 'border-[#1A237E] text-[#1A237E]' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}>
+                            {NOMBRES_MESES[parseInt(mesNum, 10) - 1]}
+                        </button>
+                    );
+                })}
+            </div>
+        </div>
+
         <div className="flex items-center justify-between mb-4 px-2">
           <div className="flex items-center gap-6">
             <div className="flex items-center gap-2"><span className="w-6 h-6 flex items-center justify-center rounded bg-green-50 text-green-600 font-bold text-xs border border-green-200">✓</span><span className="text-xs text-gray-600 font-medium">Presente</span></div>
@@ -718,22 +734,25 @@ const AsistenciaDocente = () => {
             <div className="flex items-center gap-2"><span className="w-6 h-6 flex items-center justify-center rounded bg-amber-50 text-amber-600 font-bold text-xs border border-amber-200">R</span><span className="text-xs text-gray-600 font-medium">Retardo</span></div>
             <div className="flex items-center gap-2"><span className="w-6 h-6 flex items-center justify-center rounded bg-slate-100 text-slate-600 font-bold text-xs border border-slate-300">J</span><span className="text-xs text-gray-600 font-medium">Justificante</span></div>
           </div>
-          <div className="text-[11px] font-bold text-gray-500 flex items-center gap-1.5"><CalendarClock className="w-4 h-4" /> Horario: {infoDias || "Cargando..."}</div>
         </div>
 
         <div className="overflow-x-auto border border-gray-200 rounded-xl shadow-sm custom-scrollbar z-10 relative max-h-[600px]" ref={tableContainerRef}>
           {cargando ? (
             <div className="flex flex-col items-center justify-center py-20 text-[#1A237E]"><Loader2 className="w-10 h-10 animate-spin mb-4" /><p className="font-bold">Cargando datos de la base de datos...</p></div>
+          ) : !mesSeleccionado ? (
+            <div className="flex flex-col items-center justify-center py-20 text-gray-400"><CalendarDays className="w-12 h-12 mb-3 opacity-50" /><p className="font-semibold text-gray-600">No hay clases programadas.</p></div>
           ) : (
             <table className="w-full text-sm text-left">
               <thead className="bg-gray-50 text-gray-500 text-[11px] uppercase font-bold border-b border-gray-200 sticky top-0 z-30 shadow-sm">
                 <tr>
                   <th className="py-4 px-2 border-r border-gray-200 text-center w-[48px] min-w-[48px] max-w-[48px] sticky left-0 z-40 bg-gray-50">No.</th>
                   <th className="py-4 px-4 border-r border-gray-200 w-[96px] min-w-[96px] max-w-[96px] tracking-wider sticky left-[48px] z-40 bg-gray-50">Matrícula</th>
-                  <th className="py-4 px-4 border-r border-gray-200 w-[320px] min-w-[320px] max-w-[320px] tracking-wider sticky left-[144px] z-40 bg-gray-50">Nombre del Alumno</th>
-                  <th className="py-4 px-2 border-r border-gray-200 text-center w-[80px] min-w-[80px] max-w-[80px] leading-tight sticky left-[464px] z-40 bg-gray-50">Faltas<br/>Totales</th>
+                  <th className="py-4 px-4 border-r border-gray-200 w-[320px] min-w-[320px] max-w-[320px] tracking-wider sticky left-[144px] z-40 bg-gray-50 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)]">Nombre del Alumno</th>
+                  <th className="py-4 px-2 border-r border-gray-200 text-center w-[80px] min-w-[80px] max-w-[80px] leading-tight bg-gray-50">Faltas<br/>Totales</th>
                   
-                  {fechasClase.map((fecha, idx) => {
+                  {/* 🌟 CELDAS FILTRADAS POR MES */}
+                  {fechasDelMes.map((fecha) => {
+                    const numSesionReal = fechasClase.indexOf(fecha) + 1;
                     const alumnosPendientes = alumnosFiltrados.filter(a => !a.asistencias[fecha]);
                     const tieneSinGuardar = alumnosPendientes.length > 0;
                     const esActiva = fecha <= hoy && !isSoloLectura && tieneSinGuardar && !modoEdicion;
@@ -742,7 +761,7 @@ const AsistenciaDocente = () => {
                     return (
                       <th key={fecha} className={`py-2 px-2 border-r border-gray-200 text-center min-w-[60px] ${esActiva ? 'bg-blue-100/50' : 'bg-gray-50'}`}>
                         <div className="flex flex-col items-center justify-center min-w-[55px]">
-                          <span className="text-[8px] font-bold text-gray-400 uppercase mb-0.5 tracking-wider">Sesión {idx + 1}</span>
+                          <span className="text-[8px] font-bold text-gray-400 uppercase mb-0.5 tracking-wider">Sesión {numSesionReal}</span>
                           <span className={`text-[10px] whitespace-nowrap tracking-widest font-black ${esActiva ? 'text-[#1A237E]' : 'text-gray-500'}`}>{formatearFechaMes(fecha)}</span>
                           {esActiva && <input type="checkbox" checked={todosMarcados} onChange={(e) => toggleColumna(fecha, e)} className="mt-1.5 w-4 h-4 accent-green-600 text-green-600 rounded cursor-pointer" />}
                         </div>
@@ -768,11 +787,11 @@ const AsistenciaDocente = () => {
                     }).length;
 
                     return (
-                      <tr key={alumno.id} className="hover:bg-blue-50/30 transition-colors">
-                        <td className="py-2 px-2 text-center border-r border-gray-100 text-gray-400 font-bold sticky left-0 bg-white z-20 shadow-[1px_0_0_0_#f3f4f6] align-middle w-[48px] min-w-[48px] max-w-[48px]">{idx + 1}</td>
-                        <td className="py-2 px-4 border-r border-gray-100 font-mono text-gray-500 sticky left-[48px] bg-white z-20 shadow-[1px_0_0_0_#f3f4f6] align-middle w-[96px] min-w-[96px] max-w-[96px]">{alumno.matricula}</td>
+                      <tr key={alumno.id} className="hover:bg-blue-50/30 transition-colors group">
+                        <td className="py-2 px-2 text-center border-r border-gray-100 text-gray-400 font-bold sticky left-0 bg-white z-20 shadow-[1px_0_0_0_#f3f4f6] align-middle w-[48px] min-w-[48px] max-w-[48px] group-hover:bg-blue-50/30">{idx + 1}</td>
+                        <td className="py-2 px-4 border-r border-gray-100 font-mono text-gray-500 sticky left-[48px] bg-white z-20 shadow-[1px_0_0_0_#f3f4f6] align-middle w-[96px] min-w-[96px] max-w-[96px] group-hover:bg-blue-50/30">{alumno.matricula}</td>
                         
-                        <td className="py-2 px-4 border-r border-gray-100 font-bold text-gray-800 sticky left-[144px] bg-white z-20 shadow-[1px_0_0_0_#f3f4f6] w-[320px] min-w-[320px] max-w-[320px] align-middle">
+                        <td className="py-2 px-4 border-r border-gray-100 font-bold text-gray-800 sticky left-[144px] bg-white z-20 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)] w-[320px] min-w-[320px] max-w-[320px] align-middle group-hover:bg-blue-50/30">
                           <div className="flex items-center gap-3">
                             <div className="w-7 h-7 rounded-full bg-[#1A237E]/10 flex items-center justify-center text-[#1A237E] font-black text-xs shrink-0">
                               {alumno.nombre.charAt(0)}
@@ -783,11 +802,11 @@ const AsistenciaDocente = () => {
                           </div>
                         </td>
 
-                        <td className="py-2 px-2 border-r border-gray-100 text-center sticky left-[464px] bg-white z-20 shadow-[1px_0_0_0_#f3f4f6] align-middle w-[80px] min-w-[80px] max-w-[80px]">
+                        <td className="py-2 px-2 border-r border-gray-100 text-center align-middle w-[80px] min-w-[80px] max-w-[80px]">
                           <span className={`inline-flex items-center justify-center w-7 h-7 rounded-lg font-bold text-sm ${faltasTotales > 0 ? 'bg-red-100 text-red-700' : 'bg-gray-100 text-gray-600'}`}>{faltasTotales}</span>
                         </td>
 
-                        {fechasClase.map(fecha => {
+                        {fechasDelMes.map(fecha => {
                           const registroBD = alumno.asistencias[fecha];
                           const cambioPendiente = cambiosPendientes[`${alumno.matricula}_${fecha}`]?.estado;
 
@@ -799,7 +818,6 @@ const AsistenciaDocente = () => {
                             const isChecked = cambioPendiente === 'P'; 
                             return (
                               <td key={fecha} className="p-1 border-r border-gray-100 text-center align-middle bg-blue-50/20">
-                                {/* 🌟 ELIMINACIÓN DE CAMBIO AL DESMARCAR (UN SOLO ALUMNO) */}
                                 <input 
                                   type="checkbox" 
                                   checked={isChecked} 
@@ -857,7 +875,7 @@ const AsistenciaDocente = () => {
                   })
                 ) : (
                   <tr>
-                    <td colSpan={6 + fechasClase.length} className="py-16 text-center">
+                    <td colSpan={5 + fechasDelMes.length} className="py-16 text-center">
                       <div className="flex flex-col items-center justify-center text-gray-400">
                         <Search className="w-10 h-10 mb-3 opacity-50" />
                         <p className="font-semibold text-gray-600">No se encontraron datos.</p>
