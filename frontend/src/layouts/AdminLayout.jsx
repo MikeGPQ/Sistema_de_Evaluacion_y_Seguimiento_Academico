@@ -174,7 +174,7 @@ const AdminLayout = () => {
               <CalendarDays className="w-[18px] h-[18px] shrink-0" />
               {!effectivelyCollapsed && <span>Grupos y Horarios</span>}
             </Link>
-            <Link to="/reportes" title="Boletas y Listas" className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-colors ${effectivelyCollapsed ? 'justify-center' : ''} ${isActive('/reportes') ? 'bg-[#1A237E] text-white font-semibold shadow-md' : 'text-slate-300 hover:bg-slate-800 hover:text-white'}`}>
+            <Link to="/reportes/asistencia" title="Boletas y Listas" className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-colors ${effectivelyCollapsed ? 'justify-center' : ''} ${isActive('/reportes') ? 'bg-[#1A237E] text-white font-semibold shadow-md' : 'text-slate-300 hover:bg-slate-800 hover:text-white'}`}>
               <FileText className="w-[18px] h-[18px] shrink-0" />
               {!effectivelyCollapsed && <span>Boletas y Listas</span>}
             </Link>

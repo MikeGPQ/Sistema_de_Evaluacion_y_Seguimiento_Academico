@@ -4,6 +4,7 @@ from fastapi.responses import StreamingResponse
 import io
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
+from sqlalchemy import distinct
 from datetime import date, timedelta
 from typing import List, Optional
 from pydantic import BaseModel
@@ -16,9 +17,13 @@ from app.models.attendance import AttendanceRecord
 from app.models.academic_group import AcademicGroup
 from app.models.subject import Subject
 from app.models.academic_period import AcademicPeriod
-from app.models.teacher import Teacher 
+from app.models.teacher import Teacher
 from app.services.audit_service import log_audit_event
-from app.models.student_academic_profile import StudentAcademicProfile;
+from app.models.student_academic_profile import StudentAcademicProfile
+from app.models.academic_level import AcademicLevel
+from app.models.quarter_catalog import QuarterCatalog
+from app.models.sigad_group import SigadGroup
+from app.models.assignment_schedule import AssignmentSchedule
 
 router = APIRouter(prefix="/asistencia", tags=["Asistencia Docente"])
 
@@ -301,81 +306,204 @@ def get_student_attendance(student_id: str, period: str, db: Session = Depends(g
     
     return list(materias_fusionadas.values())
 
+@router.get("/reporte/filtros")
+def obtener_filtros_reporte(db: Session = Depends(get_db)):
+    periodo = db.query(AcademicPeriod).filter(AcademicPeriod.is_active == True).first()
+    if not periodo:
+        raise HTTPException(status_code=404, detail="No hay periodo activo")
+
+    niveles = db.query(AcademicLevel).all()
+    niveles_data = [{"id": n.id, "name": n.name} for n in niveles]
+
+    # Programs that have students enrolled in the active period
+    programas_ids = (
+        db.query(distinct(Subject.career_id))
+        .join(AcademicGroup, AcademicGroup.subject_id == Subject.id)
+        .join(StudentEnrollment, StudentEnrollment.academic_group_id == AcademicGroup.id)
+        .filter(
+            AcademicGroup.period_id == periodo.id,
+            Subject.career_id != None
+        )
+        .all()
+    )
+    programas_ids_list = [row[0] for row in programas_ids]
+    programas = db.query(AcademicProgram).filter(AcademicProgram.id.in_(programas_ids_list)).all()
+    programas_data = [{"id": p.id, "name": p.name, "nivel_academico": p.nivel_academico} for p in programas]
+
+    # Check if tronco comun subjects exist in active period
+    tronco_comun_exists = (
+        db.query(StudentEnrollment)
+        .join(AcademicGroup, AcademicGroup.id == StudentEnrollment.academic_group_id)
+        .join(Subject, Subject.id == AcademicGroup.subject_id)
+        .filter(
+            AcademicGroup.period_id == periodo.id,
+            Subject.career_id == None
+        )
+        .first()
+    )
+    if tronco_comun_exists:
+        programas_data.insert(0, {"id": None, "name": "Tronco Común", "nivel_academico": None})
+
+    cuatrimestres = db.query(QuarterCatalog).order_by(QuarterCatalog.id).all()
+    cuatrimestres_data = [{"id": q.id, "nombre": q.nombre} for q in cuatrimestres]
+
+    return {
+        "niveles": niveles_data,
+        "programas": programas_data,
+        "cuatrimestres": cuatrimestres_data,
+        "periodo_activo": {
+            "id": periodo.id,
+            "codigo": periodo.codigo,
+            "anio": periodo.anio,
+            "fecha_inicio": periodo.fecha_inicio.isoformat() if periodo.fecha_inicio else None,
+            "fecha_fin": periodo.fecha_fin.isoformat() if periodo.fecha_fin else None,
+        }
+    }
+
+
+@router.get("/reporte/materias-grupos")
+def obtener_materias_grupos(
+    nivel_academico: Optional[str] = None,
+    carrera_id: Optional[int] = None,
+    tronco_comun: Optional[bool] = None,
+    cuatrimestre_id: Optional[int] = None,
+    db: Session = Depends(get_db)
+):
+    periodo = db.query(AcademicPeriod).filter(AcademicPeriod.is_active == True).first()
+    if not periodo:
+        raise HTTPException(status_code=404, detail="No hay periodo activo")
+
+    query = (
+        db.query(AcademicGroup)
+        .join(Subject, Subject.id == AcademicGroup.subject_id)
+        .filter(AcademicGroup.period_id == periodo.id)
+    )
+
+    if tronco_comun:
+        query = query.filter(Subject.career_id == None)
+    elif carrera_id is not None:
+        query = query.filter(Subject.career_id == carrera_id)
+
+    if nivel_academico:
+        query = query.filter(Subject.nivel_academico == nivel_academico)
+
+    if cuatrimestre_id:
+        query = query.filter(Subject.quarter_id == cuatrimestre_id)
+
+    grupos = query.all()
+
+    result = []
+    for g in grupos:
+        subject = g.subject
+        identificador = g.sigad_group.identificador if g.sigad_group else str(g.id)
+        carrera_nombre = subject.career.name if subject and subject.career else "Tronco Común"
+        cuatrimestre_nombre = subject.quarter.nombre if subject and subject.quarter else ""
+        materia_nombre = subject.nombre if subject else ""
+        result.append({
+            "id": g.id,
+            "label": f"{materia_nombre} - {identificador}",
+            "materia_id": subject.id if subject else None,
+            "materia_nombre": materia_nombre,
+            "grupo_identificador": identificador,
+            "cuatrimestre_id": subject.quarter_id if subject else None,
+            "cuatrimestre_nombre": cuatrimestre_nombre,
+            "carrera_nombre": carrera_nombre,
+        })
+
+    return result
+
+
 @router.get("/reporte")
 def generar_reporte_asistencia(
     carrera_id: Optional[int] = None,
     cuatrimestre: Optional[int] = None,
     grupo_id: Optional[int] = None,
     materia_id: Optional[int] = None,
+    nivel_academico: Optional[str] = None,
+    tronco_comun: Optional[bool] = None,
     formato: str = "excel",
     db: Session = Depends(get_db)
 ):
-    # 🔹 Obtener periodo activo
     periodo = db.query(AcademicPeriod).filter(AcademicPeriod.is_active == True).first()
     if not periodo:
         raise HTTPException(status_code=404, detail="No hay periodo activo")
 
-    # 🔹 Query base
-    query = db.query(StudentEnrollment).join(AcademicGroup)
+    query = (
+        db.query(StudentEnrollment)
+        .join(AcademicGroup, AcademicGroup.id == StudentEnrollment.academic_group_id)
+        .join(Subject, Subject.id == AcademicGroup.subject_id)
+        .filter(AcademicGroup.period_id == periodo.id)
+    )
 
     if grupo_id:
         query = query.filter(StudentEnrollment.academic_group_id == grupo_id)
 
     if materia_id:
-        query = query.join(Subject).filter(Subject.id == materia_id)
+        query = query.filter(Subject.id == materia_id)
 
-    if carrera_id:
-        query = query.join(Subject).filter(Subject.career_id == carrera_id)
+    if tronco_comun:
+        query = query.filter(Subject.career_id == None)
+    elif carrera_id:
+        query = query.filter(Subject.career_id == carrera_id)
 
     if cuatrimestre:
-        query = query.join(Subject).filter(Subject.quarter_id == cuatrimestre)
+        query = query.filter(Subject.quarter_id == cuatrimestre)
+
+    if nivel_academico:
+        query = query.filter(Subject.nivel_academico == nivel_academico)
 
     inscripciones = query.all()
 
     data = []
 
     for insc in inscripciones:
-        total_clases = 0
-        asistencias = 0
-
         grupo = insc.academic_group
-        fechas = calcular_fechas_clase_v3(
-            grupo.schedules,
-            periodo.fecha_inicio,
-            periodo.fecha_fin
-        )
-
-        total_clases = len(fechas)
-
-        for rec in insc.attendance_records:
-            if rec.estado == "asistencia" or rec.estado == "justificado":
-                asistencias += 1
-
-        porcentaje = (asistencias / total_clases * 100) if total_clases > 0 else 0
-
+        subject = grupo.subject
         alumno = insc.student
 
+        # Determine allowed absences based on distinct class days per week
+        dias_distintos = len(set(s.dia_semana for s in grupo.schedules)) if grupo.schedules else 0
+        faltas_permitidas = 3 if dias_distintos <= 1 else 6
+
+        # Count absences (faltas only)
+        total_faltas = sum(1 for rec in insc.attendance_records if rec.estado == "falta")
+
+        # Count attended/justified for percentage
+        asistencias = sum(
+            1 for rec in insc.attendance_records
+            if rec.estado in ("asistencia", "justificado")
+        )
+
+        fechas = calcular_fechas_clase_v3(grupo.schedules, periodo.fecha_inicio, periodo.fecha_fin)
+        total_clases = len(fechas)
+        porcentaje = (asistencias / total_clases * 100) if total_clases > 0 else 0
+
+        identificador = grupo.sigad_group.identificador if grupo.sigad_group else str(grupo.id)
+        carrera_nombre = subject.career.name if subject and subject.career else "Tronco Común"
+        cuatrimestre_nombre = subject.quarter.nombre if subject and subject.quarter else ""
+        nombre_completo = f"{alumno.nombre} {alumno.apellido_paterno} {alumno.apellido_materno}".strip() if alumno else ""
+
         data.append({
-            "matricula": alumno.matricula,
-            "nombre": f"{alumno.nombre} {alumno.apellido_paterno}",
-            "materia": grupo.subject.nombre if grupo.subject else "",
-            "grupo": grupo.id,
-            "asistencias": asistencias,
-            "total_clases": total_clases,
-            "porcentaje": round(porcentaje, 2),
-            "riesgo": "SI" if porcentaje < 70 else "NO"
+            "Matricula": alumno.matricula if alumno else "",
+            "Nombre Completo": nombre_completo,
+            "Carrera": carrera_nombre,
+            "Cuatrimestre": cuatrimestre_nombre,
+            "Materia": subject.nombre if subject else "",
+            "Grupo": identificador,
+            "Asistencias": asistencias,
+            "Faltas": total_faltas,
+            "Total Clases": total_clases,
+            "Porcentaje": round(porcentaje, 2),
+            "Riesgo": "SI" if total_faltas > faltas_permitidas else "NO",
         })
 
-    # 🔹 Convertir a DataFrame
     df = pd.DataFrame(data)
 
     if formato == "excel":
         output = io.BytesIO()
         with pd.ExcelWriter(output, engine="openpyxl") as writer:
             df.to_excel(writer, index=False, sheet_name="Reporte")
-
         output.seek(0)
-
         return StreamingResponse(
             output,
             media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
