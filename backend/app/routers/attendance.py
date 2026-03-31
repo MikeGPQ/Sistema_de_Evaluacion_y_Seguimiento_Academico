@@ -1,4 +1,7 @@
 import json
+import pandas as pd
+from fastapi.responses import StreamingResponse
+import io
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
 from datetime import date, timedelta
@@ -297,3 +300,86 @@ def get_student_attendance(student_id: str, period: str, db: Session = Depends(g
             materias_fusionadas[crn]["justifications"].update(justification_map)
     
     return list(materias_fusionadas.values())
+
+@router.get("/reporte")
+def generar_reporte_asistencia(
+    carrera_id: Optional[int] = None,
+    cuatrimestre: Optional[int] = None,
+    grupo_id: Optional[int] = None,
+    materia_id: Optional[int] = None,
+    formato: str = "excel",
+    db: Session = Depends(get_db)
+):
+    # 🔹 Obtener periodo activo
+    periodo = db.query(AcademicPeriod).filter(AcademicPeriod.is_active == True).first()
+    if not periodo:
+        raise HTTPException(status_code=404, detail="No hay periodo activo")
+
+    # 🔹 Query base
+    query = db.query(StudentEnrollment).join(AcademicGroup)
+
+    if grupo_id:
+        query = query.filter(StudentEnrollment.academic_group_id == grupo_id)
+
+    if materia_id:
+        query = query.join(Subject).filter(Subject.id == materia_id)
+
+    if carrera_id:
+        query = query.join(Subject).filter(Subject.career_id == carrera_id)
+
+    if cuatrimestre:
+        query = query.join(Subject).filter(Subject.quarter_id == cuatrimestre)
+
+    inscripciones = query.all()
+
+    data = []
+
+    for insc in inscripciones:
+        total_clases = 0
+        asistencias = 0
+
+        grupo = insc.academic_group
+        fechas = calcular_fechas_clase_v3(
+            grupo.schedules,
+            periodo.fecha_inicio,
+            periodo.fecha_fin
+        )
+
+        total_clases = len(fechas)
+
+        for rec in insc.attendance_records:
+            if rec.estado == "asistencia" or rec.estado == "justificado":
+                asistencias += 1
+
+        porcentaje = (asistencias / total_clases * 100) if total_clases > 0 else 0
+
+        alumno = insc.student
+
+        data.append({
+            "matricula": alumno.matricula,
+            "nombre": f"{alumno.nombre} {alumno.apellido_paterno}",
+            "materia": grupo.subject.nombre if grupo.subject else "",
+            "grupo": grupo.id,
+            "asistencias": asistencias,
+            "total_clases": total_clases,
+            "porcentaje": round(porcentaje, 2),
+            "riesgo": "SI" if porcentaje < 70 else "NO"
+        })
+
+    # 🔹 Convertir a DataFrame
+    df = pd.DataFrame(data)
+
+    if formato == "excel":
+        output = io.BytesIO()
+        with pd.ExcelWriter(output, engine="openpyxl") as writer:
+            df.to_excel(writer, index=False, sheet_name="Reporte")
+
+        output.seek(0)
+
+        return StreamingResponse(
+            output,
+            media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            headers={"Content-Disposition": "attachment; filename=reporte_asistencia.xlsx"}
+        )
+
+    return df.to_dict(orient="records")

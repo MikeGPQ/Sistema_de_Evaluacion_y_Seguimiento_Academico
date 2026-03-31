@@ -1,7 +1,7 @@
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { useAuth } from "../hooks/AuthContext";
 import { Hammer } from "lucide-react";
-
+import ReporteAsistencia from "../pages/ReporteAsistencia";
 // Páginas
 import LoginPage from "../pages/LoginPage";
 import ChangePassword from "../pages/ChangePassword";
@@ -113,14 +113,15 @@ const AppRoutes = () => {
 
         {/* ADMIN & SUPER ADMIN */}
         <Route element={<ProtectedRoute allowedRoles={["admin", "super_admin"]}><AdminLayout /></ProtectedRoute>}>
-          <Route path="/alumnos/listado" element={<ListadoAlumnos />} />
-          <Route path="/alumnos/importar" element={<ImportarAlumnos />} />
-          <Route path="/alumnos/cambiar-estatus" element={<CambiarEstatusAlumno />} />
-          <Route path="/docentes" element={<EnConstruccion modulo="Sincronización Docente" />} />
-          <Route path="/horarios" element={<GruposYHorarios />} />
-          <Route path="/reportes" element={<EnConstruccion modulo="Boletas y Listas" />} />
-        </Route>
-
+  <Route path="/alumnos/listado" element={<ListadoAlumnos />} />
+  <Route path="/alumnos/importar" element={<ImportarAlumnos />} />
+  <Route path="/alumnos/cambiar-estatus" element={<CambiarEstatusAlumno />} />
+  <Route path="/docentes" element={<EnConstruccion modulo="Sincronización Docente" />} />
+  <Route path="/horarios" element={<GruposYHorarios />} />
+  
+  {/* REPORTE DE ASISTENCIA */}
+  <Route path="/reportes/asistencia" element={<ReporteAsistencia />} />
+</Route>
         {/* SUPER ADMIN */}
         <Route element={<ProtectedRoute allowedRoles={["super_admin"]}><AdminLayout /></ProtectedRoute>}>
           <Route path="/administradores/listado" element={<ListadoAdministradores />} />
