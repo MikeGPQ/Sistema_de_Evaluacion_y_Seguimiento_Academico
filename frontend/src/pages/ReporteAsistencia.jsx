@@ -193,7 +193,7 @@ export default function ReporteAsistencia() {
   const totalAlumnos = datosFiltrados.length;
   const alumnosEnRiesgo = datosFiltrados.filter(a => a['Riesgo'] === 'SI').length;
   const promedioAsistencia = totalAlumnos > 0
-    ? (datosFiltrados.reduce((sum, a) => sum + (a['Porcentaje'] || 0), 0) / totalAlumnos).toFixed(1)
+    ? (datosFiltrados.reduce((sum, a) => sum + (a['Porcentaje'] || 0), 0) / totalAlumnos).toFixed(0)
     : 0;
 
   // Excel download
@@ -308,7 +308,7 @@ export default function ReporteAsistencia() {
         (a['Asistencias'] ?? 0).toString(),
         (a['Faltas'] ?? 0).toString(),
         (a['Total Clases'] ?? 0).toString(),
-        `${a['Porcentaje'] ?? 0}%`,
+        `${Math.round(a['Porcentaje'] ?? 0)}%`,
         a['Riesgo'] === 'SI' ? 'EN RIESGO' : 'OK',
       ]);
 
@@ -714,7 +714,7 @@ export default function ReporteAsistencia() {
                       <td className="px-3 py-2.5 text-center text-gray-600">{alumno['Total Clases']}</td>
                       <td className="px-3 py-2.5 text-center font-bold">
                         <span className={alumno['Porcentaje'] < 80 ? 'text-amber-600' : 'text-green-600'}>
-                          {alumno['Porcentaje']}%
+                          {Math.round(alumno['Porcentaje'])}%
                         </span>
                       </td>
                       <td className="px-3 py-2.5 text-center">

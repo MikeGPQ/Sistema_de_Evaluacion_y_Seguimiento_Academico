@@ -476,7 +476,7 @@ def generar_reporte_asistencia(
 
         fechas = calcular_fechas_clase_v3(grupo.schedules, periodo.fecha_inicio, periodo.fecha_fin)
         total_clases = len(fechas)
-        porcentaje = (asistencias / total_clases * 100) if total_clases > 0 else 0
+        porcentaje = round(asistencias / total_clases * 100) if total_clases > 0 else 0
 
         identificador = grupo.sigad_group.identificador if grupo.sigad_group else str(grupo.id)
         carrera_nombre = subject.career.name if subject and subject.career else "Tronco Común"
@@ -493,7 +493,7 @@ def generar_reporte_asistencia(
             "Asistencias": asistencias,
             "Faltas": total_faltas,
             "Total Clases": total_clases,
-            "Porcentaje": round(porcentaje, 2),
+            "Porcentaje": porcentaje,
             "Riesgo": "SI" if total_faltas > faltas_permitidas else "NO",
         })
 
