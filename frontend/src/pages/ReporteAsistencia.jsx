@@ -1,41 +1,38 @@
 import { useState, useEffect, useRef } from 'react';
-import { Search, Users, AlertTriangle, CheckCircle, ChevronDown, Loader2, GraduationCap, BookOpen, CalendarDays, FileSpreadsheet, FileText, Filter } from 'lucide-react';
+import { Search, Users, AlertTriangle, CheckCircle, ChevronDown, ChevronLeft, ChevronRight, Loader2, GraduationCap, BookOpen, CalendarDays, FileSpreadsheet, FileText, Filter } from 'lucide-react';
 import Swal from 'sweetalert2';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import client from '../lib/axios';
 
 export default function ReporteAsistencia() {
-  // Filter options from backend
   const [filtrosData, setFiltrosData] = useState(null);
   const [materiasGruposOptions, setMateriasGruposOptions] = useState([]);
 
-  // Selected filters
   const [nivelSeleccionado, setNivelSeleccionado] = useState('');
   const [programaSeleccionado, setProgramaSeleccionado] = useState('');
   const [cuatrimestreSeleccionado, setCuatrimestreSeleccionado] = useState('');
   const [materiaGrupoSeleccionado, setMateriaGrupoSeleccionado] = useState('');
   const [cuatrimestreBloqueado, setCuatrimestreBloqueado] = useState(false);
 
-  // Dropdown open states
   const [isDropdownNivelOpen, setIsDropdownNivelOpen] = useState(false);
   const [isDropdownProgramaOpen, setIsDropdownProgramaOpen] = useState(false);
   const [isDropdownCuatrimestreOpen, setIsDropdownCuatrimestreOpen] = useState(false);
   const [isDropdownMateriaOpen, setIsDropdownMateriaOpen] = useState(false);
 
-  // Refs for click outside
   const dropdownNivelRef = useRef(null);
   const dropdownProgramaRef = useRef(null);
   const dropdownCuatrimestreRef = useRef(null);
   const dropdownMateriaRef = useRef(null);
 
-  // Data
   const [data, setData] = useState([]);
   const [busqueda, setBusqueda] = useState('');
   const [cargando, setCargando] = useState(true);
   const [cargandoFiltros, setCargandoFiltros] = useState(false);
 
-  // Load initial filter data
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(10);
+
   useEffect(() => {
     const fetchFiltros = async () => {
       try {
@@ -51,7 +48,6 @@ export default function ReporteAsistencia() {
     fetchFiltros();
   }, []);
 
-  // Load materias-grupos when filters change
   useEffect(() => {
     if (!filtrosData) return;
     const fetchMateriasGrupos = async () => {
@@ -78,13 +74,11 @@ export default function ReporteAsistencia() {
     fetchMateriasGrupos();
   }, [nivelSeleccionado, programaSeleccionado, cuatrimestreSeleccionado, filtrosData]);
 
-  // Load report data
   useEffect(() => {
     if (!filtrosData) return;
     obtenerReporte();
   }, [filtrosData]);
 
-  // Close dropdowns on click outside
   useEffect(() => {
     const handleClickOutside = (e) => {
       if (dropdownNivelRef.current && !dropdownNivelRef.current.contains(e.target)) setIsDropdownNivelOpen(false);
@@ -120,7 +114,6 @@ export default function ReporteAsistencia() {
     }
   };
 
-  // Filter handlers
   const handleNivelChange = (nivel) => {
     setNivelSeleccionado(nivel);
     setProgramaSeleccionado('');
@@ -148,7 +141,6 @@ export default function ReporteAsistencia() {
   const handleMateriaGrupoChange = (id) => {
     setMateriaGrupoSeleccionado(id);
     setIsDropdownMateriaOpen(false);
-    // Auto-set cuatrimestre from selected materia
     const selected = materiasGruposOptions.find(m => m.id === id);
     if (selected && selected.cuatrimestre_id) {
       setCuatrimestreSeleccionado(selected.cuatrimestre_id);
@@ -161,17 +153,14 @@ export default function ReporteAsistencia() {
     setCuatrimestreBloqueado(false);
   };
 
-  // Filtered programs based on nivel
   const programasFiltrados = filtrosData ? filtrosData.programas.filter(p => {
     if (!nivelSeleccionado) return true;
     if (p.id === null) {
-      // Tronco Comun: only for licenciatura or when no nivel is selected
       return nivelSeleccionado !== 'maestria';
     }
     return p.nivel_academico === nivelSeleccionado;
   }) : [];
 
-  // Search filter on loaded data
   const handleBusquedaChange = (e) => {
     let val = e.target.value;
     val = val.replace(/[^a-zA-Z0-9áéíóúÁÉÍÓÚñÑüÜ\s]/g, '');
@@ -189,14 +178,19 @@ export default function ReporteAsistencia() {
     );
   });
 
-  // Stats
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [datosFiltrados.length, busqueda]);
+
+  const totalPages = Math.max(1, Math.ceil(datosFiltrados.length / itemsPerPage));
+  const datosPaginados = datosFiltrados.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
+
   const totalAlumnos = datosFiltrados.length;
   const alumnosEnRiesgo = datosFiltrados.filter(a => a['Riesgo'] === 'SI').length;
   const promedioAsistencia = totalAlumnos > 0
     ? (datosFiltrados.reduce((sum, a) => sum + (a['Porcentaje'] || 0), 0) / totalAlumnos).toFixed(0)
     : 0;
 
-  // Excel download
   const descargarExcel = () => {
     const params = new URLSearchParams({ formato: 'excel' });
     if (nivelSeleccionado) params.append('nivel_academico', nivelSeleccionado);
@@ -210,7 +204,6 @@ export default function ReporteAsistencia() {
     window.open(`${import.meta.env.VITE_API_URL}/asistencia/reporte?${params.toString()}`, '_blank');
   };
 
-  // PDF generation
   const handleExportPDF = () => {
     if (datosFiltrados.length === 0) {
       Swal.fire('Sin datos', 'No hay datos para generar el reporte PDF.', 'warning');
@@ -221,7 +214,6 @@ export default function ReporteAsistencia() {
       const pageWidth = doc.internal.pageSize.getWidth();
       const pageHeight = doc.internal.pageSize.getHeight();
 
-      // Build subtitle info
       const periodoLabel = filtrosData?.periodo_activo?.codigo || 'N/A';
       const nivelLabel = nivelSeleccionado ? (nivelSeleccionado === 'licenciatura' ? 'Licenciatura' : 'Maestría') : 'Todos los niveles';
 
@@ -268,7 +260,6 @@ export default function ReporteAsistencia() {
         pdf.setLineWidth(0.5);
         pdf.line(14, 23, pageWidth - 14, 23);
 
-        // Info rows
         pdf.setFontSize(7.5);
         pdf.setTextColor(150);
         pdf.setFont('helvetica', 'bold');
@@ -354,7 +345,6 @@ export default function ReporteAsistencia() {
                 hookData.cell.styles.textColor = [34, 197, 94];
               }
             }
-            // Highlight entire row if at risk
             const rowData = hookData.row.raw;
             if (rowData && rowData[riesgoCol] === 'EN RIESGO' && hookData.column.index !== riesgoCol) {
               hookData.cell.styles.fillColor = [255, 250, 250];
@@ -380,14 +370,12 @@ export default function ReporteAsistencia() {
     }
   };
 
-  // Helper to get label for nivel
   const getNivelLabel = () => {
     if (!nivelSeleccionado) return 'Todos los niveles';
     const nivel = filtrosData?.niveles?.find(n => n.name === nivelSeleccionado);
     return nivel ? (nivel.name === 'licenciatura' ? 'Licenciatura' : 'Maestría') : nivelSeleccionado;
   };
 
-  // Helper to get label for programa
   const getProgramaLabel = () => {
     if (!programaSeleccionado) return 'Todos los programas';
     if (programaSeleccionado === 'tronco_comun') return 'Tronco Común';
@@ -395,14 +383,12 @@ export default function ReporteAsistencia() {
     return prog?.name || 'Programa';
   };
 
-  // Helper to get label for cuatrimestre
   const getCuatrimestreLabel = () => {
     if (!cuatrimestreSeleccionado) return 'Todos';
     const q = filtrosData?.cuatrimestres?.find(c => c.id == cuatrimestreSeleccionado);
     return q?.nombre || 'Cuatrimestre';
   };
 
-  // Helper to get label for materia/grupo
   const getMateriaGrupoLabel = () => {
     if (!materiaGrupoSeleccionado) return 'Todas las materias';
     const m = materiasGruposOptions.find(o => o.id === materiaGrupoSeleccionado);
@@ -440,14 +426,14 @@ export default function ReporteAsistencia() {
           <div className="flex gap-3 mt-3 lg:mt-0">
             <button
               onClick={handleExportPDF}
-              disabled={data.length === 0}
+              disabled={datosFiltrados.length === 0}
               className="h-[38px] flex items-center px-4 py-2 bg-white border border-gray-300 text-gray-700 rounded-lg text-sm font-bold hover:bg-gray-50 hover:text-[#1A237E] hover:border-[#1A237E] transition-all shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <FileText className="w-4 h-4 mr-2" /> Exportar PDF
             </button>
             <button
               onClick={descargarExcel}
-              disabled={data.length === 0}
+              disabled={datosFiltrados.length === 0}
               className="h-[38px] flex items-center px-4 py-2 bg-[#1A237E] text-white rounded-lg text-sm font-bold hover:bg-[#283593] transition-colors shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <FileSpreadsheet className="w-4 h-4 mr-2" /> Exportar Excel
@@ -528,7 +514,7 @@ export default function ReporteAsistencia() {
           {/* Cuatrimestre */}
           <div className="flex flex-col relative z-30" ref={dropdownCuatrimestreRef}>
             <label className="text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-1">
-              Cuatrimestre {cuatrimestreBloqueado && <span className="text-[9px] text-amber-500 normal-case">(auto)</span>}
+              Cuatrimestre
             </label>
             <div
               onClick={() => !cuatrimestreBloqueado && setIsDropdownCuatrimestreOpen(!isDropdownCuatrimestreOpen)}
@@ -664,7 +650,7 @@ export default function ReporteAsistencia() {
         </div>
 
         {/* Table */}
-        <div className="overflow-x-auto border border-gray-200 rounded-xl shadow-sm max-h-[600px]">
+        <div className={`overflow-x-auto border border-gray-200 rounded-xl shadow-sm ${itemsPerPage >= 25 ? 'max-h-[600px] overflow-y-auto' : ''}`}>
           {cargando ? (
             <div className="flex flex-col items-center justify-center py-20 text-[#1A237E]">
               <Loader2 className="w-10 h-10 animate-spin mb-4" />
@@ -695,14 +681,15 @@ export default function ReporteAsistencia() {
                 </tr>
               </thead>
               <tbody>
-                {datosFiltrados.map((alumno, index) => {
+                {datosPaginados.map((alumno, index) => {
                   const enRiesgo = alumno['Riesgo'] === 'SI';
+                  const globalIndex = (currentPage - 1) * itemsPerPage + index + 1;
                   return (
                     <tr
                       key={index}
                       className={`border-b border-gray-100 transition-colors ${enRiesgo ? 'bg-red-50/60 hover:bg-red-50' : 'hover:bg-gray-50'}`}
                     >
-                      <td className="px-3 py-2.5 text-center text-gray-400 text-xs">{index + 1}</td>
+                      <td className="px-3 py-2.5 text-center text-gray-400 text-xs">{globalIndex}</td>
                       <td className="px-3 py-2.5 font-bold text-gray-800">{alumno['Matricula']}</td>
                       <td className="px-3 py-2.5 text-gray-700">{alumno['Nombre Completo']}</td>
                       <td className="px-3 py-2.5 text-gray-600 text-xs">{alumno['Carrera']}</td>
@@ -736,12 +723,68 @@ export default function ReporteAsistencia() {
           )}
         </div>
 
-        {/* Footer info */}
+        {/* Pagination controls */}
         {datosFiltrados.length > 0 && (
-          <div className="mt-4 flex items-center justify-between text-xs text-gray-400">
-            <p>Mostrando {datosFiltrados.length} de {data.length} registros</p>
-            <p>Los alumnos en riesgo superan el límite de faltas permitidas (3 faltas si la clase es 1 vez/semana, 6 si es 2 veces/semana)</p>
+          <div className="mt-4 flex flex-col sm:flex-row items-center justify-between gap-3">
+            <div className="flex items-center gap-3 text-xs text-gray-500">
+              <span>
+                Mostrando {(currentPage - 1) * itemsPerPage + 1}–{Math.min(currentPage * itemsPerPage, datosFiltrados.length)} de {datosFiltrados.length} registros
+              </span>
+              <div className="flex items-center gap-1.5">
+                <span className="text-gray-400">Filas:</span>
+                <select
+                  value={itemsPerPage}
+                  onChange={e => { setItemsPerPage(Number(e.target.value)); setCurrentPage(1); }}
+                  className="border border-gray-300 rounded-md px-2 py-1 text-xs font-semibold text-gray-700 outline-none focus:ring-2 focus:ring-[#1A237E] focus:border-[#1A237E]"
+                >
+                  {[10, 25, 50, 100].map(n => <option key={n} value={n}>{n}</option>)}
+                </select>
+              </div>
+            </div>
+            <div className="flex items-center gap-1">
+              <button
+                onClick={() => setCurrentPage(1)}
+                disabled={currentPage === 1}
+                className="px-2 py-1.5 rounded-md border border-gray-200 text-gray-500 text-xs font-bold hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+              >«</button>
+              <button
+                onClick={() => setCurrentPage(p => p - 1)}
+                disabled={currentPage === 1}
+                className="p-1.5 rounded-md border border-gray-200 text-gray-500 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+              ><ChevronLeft className="w-4 h-4" /></button>
+              {Array.from({ length: totalPages }, (_, i) => i + 1)
+                .filter(p => p === 1 || p === totalPages || Math.abs(p - currentPage) <= 2)
+                .reduce((acc, p, idx, arr) => {
+                  if (idx > 0 && p - arr[idx - 1] > 1) acc.push('...');
+                  acc.push(p);
+                  return acc;
+                }, [])
+                .map((item, idx) =>
+                  item === '...'
+                    ? <span key={`ellipsis-${idx}`} className="px-2 py-1 text-xs text-gray-400">…</span>
+                    : <button
+                        key={item}
+                        onClick={() => setCurrentPage(item)}
+                        className={`px-3 py-1.5 rounded-md border text-xs font-bold transition-colors ${currentPage === item ? 'bg-[#1A237E] border-[#1A237E] text-white' : 'border-gray-200 text-gray-600 hover:bg-gray-50'}`}
+                      >{item}</button>
+                )}
+              <button
+                onClick={() => setCurrentPage(p => p + 1)}
+                disabled={currentPage === totalPages}
+                className="p-1.5 rounded-md border border-gray-200 text-gray-500 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+              ><ChevronRight className="w-4 h-4" /></button>
+              <button
+                onClick={() => setCurrentPage(totalPages)}
+                disabled={currentPage === totalPages}
+                className="px-2 py-1.5 rounded-md border border-gray-200 text-gray-500 text-xs font-bold hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+              >»</button>
+            </div>
           </div>
+        )}
+
+        {/* Footer note */}
+        {datosFiltrados.length > 0 && (
+          <p className="mt-2 text-xs text-gray-400">Los alumnos en riesgo superan el límite de faltas permitidas (3 faltas si la clase es 1 vez/semana, 6 si es 2 veces/semana)</p>
         )}
       </div>
     </div>

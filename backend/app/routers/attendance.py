@@ -315,7 +315,6 @@ def obtener_filtros_reporte(db: Session = Depends(get_db)):
     niveles = db.query(AcademicLevel).all()
     niveles_data = [{"id": n.id, "name": n.name} for n in niveles]
 
-    # Programs that have students enrolled in the active period
     programas_ids = (
         db.query(distinct(Subject.career_id))
         .join(AcademicGroup, AcademicGroup.subject_id == Subject.id)
@@ -330,7 +329,6 @@ def obtener_filtros_reporte(db: Session = Depends(get_db)):
     programas = db.query(AcademicProgram).filter(AcademicProgram.id.in_(programas_ids_list)).all()
     programas_data = [{"id": p.id, "name": p.name, "nivel_academico": p.nivel_academico} for p in programas]
 
-    # Check if tronco comun subjects exist in active period
     tronco_comun_exists = (
         db.query(StudentEnrollment)
         .join(AcademicGroup, AcademicGroup.id == StudentEnrollment.academic_group_id)
@@ -461,14 +459,11 @@ def generar_reporte_asistencia(
         subject = grupo.subject
         alumno = insc.student
 
-        # Determine allowed absences based on distinct class days per week
         dias_distintos = len(set(s.dia_semana for s in grupo.schedules)) if grupo.schedules else 0
         faltas_permitidas = 3 if dias_distintos <= 1 else 6
 
-        # Count absences (faltas only)
         total_faltas = sum(1 for rec in insc.attendance_records if rec.estado == "falta")
 
-        # Count attended/justified for percentage
         asistencias = sum(
             1 for rec in insc.attendance_records
             if rec.estado in ("asistencia", "justificado")
