@@ -19,6 +19,7 @@ import MiCargaAcademica from "../pages/GruposyHorarios/MiCargaAcademica";
 // Super Admin
 import ListadoAdministradores from "../pages/Administradores/ListadoAdministradores";
 import AuditLogs from "../pages/Administradores/AuditLogs";
+import Boletas from "../pages/Administradores/Boletas";
 
 // Docentes (NUEVA IMPORTACIÓN)
 import Calificaciones from "../pages/Docentes/Calificaciones";
@@ -118,7 +119,8 @@ const AppRoutes = () => {
           <Route path="/alumnos/cambiar-estatus" element={<CambiarEstatusAlumno />} />
           <Route path="/docentes" element={<EnConstruccion modulo="Sincronización Docente" />} />
           <Route path="/horarios" element={<GruposYHorarios />} />
-          <Route path="/reportes" element={<EnConstruccion modulo="Boletas y Listas" />} />
+          <Route path="/boletas" element={<Boletas />} />
+          <Route path="/reportes" element={<EnConstruccion modulo="Listas" />} />
         </Route>
 
         {/* SUPER ADMIN */}
