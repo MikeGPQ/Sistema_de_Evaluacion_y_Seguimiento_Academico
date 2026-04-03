@@ -60,7 +60,7 @@ const calcularLetrasCURP = (nombre, paterno, materno) => {
   return { prefijo, consonantes };
 };
 
-export default function ManualRegister({ isOpen, onClose, alumnoAEditar }) {
+export default function ManualRegister({ isOpen, onClose, alumnoAEditar, modoMaestria }) {
   const { user } = useAuth();
   const [careers, setCareers] = useState([]);
   const [schools, setSchools] = useState([]);
@@ -123,17 +123,53 @@ export default function ManualRegister({ isOpen, onClose, alumnoAEditar }) {
         foto_id: null, foto_nombre: null, certificado_id: null, certificado_nombre: null
       });
 
-      client.get('/alumnos/options').then(res => {
-        setCareers(res.data.careers || []);
-        setSchools(res.data.schools || []);
-        setLevels(res.data.levels || []);
-        setTitulaciones(res.data.titulation_statuses || []);
-      }).catch(err => console.error("Error al cargar catálogos:", err));
+      setIsLoadingDetails(true);
 
-      if (alumnoAEditar) {
-        setIsLoadingDetails(true);
-        client.get(`/alumnos/detalle/${alumnoAEditar.matricula}`).then(res => {
-          const { student, address } = res.data;
+      Promise.all([
+        client.get('/alumnos/options'),
+        alumnoAEditar ? client.get(`/alumnos/detalle/${alumnoAEditar.matricula}`) : Promise.resolve(null)
+      ])
+      .then(([optionsRes, detalleRes]) => {
+        
+        const loadedCareers = optionsRes.data.careers || [];
+        const loadedSchools = optionsRes.data.schools || [];
+        const loadedLevels = optionsRes.data.levels || [];
+        const loadedTitulaciones = optionsRes.data.titulation_statuses || [];
+
+        setCareers(loadedCareers);
+        setSchools(loadedSchools);
+        setLevels(loadedLevels);
+        setTitulaciones(loadedTitulaciones);
+
+        if (detalleRes) {
+          const { student, address } = detalleRes.data;
+
+          let estatusTitulacionAsignado = student.titulation_status_id || '';
+          let nivelAsignado = student.nivel_id || '';
+          let carreraAsignada = student.career_id || '';
+          let procedenciaAsignada = student.origin_school_id || '';
+          let folioAsignado = student.folio_certificado || '';
+          let certIdAsignado = student.certificado_id || null;
+          let certNomAsignado = student.certificado_nombre || null;
+
+          if (modoMaestria) {
+            const nivelMaestria = loadedLevels.find(l => l.name.toLowerCase().includes('maestria'));
+            if (nivelMaestria) nivelAsignado = nivelMaestria.id;
+
+            if (alumnoAEditar.es_opcion_titulacion) {
+              const estatusOpcion = loadedTitulaciones.find(t => 
+                t.description.toLowerCase().includes('opción a titulación') || 
+                t.description.toLowerCase().includes('maestría como opción')
+              );
+              if (estatusOpcion) estatusTitulacionAsignado = estatusOpcion.id;
+            }
+
+            carreraAsignada = ''; 
+            procedenciaAsignada = '';
+            folioAsignado = '';
+            certIdAsignado = null;
+            certNomAsignado = null;
+          }
 
           let cp_sufijo = '';
           if (address.codigo_postal && address.codigo_postal.length === 5) {
@@ -149,23 +185,38 @@ export default function ManualRegister({ isOpen, onClose, alumnoAEditar }) {
 
           const promRaw = String(student.promedio_procedencia ?? '').trim().toLowerCase();
           const esPromedioInvalido = ['', 'nan', 'null', 'none', 'undefined'].includes(promRaw);
-          const promedioValor = esPromedioInvalido ? '' : Math.round(student.promedio_procedencia).toString();
+          let promedioValor = esPromedioInvalido ? '' : Math.round(student.promedio_procedencia).toString();
+
+          if (modoMaestria) {
+            promedioValor = '';
+          }
 
           const dataCargada = {
-            matricula: student.matricula, nombre: student.nombre,
-            apellido_paterno: student.apellido_paterno, apellido_materno: student.apellido_materno,
-            curp: student.curp, email_personal: student.email_personal, email_institucional: email_inst_limpio,
-            nivel_id: student.nivel_id || '',
-            titulation_status_id: student.titulation_status_id || '',
+            matricula: student.matricula, 
+            nombre: student.nombre,
+            apellido_paterno: student.apellido_paterno, 
+            apellido_materno: student.apellido_materno,
+            curp: student.curp, 
+            email_personal: student.email_personal, 
+            email_institucional: email_inst_limpio,
+            
+            nivel_id: nivelAsignado,
+            titulation_status_id: estatusTitulacionAsignado,
             estatus_titulacion: student.estatus_titulacion || '',
-            folio_certificado: student.folio_certificado || '',
-            career_id: student.career_id, origin_school_id: student.origin_school_id,
+            folio_certificado: folioAsignado,
+            career_id: carreraAsignada, 
+            origin_school_id: procedenciaAsignada,
             promedio_procedencia: promedioValor,
+            
             calle: address.calle, numero_domicilio: address.numero_domicilio, colonia: address.colonia,
             codigo_postal: cp_sufijo, municipio: address.municipio, estado: address.estado || 'Campeche',
-            status: student.status, foto_id: student.foto_id ?? null, foto_nombre: student.foto_nombre ?? null,
-            certificado_id: student.certificado_id ?? null, certificado_nombre: student.certificado_nombre ?? null
+            status: student.status, 
+            foto_id: student.foto_id ?? null, 
+            foto_nombre: student.foto_nombre ?? null,
+            certificado_id: certIdAsignado, 
+            certificado_nombre: certNomAsignado
           };
+          
           setFormData(dataCargada);
           setDatosOriginales(dataCargada);
 
@@ -198,12 +249,17 @@ export default function ManualRegister({ isOpen, onClose, alumnoAEditar }) {
             email: emailRegex.test(student.email_personal) ? '' : '❌ El correo importado tiene un formato dudoso.',
             promedio: promedioValor !== '' ? '' : '❌ Falta el promedio.'
           });
-        }).catch(() => {
-          Swal.fire('Error', 'No se pudieron cargar los detalles del alumno', 'error');
-        }).finally(() => setIsLoadingDetails(false));
-      }
+        }
+      })
+      .catch(err => {
+        console.error("Error al cargar datos iniciales:", err);
+        Swal.fire('Error', 'Hubo un problema al cargar la información.', 'error');
+      })
+      .finally(() => {
+        setIsLoadingDetails(false);
+      });
     }
-  }, [isOpen, alumnoAEditar]);
+  }, [isOpen, alumnoAEditar, modoMaestria]);
 
   useEffect(() => {
     if (isLoadingDetails) return;
@@ -545,7 +601,13 @@ export default function ManualRegister({ isOpen, onClose, alumnoAEditar }) {
     if (files.certificado) dataToSend.append('certificado', files.certificado);
 
     try {
-      if (alumnoAEditar) {
+      if (modoMaestria) {
+        dataToSend.append('es_opcion_titulacion', alumnoAEditar.es_opcion_titulacion || false);
+        
+        await client.post(`/alumnos/inscribir-maestria/${formData.matricula}`, dataToSend);
+        Swal.fire({ title: 'Inscrito', text: 'Alumno inscrito a Maestría exitosamente', icon: 'success', confirmButtonColor: '#1A237E' }).then(() => onClose());
+        
+      } else if (alumnoAEditar) {
         await client.put(`/alumnos/actualizar/${alumnoAEditar.matricula}`, dataToSend);
         Swal.fire({ title: 'Actualizado', text: 'Los datos han sido actualizados', icon: 'success', confirmButtonColor: '#f59e0b' }).then(() => onClose());
       } else {
@@ -600,9 +662,13 @@ export default function ManualRegister({ isOpen, onClose, alumnoAEditar }) {
               </svg>
               Volver a inicio
             </button>
-            <h2 className="text-2xl font-bold text-white">{alumnoAEditar ? 'Edición de Alumno' : 'Alta de Alumno'}</h2>
+            <h2 className="text-2xl font-bold text-white">
+              {modoMaestria ? 'Inscripción a Maestría' : (alumnoAEditar ? 'Edición de Alumno' : 'Alta de Alumno')}
+            </h2>
             <p className="text-blue-200 text-sm mt-1">
-              {alumnoAEditar ? 'Modifique la información del alumno seleccionado.' : 'Complete los datos del alumno para registrarlo en el sistema'}
+              {modoMaestria 
+                ? 'Complete exclusivamente los datos de procedencia y documentación de posgrado. El expediente personal es de solo lectura.' 
+                : (alumnoAEditar ? 'Modifique la información del alumno seleccionado.' : 'Complete los datos del alumno para registrarlo en el sistema')}
             </p>
           </div>
 
@@ -620,21 +686,44 @@ export default function ManualRegister({ isOpen, onClose, alumnoAEditar }) {
                 </div>
                 <div>
                   <label className="block text-xs font-bold text-gray-600 mb-1">Nombre(s) <span className="text-red-500">*</span></label>
-                  <input name="nombre" value={formData.nombre} maxLength={50} onChange={handleChange} className="w-full border border-gray-300 rounded-md p-2.5 text-sm focus:border-[#1e3a8a] focus:ring-1 focus:ring-[#1e3a8a] outline-none" required />
+                  <input name="nombre" value={formData.nombre} maxLength={50} onChange={handleChange} disabled={modoMaestria} className={`w-full border rounded-md p-2.5 text-sm outline-none ${modoMaestria ? 'bg-gray-100 text-gray-500 border-gray-200' : 'border-gray-300 focus:border-[#1e3a8a] focus:ring-1 focus:ring-[#1e3a8a]'}`} required />
                 </div>
                 <div>
                   <label className="block text-xs font-bold text-gray-600 mb-1">Apellido Paterno <span className="text-red-500">*</span></label>
-                  <input name="apellido_paterno" value={formData.apellido_paterno} maxLength={50} onChange={handleChange} className="w-full border border-gray-300 rounded-md p-2.5 text-sm focus:border-[#1e3a8a] focus:ring-1 focus:ring-[#1e3a8a] outline-none" required />
+                  <input 
+                    name="apellido_paterno" 
+                    value={formData.apellido_paterno} 
+                    maxLength={50} 
+                    onChange={handleChange} 
+                    disabled={modoMaestria} 
+                    className={`w-full border rounded-md p-2.5 text-sm outline-none ${modoMaestria ? 'bg-gray-100 text-gray-500 border-gray-200' : 'border-gray-300 focus:border-[#1e3a8a] focus:ring-1 focus:ring-[#1e3a8a]'}`} 
+                    required 
+                  />
                 </div>
                 <div>
                   <label className="block text-xs font-bold text-gray-600 mb-1">Apellido Materno <span className="text-red-500">*</span></label>
-                  <input name="apellido_materno" value={formData.apellido_materno} maxLength={50} onChange={handleChange} className="w-full border border-gray-300 rounded-md p-2.5 text-sm focus:border-[#1e3a8a] focus:ring-1 focus:ring-[#1e3a8a] outline-none" required />
+                  <input 
+                    name="apellido_materno" 
+                    value={formData.apellido_materno} 
+                    maxLength={50} 
+                    onChange={handleChange} 
+                    disabled={modoMaestria} 
+                    className={`w-full border rounded-md p-2.5 text-sm outline-none ${modoMaestria ? 'bg-gray-100 text-gray-500 border-gray-200' : 'border-gray-300 focus:border-[#1e3a8a] focus:ring-1 focus:ring-[#1e3a8a]'}`} 
+                    required 
+                  />
                 </div>
                 <div>
                   <label className="block text-xs font-bold text-gray-600 mb-1">CURP <span className="text-red-500">*</span></label>
-                  <input name="curp" value={formData.curp} onChange={handleChange} onBlur={handleCheckCurp}
-                    className={`w-full border rounded-md p-2.5 text-sm uppercase outline-none font-bold tracking-wider transition-all focus:ring-1 ${erroresEnVivo.curp ? 'border-red-500 bg-red-50 focus:ring-red-500 text-red-700' : validacionExitosa.curp ? 'border-green-500 bg-green-50 focus:ring-green-500 text-green-700' : 'border-gray-300 focus:border-[#1e3a8a]'}`}
-                    maxLength={18} required />
+                  <input 
+                    name="curp" 
+                    value={formData.curp} 
+                    onChange={handleChange} 
+                    onBlur={handleCheckCurp}
+                    disabled={modoMaestria}
+                    className={`w-full border rounded-md p-2.5 text-sm uppercase outline-none font-bold tracking-wider transition-all focus:ring-1 ${modoMaestria ? 'bg-gray-100 text-gray-500 border-gray-200' : erroresEnVivo.curp ? 'border-red-500 bg-red-50 focus:ring-red-500 text-red-700' : validacionExitosa.curp ? 'border-green-500 bg-green-50 focus:ring-green-500 text-green-700' : 'border-gray-300 focus:border-[#1e3a8a]'}`}
+                    maxLength={18} 
+                    required 
+                  />
                   <div className="flex justify-between items-start mt-1">
                     <div>
                       {erroresEnVivo.curp && <p className="text-xs text-red-600 font-bold animate-pulse">{erroresEnVivo.curp}</p>}
@@ -664,7 +753,7 @@ export default function ManualRegister({ isOpen, onClose, alumnoAEditar }) {
                     value={levelOptions.find(opt => opt.value === formData.nivel_id) || null}
                     placeholder="Seleccione el nivel..."
                     styles={customSelectStyles}
-                    isDisabled={!!alumnoAEditar}
+                    isDisabled={!!alumnoAEditar || modoMaestria}
                   />
                 </div>
                 <div className="md:col-span-2">
@@ -688,6 +777,7 @@ export default function ManualRegister({ isOpen, onClose, alumnoAEditar }) {
                         options={titulationOptions}
                         onChange={handleSelectChange}
                         value={titulationOptions.find(opt => opt.value === formData.titulation_status_id) || null}
+                        isDisabled={modoMaestria && alumnoAEditar?.es_opcion_titulacion}
                         placeholder="Indique estatus..."
                         styles={{
                           ...customSelectStyles,
@@ -711,8 +801,9 @@ export default function ManualRegister({ isOpen, onClose, alumnoAEditar }) {
                   <label className="block text-xs font-bold text-gray-600 mb-1">Promedio de Procedencia <span className="text-red-500">*</span></label>
                   <input
                     type="text" inputMode="numeric" maxLength="2" name="promedio_procedencia" value={formData.promedio_procedencia}
-                    onChange={handleChange} disabled={!!alumnoAEditar}
-                    className={`w-full border rounded-md p-2.5 text-sm outline-none transition-all ${alumnoAEditar ? 'bg-gray-100 text-gray-500 border-gray-200' : erroresEnVivo.promedio ? 'border-red-500 bg-red-50' : 'border-gray-300 focus:border-[#1e3a8a]'}`} required
+                    onChange={handleChange} 
+                    disabled={!!alumnoAEditar && !modoMaestria}
+                    className={`w-full border rounded-md p-2.5 text-sm outline-none transition-all ${(!!alumnoAEditar && !modoMaestria) ? 'bg-gray-100 text-gray-500 border-gray-200' : erroresEnVivo.promedio ? 'border-red-500 bg-red-50' : 'border-gray-300 focus:border-[#1e3a8a]'}`} required
                   />
                   {erroresEnVivo.promedio && <p className="text-xs text-red-600 mt-1.5 font-bold">{erroresEnVivo.promedio}</p>}
                 </div>
@@ -728,44 +819,102 @@ export default function ManualRegister({ isOpen, onClose, alumnoAEditar }) {
                 <div>
                   <label className="block text-xs font-bold text-gray-600 mb-1">Correo Institucional</label>
                   <div className="flex">
-                    <input type="text" name="email_institucional" value={formData.email_institucional} onChange={handleChange} className="w-full border border-gray-300 rounded-l-md p-2.5 text-sm lowercase outline-none" />
+                    <input 
+                      type="text" 
+                      name="email_institucional" 
+                      value={formData.email_institucional} 
+                      onChange={handleChange} 
+                      disabled={modoMaestria} 
+                      className={`w-full border rounded-l-md p-2.5 text-sm lowercase outline-none ${modoMaestria ? 'bg-gray-100 text-gray-500 border-gray-200' : 'border-gray-300'}`} 
+                    />
                     <span className="inline-flex items-center px-3 rounded-r-md border border-l-0 border-gray-300 bg-gray-50 text-gray-500 text-sm">@red.unid.mx</span>
                   </div>
                 </div>
                 <div>
                   <label className="block text-xs font-bold text-gray-600 mb-1">Correo Personal <span className="text-red-500">*</span></label>
-                  <input type="email" name="email_personal" value={formData.email_personal} onChange={handleChange} onBlur={handleCheckEmail} onKeyDown={(e) => e.key === ' ' && e.preventDefault()}
-                    className={`w-full border rounded-md p-2.5 text-sm lowercase outline-none transition-all ${erroresEnVivo.email ? 'border-red-500 bg-red-50' : validacionExitosa.email ? 'border-green-500 bg-green-50' : 'border-gray-300 focus:border-[#1e3a8a]'}`} required />
+                  <input 
+                    type="email" 
+                    name="email_personal" 
+                    value={formData.email_personal} 
+                    onChange={handleChange} 
+                    onBlur={handleCheckEmail} 
+                    onKeyDown={(e) => e.key === ' ' && e.preventDefault()}
+                    disabled={modoMaestria}
+                    className={`w-full border rounded-md p-2.5 text-sm lowercase outline-none transition-all ${modoMaestria ? 'bg-gray-100 text-gray-500 border-gray-200' : erroresEnVivo.email ? 'border-red-500 bg-red-50' : validacionExitosa.email ? 'border-green-500 bg-green-50' : 'border-gray-300 focus:border-[#1e3a8a]'}`} 
+                    required 
+                  />
                   {erroresEnVivo.email && <p className="text-xs text-red-600 mt-1.5 font-bold">{erroresEnVivo.email}</p>}
                   {validacionExitosa.email && !erroresEnVivo.email && <p className="text-xs text-green-600 mt-1.5 font-bold">✓ Correo válido</p>}
                 </div>
                 <div className="md:col-span-2 mt-4 border-t border-gray-100 pt-5 grid grid-cols-1 md:grid-cols-2 gap-5">
                   <div className="md:col-span-2">
                     <label className="block text-xs font-bold text-gray-600 mb-1">Calle <span className="text-red-500">*</span></label>
-                    <input name="calle" value={formData.calle} onChange={handleChange} className="w-full border border-gray-300 rounded-md p-2.5 text-sm outline-none" required />
+                    <input 
+                      name="calle" 
+                      value={formData.calle} 
+                      onChange={handleChange} 
+                      disabled={modoMaestria} 
+                      className={`w-full border rounded-md p-2.5 text-sm outline-none ${modoMaestria ? 'bg-gray-100 text-gray-500 border-gray-200' : 'border-gray-300'}`} 
+                      required 
+                    />
                   </div>
                   <div>
                     <label className="block text-xs font-bold text-gray-600 mb-1">Número Ext. <span className="text-red-500">*</span></label>
-                    <input name="numero_domicilio" value={formData.numero_domicilio} onChange={handleChange} className="w-full border border-gray-300 rounded-md p-2.5 text-sm outline-none" required />
+                    <input 
+                      name="numero_domicilio" 
+                      value={formData.numero_domicilio} 
+                      onChange={handleChange} 
+                      disabled={modoMaestria} 
+                      className={`w-full border rounded-md p-2.5 text-sm outline-none ${modoMaestria ? 'bg-gray-100 text-gray-500 border-gray-200' : 'border-gray-300'}`} 
+                      required 
+                    />
                   </div>
                   <div>
                     <label className="block text-xs font-bold text-gray-600 mb-1">C.P. (Estado) <span className="text-red-500">*</span></label>
                     <div className="flex">
                       <span className="inline-flex items-center px-3 rounded-l-md border border-r-0 border-gray-300 bg-gray-50 text-gray-500 font-bold text-sm">24</span>
-                      <input name="codigo_postal" value={formData.codigo_postal} maxLength={3} onChange={handleChange} className="w-full border border-gray-300 rounded-r-md p-2.5 text-sm outline-none font-bold" required />
+                      <input 
+                        name="codigo_postal" 
+                        value={formData.codigo_postal} 
+                        maxLength={3} 
+                        onChange={handleChange} 
+                        disabled={modoMaestria} 
+                        className={`w-full border rounded-r-md p-2.5 text-sm outline-none font-bold ${modoMaestria ? 'bg-gray-100 text-gray-500 border-gray-200' : 'border-gray-300'}`} 
+                        required 
+                      />
                     </div>
                   </div>
                   <div>
                     <label className="block text-xs font-bold text-gray-600 mb-1">Colonia <span className="text-red-500">*</span></label>
-                    <Select name="colonia" options={coloniaOptions} onChange={handleSelectChange} value={coloniaOptions.find(opt => opt.value === formData.colonia) || null} placeholder={coloniasAPI.length > 0 ? "Seleccione..." : "Escriba C.P."} styles={customSelectStyles} isDisabled={coloniasAPI.length === 0} />
+                    <Select 
+                      name="colonia" 
+                      options={coloniaOptions} 
+                      onChange={handleSelectChange} 
+                      value={coloniaOptions.find(opt => opt.value === formData.colonia) || null} 
+                      placeholder={coloniasAPI.length > 0 ? "Seleccione..." : "Escriba C.P."} 
+                      styles={customSelectStyles} 
+                      isDisabled={modoMaestria || coloniasAPI.length === 0} 
+                    />
                   </div>
                   <div>
                     <label className="block text-xs font-bold text-gray-600 mb-1">Municipio <span className="text-red-500">*</span></label>
-                    <input name="municipio" value={formData.municipio} onChange={handleChange} readOnly={coloniasAPI.length > 0 && formData.municipio !== ''} className="w-full border border-gray-300 rounded-md p-2.5 text-sm outline-none bg-gray-50" required />
+                    <input 
+                      name="municipio" 
+                      value={formData.municipio} 
+                      onChange={handleChange} 
+                      disabled={modoMaestria} 
+                      readOnly={coloniasAPI.length > 0 && formData.municipio !== ''} 
+                      className={`w-full border rounded-md p-2.5 text-sm outline-none ${modoMaestria ? 'bg-gray-100 text-gray-500 border-gray-200' : 'border-gray-300 bg-gray-50'}`} 
+                      required 
+                    />
                   </div>
                   <div>
                     <label className="block text-xs font-bold text-gray-600 mb-1">Estado</label>
-                    <input value={formData.estado || "Campeche"} disabled className="w-full border border-gray-200 rounded-md p-2.5 text-sm bg-gray-50 outline-none text-gray-500 font-medium" />
+                    <input 
+                      value={formData.estado || "Campeche"} 
+                      disabled 
+                      className="w-full border border-gray-200 rounded-md p-2.5 text-sm bg-gray-50 outline-none text-gray-500 font-medium" 
+                    />
                   </div>
                 </div>
               </div>

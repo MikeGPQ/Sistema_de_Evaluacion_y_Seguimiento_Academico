@@ -32,6 +32,7 @@ from app.models.origin_school import OriginSchool
 from app.models.grade_value import GradeValue
 from app.models.student_period_gpa import StudentPeriodGpa
 from app.models.titulation_status import TitulationStatus
+from app.models.quarter_catalog import QuarterCatalog
 
 from sqlalchemy import case
 from app.models.user import User
@@ -1032,3 +1033,127 @@ def get_kardex(matricula: str, db: Session = Depends(get_db)):
         "total_creditos_acumulados": total_creditos,
         "promedio_general": promedio_general,
     }
+
+@router.get("/candidatos-maestria")
+def obtener_candidatos_maestria(db: Session = Depends(get_db)):
+    subquery_maestria = db.query(StudentAcademicProfile.student_matricula).filter(
+        StudentAcademicProfile.nivel_id == 2
+    ).subquery()
+
+    candidatos = (
+        db.query(
+            Student.matricula,
+            Student.nombre,
+            Student.apellido_paterno,
+            Student.apellido_materno,
+            StudentStatus.name.label("estatus_nombre"),
+            QuarterCatalog.external_id.label("cuatrimestre_actual"),
+            Student.email_personal
+        )
+        .join(StudentAcademicProfile, Student.matricula == StudentAcademicProfile.student_matricula)
+        .join(StudentStatus, StudentAcademicProfile.status_id == StudentStatus.id)
+        .join(QuarterCatalog, StudentAcademicProfile.quarter_actual_id == QuarterCatalog.id)
+        .filter(
+            StudentAcademicProfile.nivel_id == 1, 
+            Student.matricula.notin_(subquery_maestria), 
+            or_(
+                StudentStatus.name == 'egresado',
+                QuarterCatalog.external_id == 9
+            )
+        )
+        .all()
+    )
+
+    resultados = []
+    for row in candidatos:
+        nombre_completo = f"{row.nombre} {row.apellido_paterno} {row.apellido_materno or ''}".strip()
+        es_noveno = row.cuatrimestre_actual == 9 and row.estatus_nombre != 'egresado'
+        
+        resultados.append({
+            "matricula": row.matricula,
+            "nombre_completo": nombre_completo,
+            "email": row.email_personal,
+            "estatus": row.estatus_nombre,
+            "cuatrimestre": row.cuatrimestre_actual,
+            "es_opcion_titulacion": es_noveno
+        })
+
+    return {"data": resultados}
+
+@router.post("/inscribir-maestria/{matricula}")
+def inscribir_maestria(
+    matricula: str,
+    student_data: str = Form(...),
+    certificado: UploadFile = File(None),
+    db: Session = Depends(get_db)
+):
+    try:
+        data_dict = json.loads(student_data)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Error en formato JSON de los datos.")
+
+    alumno = db.query(Student).filter(Student.matricula == matricula).first()
+    if not alumno:
+        raise HTTPException(status_code=404, detail="Matrícula no encontrada.")
+
+    perfil_existente = db.query(StudentAcademicProfile).filter(
+        StudentAcademicProfile.student_matricula == matricula,
+        StudentAcademicProfile.nivel_id == 2 # 2 = Maestría
+    ).first()
+
+    if perfil_existente:
+        raise HTTPException(status_code=400, detail="El alumno ya cuenta con un perfil de Maestría.")
+
+    cert_file_id = None
+    if certificado:
+        cert_content = certificado.file.read()
+        cert_file = FileModel(
+            file_name=certificado.filename,
+            mime_type=certificado.content_type or "application/pdf",
+            size_bytes=len(cert_content),
+            file_content=cert_content
+        )
+        db.add(cert_file)
+        db.flush()
+        cert_file_id = cert_file.id
+    elif not data_dict.get('es_opcion_titulacion'):
+        raise HTTPException(status_code=400, detail="El certificado es obligatorio para alumnos egresados.")
+
+    periodo_activo = db.query(AcademicPeriod).filter(AcademicPeriod.is_active == True).first()
+    activo_status = db.query(StudentStatus).filter(StudentStatus.name == 'activo').first()
+
+    nuevo_perfil = StudentAcademicProfile(
+        student_matricula=matricula,
+        nivel_id=2, 
+        career_id=data_dict.get('career_id'),
+        origin_school_id=data_dict.get('origin_school_id'),
+        period_id=periodo_activo.id if periodo_activo else 1,
+        quarter_actual_id=1, 
+        status_id=activo_status.id if activo_status else 1,
+        promedio_procedencia=data_dict.get('promedio_procedencia', 0),
+        certificado_id=cert_file_id,
+        folio_certificado=data_dict.get('folio_certificado'),
+        estatus_titulacion_id=data_dict.get('titulation_status_id')
+    )
+    db.add(nuevo_perfil)
+
+    log_audit_event(
+        db=db,
+        user_identifier=data_dict.get('usuario_id', 'Sistema'),
+        action="CREATE",
+        entity_name="student_academic_profiles",
+        entity_id=matricula,
+        old_values=None,
+        new_values={
+            "evento": "Inscripción a Maestría (HU-41)",
+            "career_id": data_dict.get('career_id'),
+            "es_opcion_titulacion": data_dict.get('es_opcion_titulacion', False)
+        }
+    )
+
+    try:
+        db.commit()
+        return {"status": "success", "message": "Inscripción a Maestría generada correctamente.", "matricula": matricula}
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Error al registrar perfil: {str(e)}")
