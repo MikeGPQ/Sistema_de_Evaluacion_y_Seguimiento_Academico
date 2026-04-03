@@ -153,6 +153,13 @@ export default function ReporteAsistencia() {
     setCuatrimestreBloqueado(false);
   };
 
+  const cuatrimestresFiltrados = filtrosData ? filtrosData.cuatrimestres.filter(q => {
+    if (nivelSeleccionado === 'maestria') {
+      return parseInt(q.id) <= 5; 
+    }
+    return true;
+  }) : [];
+
   const programasFiltrados = filtrosData ? filtrosData.programas.filter(p => {
     if (!nivelSeleccionado) return true;
     if (p.id === null) {
@@ -534,7 +541,7 @@ export default function ReporteAsistencia() {
                 >
                   Todos
                 </div>
-                {(filtrosData?.cuatrimestres || []).map(q => (
+                {cuatrimestresFiltrados.map(q => (
                   <div
                     key={q.id}
                     onClick={() => handleCuatrimestreChange(q.id)}

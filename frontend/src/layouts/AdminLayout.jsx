@@ -154,11 +154,11 @@ const AdminLayout = () => {
             {isSuperAdmin && (
               <Link 
                 to="/admin/audit-logs" 
-                title="Logs de Auditoría" 
+                title="Auditoría del Sistema"
                 className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-colors ${effectivelyCollapsed ? 'justify-center' : ''} ${isActive('/admin/audit-logs') ? 'bg-[#1A237E] text-white font-semibold shadow-md' : 'text-slate-300 hover:bg-slate-800 hover:text-white'}`}
               >
                 <ShieldAlert className="w-[18px] h-[18px] shrink-0" /> 
-                {!effectivelyCollapsed && <span>Logs de Auditoría</span>}
+                {!effectivelyCollapsed && <span>Auditoría del Sistema</span>}
               </Link>
             )}
 

@@ -1145,7 +1145,7 @@ def inscribir_maestria(
         entity_id=matricula,
         old_values=None,
         new_values={
-            "evento": "Inscripción a Maestría (HU-41)",
+            "evento": "Inscripción a Maestría",
             "career_id": data_dict.get('career_id'),
             "es_opcion_titulacion": data_dict.get('es_opcion_titulacion', False)
         }

@@ -15,9 +15,12 @@ from app.models.academic_period import AcademicPeriod
 from app.models.student_status import StudentStatus
 from app.services.audit_service import log_audit_event
 from datetime import time
+from pydantic import BaseModel
 
 router = APIRouter(prefix="/asignacion", tags=["Asignación de Horarios"])
 
+class CargaBloqueRequest(BaseModel):
+    usuario_id: str = "Sistema"
 
 def time_to_minutes(t):
     if isinstance(t, str):
@@ -537,7 +540,7 @@ def obtener_horario_real(matricula: str, db: Session = Depends(get_db)):
     return horario_formateado
 
 @router.post("/{matricula}/carga-bloque-nuevo-ingreso")
-def carga_bloque_nuevo_ingreso(matricula: str, db: Session = Depends(get_db)):
+def carga_bloque_nuevo_ingreso(matricula: str, request: CargaBloqueRequest, db: Session = Depends(get_db)):
     alumno = db.query(Student).filter(Student.matricula == matricula).first()
     if not alumno:
         raise HTTPException(status_code=404, detail="No existe el alumno.")
@@ -647,7 +650,7 @@ def carga_bloque_nuevo_ingreso(matricula: str, db: Session = Depends(get_db)):
 
         log_audit_event(
             db=db,
-            user_identifier="SISTEMA_AUTO",
+            user_identifier=request.usuario_id, 
             action="CREATE",
             entity_name="student_enrollments_bloque",
             entity_id=matricula,
@@ -655,7 +658,6 @@ def carga_bloque_nuevo_ingreso(matricula: str, db: Session = Depends(get_db)):
             new_values={
                 "grupos_inscritos": grupos_finales,
                 "errores": materias_con_error,
-                "tipo": "nuevo_ingreso"
             }
         )
 

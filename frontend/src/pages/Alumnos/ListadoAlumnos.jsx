@@ -112,11 +112,37 @@ const handleSeleccionarCandidato = async (candidato) => {
   const [filtroCuatrimestre, setFiltroCuatrimestre] = useState('');
   const [filtroNivelAcademico, setFiltroNivelAcademico] = useState('');
   const [nivelesAcademicos, setNivelesAcademicos] = useState([]);
+  const [programasAcademicos, setProgramasAcademicos] = useState([]);
 
   useEffect(() => {
     client.get('/catalogos/estatus').then(res => setEstatusCatalogo(res.data)).catch(() => {});
     client.get('/catalogos/niveles-academicos').then(res => setNivelesAcademicos(res.data)).catch(() => {});
+    client.get('/catalogos/programas-academicos').then(res => setProgramasAcademicos(res.data)).catch(() => {}); 
   }, []);
+
+  // Lógica de interdependencia de filtros
+  const nivelSeleccionado = nivelesAcademicos.find(n => n.id.toString() === filtroNivelAcademico.toString());
+  const esMaestria = nivelSeleccionado?.name.toLowerCase() === 'maestria';
+
+  const programasFiltrados = filtroNivelAcademico
+    ? programasAcademicos.filter(p => p.nivel_academico?.toLowerCase() === nivelSeleccionado?.name.toLowerCase())
+    : programasAcademicos;
+
+  const maxCuatrimestres = esMaestria ? 5 : 9;
+  const opcionesCuatrimestre = Array.from({ length: maxCuatrimestres }, (_, i) => i + 1);
+
+  useEffect(() => {
+    if (esMaestria && parseInt(filtroCuatrimestre) > 5) {
+      handleCambioFiltro(setFiltroCuatrimestre, '');
+    }
+    
+    if (filtroCarrera) {
+      const programaSeleccionado = programasAcademicos.find(p => p.id.toString() === filtroCarrera.toString());
+      if (programaSeleccionado && nivelSeleccionado && programaSeleccionado.nivel_academico?.toLowerCase() !== nivelSeleccionado.name.toLowerCase()) {
+        handleCambioFiltro(setFiltroCarrera, '');
+      }
+    }
+  }, [filtroNivelAcademico, esMaestria, filtroCuatrimestre, filtroCarrera, programasAcademicos, nivelSeleccionado]);
 
   const fetchAlumnos = async () => {
     try {
@@ -339,7 +365,7 @@ const handleSeleccionarCandidato = async (candidato) => {
           </div>
 
           <div className="w-64">
-            <label className="block text-xs font-semibold text-gray-600 mb-1">Carrera</label>
+            <label className="block text-xs font-semibold text-gray-600 mb-1">Programa Académico</label>
             <div className="relative">
               <Filter className="w-4 h-4 absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
               <select 
@@ -347,16 +373,10 @@ const handleSeleccionarCandidato = async (candidato) => {
                 onChange={(e) => handleCambioFiltro(setFiltroCarrera, e.target.value)}
                 className="w-full pl-9 pr-4 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:border-blue-500 appearance-none bg-white cursor-pointer"
               >
-                <option value="">Todas las carreras</option>
-                <option value="1">Licenciatura en Contabilidad y Finanzas (LCF)</option>
-                <option value="2">Licenciatura en Derecho y Ciencias Jurídicas (LDCJ)</option>
-                <option value="3">Licenciatura en Diseño Gráfico Digital (LDGD)</option>
-                <option value="4">Licenciatura en Educación Física, Recreación y Deporte (LEFRD)</option>
-                <option value="5">Licenciatura en Mercadotecnia Estratégica (LME)</option>
-                <option value="6">Licenciatura en Administración de Empresas (LAE)</option>
-                <option value="7">Licenciatura en Contabilidad Financiera (LCFIN)</option>
-                <option value="8">Licenciatura en Educación y Tecnologías para el Aprendizaje (LETA)</option>
-                <option value="9">Licenciatura en Ingenieria de Software y Sistemas Computacionales (LISSC)</option>
+                <option value="">Todos los programas</option>
+                {programasFiltrados.map(prog => (
+                  <option key={prog.id} value={prog.id}>{prog.name}</option>
+                ))}
               </select>
             </div>
           </div>
@@ -369,7 +389,7 @@ const handleSeleccionarCandidato = async (candidato) => {
               className="w-full px-4 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:border-blue-500 bg-white cursor-pointer"
             >
               <option value="">Todos</option>
-              {[1,2,3,4,5,6,7,8,9].map(num => (
+              {opcionesCuatrimestre.map(num => (
                 <option key={num} value={num}>{num}º Cuatrimestre</option>
               ))}
             </select>
