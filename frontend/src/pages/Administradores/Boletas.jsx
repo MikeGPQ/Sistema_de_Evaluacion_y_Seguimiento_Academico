@@ -18,56 +18,119 @@ const isBoletaCompleta = (boleta) =>
   boleta.materias.every((m) => m.acta_status === 'cerrada');
 
 const buildPDF = (boletas, titulo) => {
-  const doc = new jsPDF({ orientation: 'p', unit: 'mm', format: 'letter' });
-  const pageW = doc.internal.pageSize.getWidth();
-  const primaryColor = [26, 35, 126]; // #1A237E
+  const doc  = new jsPDF({ orientation: 'p', unit: 'mm', format: 'letter' });
+  const pageW   = doc.internal.pageSize.getWidth();
+  const margin  = 14;
+  const primary = [11, 23, 42];   // #0B172A  (igual al Kárdex)
+  const gold    = [217, 144, 0];  // #D99000
 
-  boletas.forEach((boleta, idx) => {
-    if (idx > 0) doc.addPage();
-
-  
-    doc.setFillColor(...primaryColor);
-    doc.rect(0, 0, pageW, 28, 'F');
+  // ── encabezado estándar (mismo que Kárdex) ──────────────────────────────
+  const drawHeader = () => {
+    doc.setFillColor(...primary);
+    doc.roundedRect(margin, 8, 10, 10, 1.5, 1.5, 'F');
     doc.setTextColor(255, 255, 255);
-    doc.setFontSize(14);
-    doc.setFont('helvetica', 'bold');
-    doc.text('UNID – Sistema de Control Escolar', pageW / 2, 10, { align: 'center' });
-    doc.setFontSize(11);
-    doc.text('BOLETA DE CALIFICACIONES', pageW / 2, 18, { align: 'center' });
-    doc.setFontSize(9);
-    doc.text(`Periodo: ${boleta.periodo}`, pageW / 2, 24, { align: 'center' });
+    doc.setFontSize(7);
+    doc.setFont(undefined, 'bold');
+    doc.text('U', margin + 5, 14.5, { align: 'center' });
 
-    doc.setTextColor(30, 30, 30);
-    doc.setFontSize(10);
-    doc.setFont('helvetica', 'bold');
-    doc.text('DATOS DEL ALUMNO', 14, 36);
-    doc.setFont('helvetica', 'normal');
-    doc.setFontSize(9);
+    doc.setTextColor(...primary);
+    doc.setFontSize(12);
+    doc.setFont(undefined, 'bold');
+    doc.text('UNID', margin + 14, 14);
+    doc.setFontSize(5.5);
+    doc.setFont(undefined, 'normal');
+    doc.text('UNIVERSIDAD INTERAMERICANA PARA EL DESARROLLO', margin + 14, 18);
 
-    const alumno = boleta.alumno;
-    const datos = [
-      ['Nombre:', alumno.nombre],
-      ['Matrícula:', alumno.matricula],
-      ['Carrera:', alumno.carrera],
-      ['Cuatrimestre:', String(alumno.cuatrimestre)],
-    ];
-    datos.forEach(([label, value], i) => {
-      const y = 43 + i * 6;
-      doc.setFont('helvetica', 'bold');
-      doc.text(label, 14, y);
-      doc.setFont('helvetica', 'normal');
-      doc.text(value, 50, y);
-    });
+    doc.setFontSize(12);
+    doc.setFont(undefined, 'bold');
+    doc.setTextColor(...primary);
+    doc.text('BOLETA DE CALIFICACIONES', pageW - margin, 13, { align: 'right' });
+    doc.setFontSize(7);
+    doc.setFont(undefined, 'normal');
+    doc.setTextColor(120, 120, 120);
+    doc.text('DOCUMENTO OFICIAL', pageW - margin, 18, { align: 'right' });
 
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(10);
-    doc.text('CUERPO ACADÉMICO', 14, 72);
+    doc.setDrawColor(...gold);
+    doc.setLineWidth(1.2);
+    doc.line(margin, 22, pageW - margin, 22);
+  };
 
+  // ── pie de página estándar ──────────────────────────────────────────────
+  const drawFooter = (y) => {
+    doc.setDrawColor(200, 200, 200);
+    doc.setLineWidth(0.3);
+    doc.line(margin, y, pageW - margin, y);
+    doc.setFontSize(7);
+    doc.setTextColor(140, 140, 140);
+    doc.setFont(undefined, 'normal');
+    doc.text('Documento generado por el Sistema SESA — Solo para fines informativos.', margin, y + 5);
+    doc.text(
+      new Date().toLocaleDateString('es-MX', { day: 'numeric', month: 'long', year: 'numeric' }),
+      pageW - margin, y + 5, { align: 'right' }
+    );
+  };
+
+  // ── una boleta por alumno ───────────────────────────────────────────────
+  boletas.forEach((boleta, bIdx) => {
+    if (bIdx > 0) doc.addPage();
+
+    drawHeader();
+
+    // cuadro datos del alumno
+    const boxY = 27;
+    const boxH = 36;
+    doc.setDrawColor(210, 210, 210);
+    doc.setLineWidth(0.3);
+    doc.roundedRect(margin, boxY, pageW - margin * 2, boxH, 2, 2, 'S');
+
+    const col2  = margin + (pageW - margin * 2) / 2 + 3;
+    const halfW = col2 - (margin + 5) - 4;
+
+    const drawField = (label, value, x, y, maxW) => {
+      doc.setFontSize(6);
+      doc.setFont(undefined, 'normal');
+      doc.setTextColor(140, 140, 140);
+      doc.text(label, x, y);
+      doc.setFontSize(8.5);
+      doc.setFont(undefined, 'bold');
+      doc.setTextColor(...primary);
+      const lines = maxW ? doc.splitTextToSize(value || 'N/A', maxW) : [value || 'N/A'];
+      doc.text(lines, x, y + 4.5);
+    };
+
+    const { nombre, matricula, carrera, cuatrimestre } = boleta.alumno;
+    drawField('NOMBRE DEL ALUMNO', nombre,               margin + 5, boxY + 8,  halfW);
+    drawField('MATRÍCULA',         matricula,             col2,       boxY + 8);
+    drawField('CARRERA',           carrera,               margin + 5, boxY + 22, halfW);
+    drawField('CUATRIMESTRE',      `${cuatrimestre}°`,   col2,       boxY + 22);
+
+    // barra de periodo
+    let curY = boxY + boxH + 6;
+    const aprobadas  = boleta.materias.filter(m => m.estatus === 'aprobada').length;
+    const reprobadas = boleta.materias.filter(m => m.estatus === 'reprobada').length;
+
+    doc.setFillColor(...primary);
+    doc.roundedRect(margin, curY, pageW - margin * 2, 7, 1, 1, 'F');
+    doc.setTextColor(255, 255, 255);
+    doc.setFontSize(8);
+    doc.setFont(undefined, 'bold');
+    doc.text(`Periodo: ${boleta.periodo}`, margin + 4, curY + 5);
+    doc.setFontSize(7);
+    doc.setFont(undefined, 'normal');
+    doc.text(
+      `Aprobadas: ${aprobadas}   Reprobadas: ${reprobadas}`,
+      pageW - margin - 4, curY + 5, { align: 'right' }
+    );
+
+    curY += 9;
+
+    // tabla — didDrawPage repite el encabezado en páginas nuevas
     autoTable(doc, {
-      startY: 76,
-      head: [['Materia', 'Parcial 1', 'Parcial 2', 'Parcial 3', 'Promedio Final']],
+      startY: curY,
+      margin: { left: margin, right: margin, top: 28 },
+      head: [['MATERIA', 'PARCIAL 1', 'PARCIAL 2', 'PARCIAL 3', 'PROMEDIO FINAL']],
       body: boleta.materias.length
-        ? boleta.materias.map((m) => [
+        ? boleta.materias.map(m => [
             m.nombre,
             formatGrade(m.parcial_1),
             formatGrade(m.parcial_2),
@@ -75,24 +138,31 @@ const buildPDF = (boletas, titulo) => {
             formatGrade(m.promedio),
           ])
         : [['Sin materias registradas en este periodo', '', '', '', '']],
-      headStyles: { fillColor: primaryColor, textColor: 255, fontSize: 9, fontStyle: 'bold' },
-      bodyStyles: { fontSize: 9 },
-      alternateRowStyles: { fillColor: [240, 242, 255] },
+      theme: 'plain',
+      didDrawPage: (d) => { if (d.pageNumber > 1) drawHeader(); },
+      headStyles: {
+        textColor: [100, 100, 100], fontSize: 7, fontStyle: 'bold',
+        halign: 'center', fillColor: [248, 249, 250],
+        lineWidth: 0.1, lineColor: [220, 220, 220],
+      },
+      bodyStyles: { fontSize: 8, textColor: primary, lineWidth: 0.1, lineColor: [230, 230, 230] },
       columnStyles: {
-        0: { cellWidth: 90 },
+        0: { cellWidth: 'auto' },
         1: { cellWidth: 22, halign: 'center' },
         2: { cellWidth: 22, halign: 'center' },
         3: { cellWidth: 22, halign: 'center' },
-        4: { cellWidth: 27, halign: 'center', fontStyle: 'bold' },
+        4: { cellWidth: 28, halign: 'center', fontStyle: 'bold' },
       },
-      margin: { left: 14, right: 14 },
+      didParseCell: (d) => {
+        if (d.section === 'body' && d.column.index === 4) {
+          const val = Number(d.cell.raw);
+          if (!isNaN(val) && val >= 7) d.cell.styles.textColor = [22, 163, 74];
+          if (!isNaN(val) && val < 7)  d.cell.styles.textColor = [220, 38, 38];
+        }
+      },
     });
 
-   
-    const finalY = doc.lastAutoTable.finalY + 8;
-    doc.setFontSize(7);
-    doc.setTextColor(120, 120, 120);
-    doc.text('Documento generado por el Sistema de Evaluación y Seguimiento Académico (SESA).', pageW / 2, finalY, { align: 'center' });
+    drawFooter(doc.lastAutoTable.finalY + 6);
   });
 
   doc.save(`${titulo}.pdf`);
