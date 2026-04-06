@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { RefreshCcw, CheckCircle, AlertCircle, ChevronDown, ChevronUp, Database, UserPlus, Mail, MailX } from 'lucide-react';
+import { RefreshCcw, CheckCircle, AlertCircle, ChevronDown, ChevronUp, Database, UserPlus, Mail, MailX, ArrowRight, XCircle } from 'lucide-react';
 import client from '../../lib/axios';
 
 const LABEL_MAP = {
@@ -13,6 +13,32 @@ const LABEL_MAP = {
   sigad_groups: 'Grupos SIGAD',
   academic_groups: 'Grupos Académicos (Asignaciones)',
   assignment_schedules: 'Horarios de Clase',
+};
+
+const FIELD_MAP = {
+  nombre_codigo: 'Nombre / Código',
+  capacidad: 'Capacidad',
+  tipo: 'Tipo',
+  codigo: 'Código del Periodo',
+  anio: 'Año',
+  fecha_inicio: 'Fecha de Inicio',
+  fecha_fin: 'Fecha de Fin',
+  fecha_limite_calif: 'Límite de Calificaciones',
+  codigo_unico: 'Código Único',
+  name: 'Nombre',
+  modalidad: 'Modalidad',
+  nivel_academico: 'Nivel Académico',
+  nombre: 'Nombre',
+  identificador: 'Identificador',
+  creditos: 'Créditos',
+  cupo_maximo: 'Cupo Máximo',
+  tipo_asignatura: 'Tipo de Asignatura',
+  subject_id: 'Materia (ID)',
+  teacher_id: 'Docente (ID)',
+  sigad_group_id: 'Grupo SIGAD (ID)',
+  aula_id: 'Aula (ID)',
+  period_id: 'Periodo (ID)',
+  sesiones: 'Sesiones de Clase'
 };
 
 const SincronizacionSigad = () => {
@@ -47,6 +73,33 @@ const SincronizacionSigad = () => {
   const totalUpdated = resultado ? Object.values(resultado).reduce((s, v) => s + (v.updated || 0), 0) : 0;
   const totalErrors = resultado ? Object.values(resultado).reduce((s, v) => s + (v.errors || 0), 0) : 0;
   const nuevosDocentes = resultado?.users_created?.nuevos_docentes ?? [];
+
+  // Procesamiento de listas para las tablas comparativas de resultados 
+  const insertedList = [];
+  const updatedList = [];
+
+  if (resultado) {
+    Object.entries(resultado).forEach(([key, val]) => {
+      if (val.inserted_details) {
+        val.inserted_details.forEach(d => {
+          insertedList.push({ entity: LABEL_MAP[key] || key, record: d.registro });
+        });
+      }
+      if (val.updated_details) {
+        val.updated_details.forEach(d => {
+          d.cambios.forEach(c => {
+            updatedList.push({
+              entity: LABEL_MAP[key] || key,
+              record: d.registro,
+              field: c.campo,
+              old: c.anterior,
+              new: c.nuevo
+            });
+          });
+        });
+      }
+    });
+  }
 
   return (
     <div className="p-6 md:p-10 max-w-5xl mx-auto">
@@ -209,6 +262,118 @@ const SincronizacionSigad = () => {
               </tbody>
             </table>
           </div>
+
+          {/* Tablas Comparativas de Resultados implementadas */}
+          {(insertedList.length > 0 || updatedList.length > 0) && (
+            <div className="mt-8 space-y-6">
+              <h2 className="text-xl font-bold text-gray-800">Detalle de Alteraciones en Base de Datos</h2>
+
+              {/* Tabla Visual de Registros Nuevos (Ahora como comparativa actual al del otro sistema ) */}
+              {insertedList.length > 0 && (
+                <div className="bg-white rounded-xl shadow-sm border border-green-200 overflow-hidden">
+                  <div className="bg-green-50 px-5 py-4 border-b border-green-100 flex items-center gap-3">
+                    <div className="bg-green-100 p-2 rounded-lg">
+                      <CheckCircle className="w-5 h-5 text-green-600" />
+                    </div>
+                    <div>
+                      <h3 className="font-bold text-green-900 text-base">Nuevos Registros (Cruces con SIGAD)</h3>
+                      <p className="text-xs text-green-700">Se detectaron {insertedList.length} elementos en SIGAD que no existían en tu base de datos local.</p>
+                    </div>
+                  </div>
+                  <div className="max-h-[500px] overflow-y-auto p-4">
+                    <div className="grid grid-cols-1 gap-3">
+                      {insertedList.map((item, idx) => (
+                        <div key={idx} className="bg-gray-50 border border-gray-200 rounded-lg p-4 flex flex-col md:flex-row md:items-center justify-between gap-4 hover:border-green-300 transition-colors">
+                          
+                          {/* Información de la Entidad */}
+                          <div className="flex-1">
+                            <span className="inline-block px-2.5 py-1 bg-green-100 text-green-800 text-[10px] font-bold uppercase tracking-wider rounded-md mb-1.5">
+                              Nuevo Registro en {item.entity}
+                            </span>
+                            <p className="text-xs text-gray-500 mt-0.5">El sistema ha importado exitosamente la siguiente información.</p>
+                          </div>
+
+                          {/* Comparativa Visual de Inserción */}
+                          <div className="flex items-center gap-3 md:w-[60%] justify-end bg-white p-3 rounded-md border border-gray-100 shadow-sm">
+                            <div className="flex-1 text-right">
+                              <p className="text-[10px] text-gray-400 font-bold uppercase mb-1">Antes (Local)</p>
+                              <span className="inline-flex items-center gap-1 text-xs font-medium text-gray-400 bg-gray-100 px-2 py-0.5 rounded-full">
+                                <XCircle className="w-3 h-3" /> No Registrado
+                              </span>
+                            </div>
+                            
+                            <div className="bg-green-50 p-1.5 rounded-full shrink-0">
+                              <ArrowRight className="w-4 h-4 text-green-500" />
+                            </div>
+                            
+                            <div className="flex-1 text-left">
+                              <p className="text-[10px] text-gray-400 font-bold uppercase mb-1">Ahora (SIGAD)</p>
+                              <p className="text-sm font-bold text-green-700 bg-green-50/50 truncate max-w-[200px] inline-block" title={item.record}>
+                                {item.record}
+                              </p>
+                            </div>
+                          </div>
+
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Tabla Visual de Registros Modificados */}
+              {updatedList.length > 0 && (
+                <div className="bg-white rounded-xl shadow-sm border border-blue-200 overflow-hidden">
+                  <div className="bg-blue-50 px-5 py-4 border-b border-blue-100 flex items-center gap-3">
+                    <div className="bg-blue-100 p-2 rounded-lg">
+                      <RefreshCcw className="w-5 h-5 text-blue-600" />
+                    </div>
+                    <div>
+                      <h3 className="font-bold text-blue-900 text-base">Registros Existentes Actualizados</h3>
+                      <p className="text-xs text-blue-700">Se detectaron {updatedList.length} cambios entre tu base de datos y SIGAD.</p>
+                    </div>
+                  </div>
+                  <div className="max-h-[500px] overflow-y-auto p-4">
+                    <div className="grid grid-cols-1 gap-3">
+                      {updatedList.map((item, idx) => (
+                        <div key={idx} className="bg-gray-50 border border-gray-200 rounded-lg p-4 flex flex-col md:flex-row md:items-center justify-between gap-4 hover:border-blue-300 transition-colors">
+                          
+                          {/* Información del Registro */}
+                          <div className="flex-1">
+                            <span className="inline-block px-2.5 py-1 bg-gray-200 text-gray-700 text-[10px] font-bold uppercase tracking-wider rounded-md mb-1.5">
+                              {item.entity}
+                            </span>
+                            <p className="font-bold text-gray-900 text-sm">{item.record}</p>
+                            <p className="text-xs text-gray-500 mt-0.5">
+                              Atributo modificado: <span className="font-semibold text-gray-700">{FIELD_MAP[item.field] || item.field}</span>
+                            </p>
+                          </div>
+
+                          {/* Comparativa Visual con Flecha */}
+                          <div className="flex items-center gap-3 md:w-[60%] justify-end bg-white p-3 rounded-md border border-gray-100 shadow-sm">
+                            <div className="flex-1 text-right">
+                              <p className="text-[10px] text-gray-400 font-bold uppercase mb-1">Antes (Local)</p>
+                              <p className="text-sm font-medium text-red-600 line-through truncate max-w-[200px] inline-block" title={item.old}>{item.old}</p>
+                            </div>
+                            
+                            <div className="bg-blue-50 p-1.5 rounded-full shrink-0">
+                              <ArrowRight className="w-4 h-4 text-blue-500" />
+                            </div>
+                            
+                            <div className="flex-1 text-left">
+                              <p className="text-[10px] text-gray-400 font-bold uppercase mb-1">Ahora (SIGAD)</p>
+                              <p className="text-sm font-bold text-green-600 truncate max-w-[200px] inline-block" title={item.new}>{item.new}</p>
+                            </div>
+                          </div>
+
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
 
           {nuevosDocentes.length > 0 && (
             <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
