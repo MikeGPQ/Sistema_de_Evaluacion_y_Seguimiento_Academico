@@ -7,7 +7,7 @@ import {
 import client from '../../lib/axios';
 import Swal from 'sweetalert2';
 import jsPDF from 'jspdf';
-import { toPng } from 'html-to-image';
+import { toJpeg } from 'html-to-image';
 import { useAuth } from '../../hooks/AuthContext';
 
 const HORAS_CLASE = [
@@ -34,6 +34,7 @@ const normalizarDia = (str) => {
 
 const GruposYHorarios = () => {
   const { user } = useAuth();
+  const [materiasAdelanto, setMateriasAdelanto] = useState([]);
   const navigate = useNavigate();
   const [vistaActual, setVistaActual] = useState('asignacion'); 
   
@@ -131,20 +132,40 @@ const GruposYHorarios = () => {
         cuatrimestre: data.alumno_cuatrimestre,
         carrera: data.carrera,
         grupoBase: data.grupo_base,
-        bloqueado: data.grupo_base_bloqueado
+        bloqueado: data.grupo_base_bloqueado,
+        esMaestria: data.es_maestria
       });
       
       setMateriasRegulares(data.materias_regulares);
       setMateriasRecursamiento(data.materias_recursamiento);
+      setMateriasAdelanto(data.materias_adelanto || []);
 
       const seleccionInicial = {};
       const gruposQueYaTenia = data.grupos_inscritos || [];
 
-      const escanearCatalogo = (catalogo, isRetake) => {
+      if (data.es_maestria) {
+        data.materias_regulares.forEach(mat => {
+          const yaInscrita = mat.grupos_disponibles.find(g => gruposQueYaTenia.includes(g.group_id));
+            if (yaInscrita) {
+              seleccionInicial[mat.subject_id] = { group_id: yaInscrita.group_id, is_retake: false, es_adelanto: false };
+            } else {
+              const grupoDisponible = mat.grupos_disponibles.find(g => g.cupo_disponible > 0);
+              if (grupoDisponible) {
+                seleccionInicial[mat.subject_id] = { group_id: grupoDisponible.group_id, is_retake: false, es_adelanto: false };
+              }
+            }
+        });
+      }
+
+      const escanearCatalogo = (catalogo, isRetake, isAdelanto = false) => {
         catalogo.forEach(mat => {
           mat.grupos_disponibles.forEach(g => {
             if (gruposQueYaTenia.includes(g.group_id)) {
-              seleccionInicial[mat.subject_id] = { group_id: g.group_id, is_retake: isRetake };
+              seleccionInicial[mat.subject_id] = { 
+                group_id: g.group_id, 
+                is_retake: isRetake,
+                es_adelanto: isAdelanto 
+              };
             }
           });
         });
@@ -152,6 +173,7 @@ const GruposYHorarios = () => {
 
       escanearCatalogo(data.materias_regulares, false);
       escanearCatalogo(data.materias_recursamiento, true);
+      escanearCatalogo(data.materias_adelanto || [], false, true);
       setSeleccion(seleccionInicial);
       setSeleccionOriginal(seleccionInicial);
       setInscripcionesOriginales(gruposQueYaTenia);
@@ -201,29 +223,90 @@ const GruposYHorarios = () => {
     });
   };
 
-  //funcion para verificar choques de horario en el front antes de verificar en el backend
-  const verificarChoquesFront = (grupoEvaluar, seleccionActual) => {
+const verificarChoquesFront = (grupoEvaluar, seleccionActual) => {
     try {
-      const sesionesEvaluar = grupoEvaluar.horario_raw || [];
       const seleccionIds = Object.values(seleccionActual).map(s => s.group_id);
 
-      for (const mat of [...materiasRegulares, ...materiasRecursamiento]) {
+      if (alumnoInfo.esMaestria) {
+        const getModuleInfo = (groupId) => {
+          let idx = materiasRegulares.findIndex(mat => mat.grupos_disponibles.some(g => g.group_id === groupId));
+          if (idx !== -1) return { index: idx, modulo: (idx % 3) + 1 };
+          
+          idx = materiasAdelanto.findIndex(mat => mat.grupos_disponibles.some(g => g.group_id === groupId));
+          if (idx !== -1) return { index: idx, modulo: (idx % 3) + 1 };
+          
+          idx = materiasRecursamiento.findIndex(mat => mat.grupos_disponibles.some(g => g.group_id === groupId));
+          if (idx !== -1) return { index: idx, modulo: (idx % 3) + 1 };
+
+          return null;
+        };
+
+        const infoEvaluar = getModuleInfo(grupoEvaluar.group_id);
+        
+        if (infoEvaluar) {
+          const sesionesEvaluar = grupoEvaluar.horario_raw || [];
+          
+          for (const subjectId of Object.keys(seleccionActual)) {
+            const groupIdSeleccionado = seleccionActual[subjectId].group_id;
+            const infoSel = getModuleInfo(groupIdSeleccionado);
+            
+            if (infoSel && infoSel.modulo === infoEvaluar.modulo) {
+                let grupoSeleccionadoObj = null;
+                let nombreMateriaChoque = "Asignatura Asignada";
+                
+                [...materiasRegulares, ...materiasAdelanto, ...materiasRecursamiento].forEach(mat => {
+                    const g = mat.grupos_disponibles.find(x => x.group_id === groupIdSeleccionado);
+                    if (g) {
+                      grupoSeleccionadoObj = g;
+                      nombreMateriaChoque = mat.nombre;
+                    }
+                });
+
+                if (grupoSeleccionadoObj) {
+                  const sesionesSel = grupoSeleccionadoObj.horario_raw || [];
+                  for (const s1 of sesionesEvaluar) {
+                    for (const s2 of sesionesSel) {
+                      const dia1 = normalizarDia(s1.dia);
+                      const dia2 = normalizarDia(s2.dia);
+                      
+                      if (dia1 && dia2 && dia1 === dia2) {
+                        const ini1 = timeToMinutes(s1.inicio); 
+                        const fin1 = timeToMinutes(s1.fin);
+                        const ini2 = timeToMinutes(s2.inicio); 
+                        const fin2 = timeToMinutes(s2.fin);
+                        
+                        if (ini1 < fin2 && fin1 > ini2) {
+                          return { 
+                            hayChoque: true, 
+                            materiaChoque: nombreMateriaChoque, 
+                            dia: `${s1.dia} (Módulo Secuencial ${infoEvaluar.modulo})` 
+                          };
+                        }
+                      }
+                    }
+                  }
+                }
+            }
+          }
+        }
+        return { hayChoque: false };
+      }
+
+      const sesionesEvaluar = grupoEvaluar.horario_raw || [];
+      for (const mat of [...materiasRegulares, ...materiasRecursamiento, ...materiasAdelanto]) {
         for (const g of mat.grupos_disponibles) {
           if (seleccionIds.includes(g.group_id)) {
              const sesionesSel = g.horario_raw || [];
-             
              for (const s1 of sesionesEvaluar) {
                for (const s2 of sesionesSel) {
                  const dia1 = normalizarDia(s1.dia);
                  const dia2 = normalizarDia(s2.dia);
-                 
                  if (dia1 && dia2 && dia1 === dia2) {
                    const ini1 = timeToMinutes(s1.inicio); 
                    const fin1 = timeToMinutes(s1.fin);
                    const ini2 = timeToMinutes(s2.inicio); 
                    const fin2 = timeToMinutes(s2.fin);
                    
-                   // Traslape estricto
                    if (ini1 < fin2 && fin1 > ini2) {
                      return { hayChoque: true, materiaChoque: mat.nombre, dia: s1.dia };
                    }
@@ -241,7 +324,7 @@ const GruposYHorarios = () => {
 
   // manejo de seleccion de grupo
   //funcion que maneja la seleccion y deseleccion de grupos, con proteccion de cambios y validacion de choques
-  const handleSeleccionGrupo = async (subjectId, groupId, isRetake) => {
+  const handleSeleccionGrupo = async (subjectId, groupId, isRetake, esAdelanto = false) => {
     if (seleccion[subjectId]?.group_id === groupId) {
       if (inscripcionesOriginales.includes(groupId)) {
         const confirmacion = await Swal.fire({
@@ -262,7 +345,8 @@ const GruposYHorarios = () => {
         const materiasPayload = Object.entries(nuevaSeleccion).map(([sid, data]) => ({
           subject_id: parseInt(sid),
           group_id: data.group_id,
-          is_retake: data.is_retake
+          is_retake: data.is_retake,
+          es_adelanto: data.es_adelanto || false
         }));
         
         try {
@@ -288,7 +372,7 @@ const GruposYHorarios = () => {
 
     } else {
       let grupoNuevo = null;
-      [...materiasRegulares, ...materiasRecursamiento].forEach(mat => {
+      [...materiasRegulares, ...materiasRecursamiento, ...materiasAdelanto].forEach(mat => {
         if (mat.subject_id === subjectId) {
           const g = mat.grupos_disponibles.find(x => x.group_id === groupId);
           if (g) grupoNuevo = g;
@@ -309,7 +393,7 @@ const GruposYHorarios = () => {
 
       setSeleccion(prev => ({
         ...prev,
-        [subjectId]: { group_id: groupId, is_retake: isRetake }
+        [subjectId]: { group_id: groupId, is_retake: isRetake, es_adelanto: esAdelanto }
       }));
     }
   };
@@ -359,7 +443,8 @@ const GruposYHorarios = () => {
     const materiasPayload = Object.entries(seleccion).map(([subjectId, data]) => ({
       subject_id: parseInt(subjectId),
       group_id: data.group_id,
-      is_retake: data.is_retake
+      is_retake: data.is_retake,
+      es_adelanto: data.es_adelanto || false
     }));
 
     if (materiasPayload.length === 0) {
@@ -395,95 +480,139 @@ const GruposYHorarios = () => {
     }
   };
 
-    const handleDownloadPDF = async () => {
-      const input = document.getElementById('horario-imprimible');
-      if (!input || !alumnoInfo) return;
+  const handleDownloadPDF = async () => {
+    const input = document.getElementById('horario-imprimible');
+    if (!input || !alumnoInfo) return;
 
-      Swal.fire({ 
-        title: 'Generando PDF', 
-        text: 'Optimizando resolución...', 
-        allowOutsideClick: false, 
-        didOpen: () => Swal.showLoading() 
+    Swal.fire({ 
+      title: 'Generando PDF', 
+      text: 'Procesando paginación...', 
+      allowOutsideClick: false, 
+      didOpen: () => Swal.showLoading() 
     });
-    
-    window.scrollTo(0, 0);
 
+    const originalClasses = input.className;
+    const originalStyle = input.getAttribute('style') || '';
     const scrollableDiv = input.querySelector('.overflow-x-auto');
     const originalOverflowX = scrollableDiv ? scrollableDiv.style.overflowX : '';
-    const originalOverflowY = scrollableDiv ? scrollableDiv.style.overflowY : '';
-    if (scrollableDiv) { 
-      scrollableDiv.style.overflowX = 'hidden'; 
-      scrollableDiv.style.overflowY = 'hidden'; 
-    }
 
     try {
-      await new Promise(resolve => setTimeout(resolve, 100));
-      const dataUrl = await toPng(input, { 
-        quality: 1.0, 
-        backgroundColor: '#ffffff', 
-        pixelRatio: 2 
-      });
+      window.scrollTo(0, 0);
+      input.className = input.className.replace('overflow-hidden', '');
+      if (scrollableDiv) scrollableDiv.style.overflowX = 'visible';
+
+      await new Promise(resolve => setTimeout(resolve, 300));
+
+      const exactWidth = input.scrollWidth;
+      const exactHeight = input.scrollHeight + 20;
       
-      const imgWidthPx = input.offsetWidth;
-      const imgHeightPx = input.offsetHeight;
-      const pdfWidth = 280; 
-      const pdfHeight = (imgHeightPx * pdfWidth) / imgWidthPx;
+      input.style.width = `${exactWidth}px`;
+      input.style.height = `${exactHeight}px`;
+      input.style.maxHeight = 'none';
 
-      const pdf = new jsPDF({ 
-        orientation: 'p', 
-        unit: 'mm', 
-        format: [pdfWidth + 20, pdfHeight + 70] 
+      const dataUrl = await toJpeg(input, { 
+        quality: 0.9, 
+        backgroundColor: '#ffffff', 
+        pixelRatio: 2,
+        width: exactWidth,
+        height: exactHeight
       });
 
-      pdf.setFillColor(15, 23, 42);
-      pdf.roundedRect(15, 15, 14, 14, 2, 2, 'F');
-      pdf.setTextColor(255, 255, 255);
-      pdf.setFont("helvetica", "bold");
-      pdf.setFontSize(16);
-      pdf.text("U", 22, 24.5, { align: "center" });
+      const pdf = new jsPDF('p', 'mm', 'a4');
+      const pdfWidth = pdf.internal.pageSize.getWidth();
+      const pdfHeight = pdf.internal.pageSize.getHeight();
+      
+      const margin = 10;
+      const contentWidth = pdfWidth - (margin * 2);
+      const imgScaledHeight = (exactHeight * contentWidth) / exactWidth;
+      
+      const headerAreaHeight = 58; 
+      const footerAreaHeight = 15; 
+      const contentHeightPerPage = pdfHeight - headerAreaHeight - footerAreaHeight;
+      
+      let heightLeft = imgScaledHeight;
+      let position = 0;
+      let pageNumber = 1;
 
-      pdf.setTextColor(15, 23, 42);
-      pdf.setFontSize(22);
-      pdf.text("UNID", 33, 22);
+      const renderizarHeader = (doc) => {
+        doc.setFillColor(255, 255, 255);
+        doc.rect(0, 0, pdfWidth, headerAreaHeight - 2, 'F');
 
-      pdf.setTextColor(100, 116, 139);
-      pdf.setFontSize(10);
-      pdf.setFont("helvetica", "normal");
-      pdf.text("Universidad Interamericana para el", 33, 27);
-      pdf.text("Desarrollo", 33, 31.5);
+        doc.setFillColor(15, 23, 42);
+        doc.roundedRect(15, 15, 14, 14, 2, 2, 'F');
+        doc.setTextColor(255, 255, 255);
+        doc.setFont("helvetica", "bold");
+        doc.setFontSize(16);
+        doc.text("U", 22, 24.5, { align: "center" });
 
-      pdf.setTextColor(15, 23, 42);
-      pdf.setFontSize(15);
-      pdf.setFont("helvetica", "bold");
-      pdf.text("HORARIO ESCOLAR OFICIAL", pdfWidth + 5, 25, { align: "right" });
+        doc.setTextColor(15, 23, 42);
+        doc.setFontSize(22);
+        doc.text("UNID", 33, 22);
 
-      pdf.setDrawColor(242, 169, 0);
-      pdf.setLineWidth(1.5);
-      pdf.line(15, 36, pdfWidth + 5, 36);
+        doc.setTextColor(100, 116, 139);
+        doc.setFontSize(10);
+        doc.setFont("helvetica", "normal");
+        doc.text("Universidad Interamericana para el Desarrollo", 33, 27);
 
-      // --- DATOS DEL ALUMNO ---
-      pdf.setFontSize(11);
-      pdf.setTextColor(100, 100, 100);
-      pdf.setFont("helvetica", "normal");
-      pdf.text(`Alumno: ${alumnoInfo.nombre} | Matrícula: ${alumnoInfo.matricula}`, 15, 45);
+        doc.setTextColor(15, 23, 42);
+        doc.setFontSize(15);
+        doc.setFont("helvetica", "bold");
+        doc.text("HORARIO ESCOLAR OFICIAL", pdfWidth - 15, 25, { align: "right" });
 
-      // --- RENDERIZADO DE TABLA ---
-      pdf.addImage(dataUrl, 'PNG', 10, 58, pdfWidth, pdfHeight);
+        doc.setDrawColor(242, 169, 0);
+        doc.setLineWidth(1.5);
+        doc.line(15, 36, pdfWidth - 15, 36);
+
+        doc.setFontSize(10);
+        doc.setTextColor(80, 80, 80);
+        doc.setFont("helvetica", "normal");
+        doc.text(`Alumno: ${alumnoInfo.nombre} | Matrícula: ${alumnoInfo.matricula}`, 15, 45);
+        doc.text(`Periodo: 2026-1 | Carrera: ${alumnoInfo.carrera}`, 15, 50);
+      };
+
+      const renderizarFooter = (doc, pNum) => {
+        doc.setFillColor(255, 255, 255);
+        doc.rect(0, pdfHeight - footerAreaHeight, pdfWidth, footerAreaHeight, 'F');
+        
+        doc.setFontSize(8); 
+        doc.setTextColor(150, 150, 150);
+        doc.setFont("helvetica", "italic");
+        doc.text(`Generado el: ${new Date().toLocaleDateString()}`, 15, pdfHeight - 8);
+        doc.text(`Página ${pNum}`, pdfWidth - 15, pdfHeight - 8, { align: "right" });
+      };
+
+      while (heightLeft > 0) {
+        if (pageNumber > 1) pdf.addPage();
+
+        pdf.addImage(
+          dataUrl, 'JPEG', 
+          margin, headerAreaHeight - position, 
+          contentWidth, imgScaledHeight
+        );
+
+        renderizarHeader(pdf);
+        renderizarFooter(pdf, pageNumber);
+
+        heightLeft -= contentHeightPerPage;
+        position += contentHeightPerPage;
+        pageNumber++;
+      }
+
       pdf.save(`Horario_${alumnoInfo.matricula}.pdf`);
       
     } catch (error) { 
-      Swal.fire('Falla de Procesamiento', 'Incapacidad de renderizar el blob de imagen.', 'error'); 
+      console.error(error);
+      Swal.fire('Error', 'No se pudo generar el archivo segmentado.', 'error'); 
     } finally {
-      if (scrollableDiv) { 
-        scrollableDiv.style.overflowX = originalOverflowX; 
-        scrollableDiv.style.overflowY = originalOverflowY; 
-      }
+      input.className = originalClasses;
+      input.setAttribute('style', originalStyle);
+      if (scrollableDiv) scrollableDiv.style.overflowX = originalOverflowX;
       Swal.close();
     }
   };
 
   // componente para mostrar cada materia con sus grupos disponibles, indicando si es recursamiento , tronco comun o carrera
-  const TarjetaMateria = ({ materia, isRetake }) => {
+  const TarjetaMateria = ({ materia, isRetake, isAdelanto = false }) => {
     let colorEtiqueta = 'bg-blue-100 text-blue-800 border-blue-200'; 
     
     if (isRetake) {
@@ -498,7 +627,7 @@ const GruposYHorarios = () => {
           <div>
             <h4 className="font-bold text-gray-800 text-sm">{materia.nombre}</h4>
             <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full mt-1 inline-block border ${colorEtiqueta}`}>
-              {materia.tipo}
+              {isAdelanto ? 'Adelanto Extra' : materia.tipo}
             </span>
           </div>
           <span className="text-xs text-gray-500 font-mono">{materia.subject_id}</span>
@@ -525,7 +654,7 @@ const GruposYHorarios = () => {
                   key={grupo.group_id} 
                   onClick={() => {
                     if (!isLleno) {
-                      handleSeleccionGrupo(materia.subject_id, grupo.group_id, isRetake);
+                      handleSeleccionGrupo(materia.subject_id, grupo.group_id, isRetake, isAdelanto);
                     }
                   }}
                   className={`flex items-center justify-between p-2.5 rounded-md border cursor-pointer transition-all ${isLleno ? 'bg-gray-50 border-gray-200 opacity-60 cursor-not-allowed' : isSelected ? 'bg-blue-50 border-[#1A237E] ring-1 ring-[#1A237E]' : 'bg-white border-gray-300 hover:bg-gray-50'}`}
@@ -697,7 +826,18 @@ const GruposYHorarios = () => {
                   </div>
                 )}
 
-              </div>
+                {materiasAdelanto.length > 0 && (
+                  <div className="mt-8 border-t border-gray-200 pt-6">
+                    <h3 className="text-sm font-bold text-purple-700 flex items-center gap-2 mb-3">
+                      <Zap className="w-4 h-4" /> Materias Disponibles para Adelanto (Costo Extra)
+                    </h3>
+                    {materiasAdelanto.map(mat => (
+                      <TarjetaMateria key={mat.subject_id} materia={mat} isRetake={false} isAdelanto={true} />
+                    ))}
+                  </div>
+                )}
+
+              </div> 
 
               <div className="lg:col-span-4">
                 <div className="bg-white border border-gray-200 rounded-lg shadow-sm sticky top-6">
@@ -781,49 +921,83 @@ const GruposYHorarios = () => {
 
               <div id="horario-imprimible" className="bg-white border border-gray-200 rounded-lg shadow-sm overflow-hidden p-6">
                 <div className="mb-6 border-b pb-4"><h2 className="text-2xl font-bold text-[#1A237E]">Horario de Clases - {alumnoInfo.nombre}</h2><p className="text-gray-500 text-sm">Periodo 2026-1 | {alumnoInfo.carrera}</p></div>
+                
                 {horarioReal.length === 0 ? (
                   <div className="flex flex-col items-center justify-center py-20 text-gray-400">
                     <Calendar className="w-12 h-12 mb-4 opacity-30" />
                     <p className="text-base font-semibold">No hay materias asignadas</p>
                     <p className="text-sm mt-1">Regresa a la pestaña de asignación para inscribir materias.</p>
                   </div>
-                ) : (
-                <div className="overflow-x-auto">
-                  <table className="w-full text-sm text-left border-collapse min-w-[1000px] table-fixed">
-                    <thead className="bg-gray-50 text-gray-600 text-xs uppercase font-bold text-center">
-                      <tr><th className="py-3 px-4 w-28 border border-gray-200 bg-gray-100">Hora</th>{DIAS_SEMANA.map(dia => (<th key={dia} className="py-3 px-4 border border-gray-200 w-1/6">{dia}</th>))}</tr>
-                    </thead>
-                    <tbody>
-                      {HORAS_CLASE.map((hora, idx) => {
-                        const rowHour = parseInt(hora.split(':')[0]);
+                ) : alumnoInfo.esMaestria ? (
+                  <div className="space-y-6">
+                    <h3 className="text-sm font-bold text-[#1A237E] mb-4 uppercase tracking-wider">Estructura Modular (Bloques de 5 Semanas)</h3>
+                    <div className="grid grid-cols-1 gap-6">
+                      {[1, 2, 3].map(numModulo => {
+                        const clasesDelModulo = horarioReal.filter((_, index) => (index % 3) + 1 === numModulo);
+                        if (clasesDelModulo.length === 0) return null;
+
                         return (
-                          <tr key={idx} className="border-b border-gray-200">
-                            <td className="py-4 px-2 font-medium text-gray-500 text-center border-r border-gray-200 bg-gray-50">{hora}</td>
-                            {DIAS_SEMANA.map(dia => {
-                              const claseInicia = horarioReal.find(c => c.dia === dia && c.hora_inicio === rowHour);
-                              const claseContinua = horarioReal.find(c => c.dia === dia && c.hora_inicio < rowHour && (c.hora_inicio + c.duracion) > rowHour);
-                              if (claseContinua) return null;
-                              if (claseInicia) {
-                                return (
-                                  <td key={`${dia}-${hora}`} rowSpan={claseInicia.duracion} className="p-2 border-r border-gray-200 align-top">
-                                    <div className="text-white rounded-md p-3 flex flex-col shadow-sm transition-transform hover:scale-[1.02]" style={{ backgroundColor: claseInicia.color, height: '100%', minHeight: `${claseInicia.duracion * 4.5}rem` }}>
-                                      <span className="font-bold text-xs leading-tight uppercase mb-1">{claseInicia.materia}</span>
-                                      <div className="mt-auto border-t border-white/20 pt-2">
-                                        <span className="block text-[10px] opacity-90 truncate">{claseInicia.profe}</span>
-                                        <span className="block text-[10px] font-mono mt-1 bg-black/10 inline-block px-1.5 py-0.5 rounded">{claseInicia.aula || 'S/A'}</span>
-                                      </div>
+                          <div key={numModulo} className="border border-gray-200 bg-white rounded-lg shadow-sm overflow-hidden">
+                            <div className="bg-slate-100 px-4 py-2 border-b border-gray-200">
+                              <h4 className="text-[11px] font-bold text-slate-700 uppercase tracking-widest">Módulo Secuencial {numModulo}</h4>
+                            </div>
+                            <div className="grid grid-cols-1 md:grid-cols-2 divide-y md:divide-y-0 md:divide-x divide-gray-100">
+                              {clasesDelModulo.map((clase, idx) => (
+                                <div key={idx} className="flex hover:bg-slate-50 transition-colors">
+                                  <div className="w-1.5 flex-shrink-0" style={{ backgroundColor: clase.color || '#2563EB' }}></div>
+                                  <div className="p-4 w-full">
+                                    <h4 className="font-bold text-gray-800 mb-2">{clase.materia}</h4>
+                                    <div className="flex justify-between items-center text-xs text-gray-600">
+                                      <span className="flex items-center gap-1"><Clock className="w-3 h-3" /> {clase.dia} {clase.hora}</span>
+                                      <span className="bg-white px-2 py-1 rounded border border-gray-200 font-mono text-[10px]">Aula: {clase.aula || 'S/A'}</span>
                                     </div>
-                                  </td>
-                                );
-                              }
-                              return <td key={`${dia}-${hora}`} className="p-2 border-r border-gray-200 align-top"></td>;
-                            })}
-                          </tr>
+                                    <p className="text-xs text-gray-500 mt-2 pt-2 border-t border-gray-100 truncate">{clase.profe}</p>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
                         );
                       })}
-                    </tbody>
-                  </table>
-                </div>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm text-left border-collapse min-w-[1000px] table-fixed">
+                      <thead className="bg-gray-50 text-gray-600 text-xs uppercase font-bold text-center">
+                        <tr><th className="py-3 px-4 w-28 border border-gray-200 bg-gray-100">Hora</th>{DIAS_SEMANA.map(dia => (<th key={dia} className="py-3 px-4 border border-gray-200 w-1/6">{dia}</th>))}</tr>
+                      </thead>
+                      <tbody>
+                        {HORAS_CLASE.map((hora, idx) => {
+                          const rowHour = parseInt(hora.split(':')[0]);
+                          return (
+                            <tr key={idx} className="border-b border-gray-200">
+                              <td className="py-4 px-2 font-medium text-gray-500 text-center border-r border-gray-200 bg-gray-50">{hora}</td>
+                              {DIAS_SEMANA.map(dia => {
+                                const claseInicia = horarioReal.find(c => c.dia === dia && c.hora_inicio === rowHour);
+                                const claseContinua = horarioReal.find(c => c.dia === dia && c.hora_inicio < rowHour && (c.hora_inicio + c.duracion) > rowHour);
+                                if (claseContinua) return null;
+                                if (claseInicia) {
+                                  return (
+                                    <td key={`${dia}-${hora}`} rowSpan={claseInicia.duracion} className="p-2 border-r border-gray-200 align-top">
+                                      <div className="text-white rounded-md p-3 flex flex-col shadow-sm transition-transform hover:scale-[1.02]" style={{ backgroundColor: claseInicia.color, height: '100%', minHeight: `${claseInicia.duracion * 4.5}rem` }}>
+                                        <span className="font-bold text-xs leading-tight uppercase mb-1">{claseInicia.materia}</span>
+                                        <div className="mt-auto border-t border-white/20 pt-2">
+                                          <span className="block text-[10px] opacity-90 truncate">{claseInicia.profe}</span>
+                                          <span className="block text-[10px] font-mono mt-1 bg-black/10 inline-block px-1.5 py-0.5 rounded">{claseInicia.aula || 'S/A'}</span>
+                                        </div>
+                                      </div>
+                                    </td>
+                                  );
+                                }
+                                return <td key={`${dia}-${hora}`} className="p-2 border-r border-gray-200 align-top"></td>;
+                              })}
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
                 )}
               </div>
             </div>

@@ -155,11 +155,11 @@ const AdminLayout = () => {
             {isSuperAdmin && (
               <Link 
                 to="/admin/audit-logs" 
-                title="Logs de Auditoría" 
+                title="Auditoría del Sistema"
                 className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-colors ${effectivelyCollapsed ? 'justify-center' : ''} ${isActive('/admin/audit-logs') ? 'bg-[#1A237E] text-white font-semibold shadow-md' : 'text-slate-300 hover:bg-slate-800 hover:text-white'}`}
               >
                 <ShieldAlert className="w-[18px] h-[18px] shrink-0" /> 
-                {!effectivelyCollapsed && <span>Logs de Auditoría</span>}
+                {!effectivelyCollapsed && <span>Auditoría del Sistema</span>}
               </Link>
             )}
 
@@ -167,10 +167,12 @@ const AdminLayout = () => {
               <Users className="w-[18px] h-[18px] shrink-0" />
               {!effectivelyCollapsed && <span>Alumnos</span>}
             </Link>
-            <Link to="/docentes" title="Sincronización Docente" className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-colors ${effectivelyCollapsed ? 'justify-center' : ''} ${isActive('/docentes') ? 'bg-[#1A237E] text-white font-semibold shadow-md' : 'text-slate-300 hover:bg-slate-800 hover:text-white'}`}>
-              <RefreshCcw className="w-[18px] h-[18px] shrink-0" />
-              {!effectivelyCollapsed && <span>Sincronización Docente</span>}
-            </Link>
+            {isSuperAdmin && (
+              <Link to="/admin/sincronizacion-sigad" title="Sincronización SIGAD" className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-colors ${effectivelyCollapsed ? 'justify-center' : ''} ${isActive('/admin/sincronizacion-sigad') ? 'bg-[#1A237E] text-white font-semibold shadow-md' : 'text-slate-300 hover:bg-slate-800 hover:text-white'}`}>
+                <RefreshCcw className="w-[18px] h-[18px] shrink-0" />
+                {!effectivelyCollapsed && <span>Sincronización SIGAD</span>}
+              </Link>
+            )}
             <Link to="/horarios" title="Grupos y Horarios" className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-colors ${effectivelyCollapsed ? 'justify-center' : ''} ${isActive('/horarios') ? 'bg-[#1A237E] text-white font-semibold shadow-md' : 'text-slate-300 hover:bg-slate-800 hover:text-white'}`}>
               <CalendarDays className="w-[18px] h-[18px] shrink-0" />
               {!effectivelyCollapsed && <span>Grupos y Horarios</span>}
@@ -179,7 +181,7 @@ const AdminLayout = () => {
               <BookOpen className="w-[18px] h-[18px] shrink-0" />
               {!effectivelyCollapsed && <span>Boletas</span>}
             </Link>
-            <Link to="/reportes" title="Listas" className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-colors ${effectivelyCollapsed ? 'justify-center' : ''} ${isActive('/reportes') ? 'bg-[#1A237E] text-white font-semibold shadow-md' : 'text-slate-300 hover:bg-slate-800 hover:text-white'}`}>
+            <Link to="/reportes/asistencia" title="Listas" className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-colors ${effectivelyCollapsed ? 'justify-center' : ''} ${isActive('/reportes') ? 'bg-[#1A237E] text-white font-semibold shadow-md' : 'text-slate-300 hover:bg-slate-800 hover:text-white'}`}>
               <FileText className="w-[18px] h-[18px] shrink-0" />
               {!effectivelyCollapsed && <span>Listas</span>}
             </Link>

@@ -19,6 +19,12 @@ const ListadoAlumnos = () => {
   const [cargando, setCargando] = useState(true);
   const [pagina, setPagina] = useState(1);
   const [total, setTotal] = useState(0);
+
+  const [modalMaestriaOpen, setModalMaestriaOpen] = useState(false);
+  const [candidatosMaestria, setCandidatosMaestria] = useState([]);
+  const [busquedaCandidato, setBusquedaCandidato] = useState('');
+  const [cargandoCandidatos, setCargandoCandidatos] = useState(false);
+  const [modoMaestriaActivo, setModoMaestriaActivo] = useState(false);
   
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [alumnoAEditar, setAlumnoAEditar] = useState(null);
@@ -50,6 +56,38 @@ const ListadoAlumnos = () => {
     }
   };
 
+  const abrirModalCandidatosMaestria = async () => {
+  setModalMaestriaOpen(true);
+  setCargandoCandidatos(true);
+  try {
+    const response = await client.get('/alumnos/candidatos-maestria');
+    setCandidatosMaestria(response.data.data || []);
+  } catch (error) {
+    Swal.fire('Error', 'No se pudieron cargar los candidatos a maestría.', 'error');
+  } finally {
+    setCargandoCandidatos(false);
+  }
+};
+
+const handleSeleccionarCandidato = async (candidato) => {
+  try {
+    const res = await client.get(`/alumnos/detalle/${candidato.matricula}`);
+    
+    const alumnoParaMaestria = {
+      ...res.data.student,
+      address: res.data.address,
+      es_opcion_titulacion: candidato.es_opcion_titulacion 
+    };
+
+    setAlumnoAEditar(alumnoParaMaestria);
+    setModoMaestriaActivo(true); 
+    setModalMaestriaOpen(false);
+    setIsModalOpen(true); 
+  } catch (error) {
+    Swal.fire('Error', 'No se pudo cargar el expediente del candidato.', 'error');
+  }
+};
+
   const STATUS_UI = {
     'activo':       { label: 'Activo',        desc: 'Inscripción vigente',   color: 'text-green-600',  activeBg: 'bg-green-50 border-green-500',   Icon: CheckCircle },
     'egresado':     { label: 'Egresado',       desc: 'Conclusión de créditos', color: 'text-blue-900',   activeBg: 'bg-blue-50 border-blue-900',     Icon: GraduationCap },
@@ -74,11 +112,37 @@ const ListadoAlumnos = () => {
   const [filtroCuatrimestre, setFiltroCuatrimestre] = useState('');
   const [filtroNivelAcademico, setFiltroNivelAcademico] = useState('');
   const [nivelesAcademicos, setNivelesAcademicos] = useState([]);
+  const [programasAcademicos, setProgramasAcademicos] = useState([]);
 
   useEffect(() => {
     client.get('/catalogos/estatus').then(res => setEstatusCatalogo(res.data)).catch(() => {});
     client.get('/catalogos/niveles-academicos').then(res => setNivelesAcademicos(res.data)).catch(() => {});
+    client.get('/catalogos/programas-academicos').then(res => setProgramasAcademicos(res.data)).catch(() => {}); 
   }, []);
+
+  // Lógica de interdependencia de filtros
+  const nivelSeleccionado = nivelesAcademicos.find(n => n.id.toString() === filtroNivelAcademico.toString());
+  const esMaestria = nivelSeleccionado?.name.toLowerCase() === 'maestria';
+
+  const programasFiltrados = filtroNivelAcademico
+    ? programasAcademicos.filter(p => p.nivel_academico?.toLowerCase() === nivelSeleccionado?.name.toLowerCase())
+    : programasAcademicos;
+
+  const maxCuatrimestres = esMaestria ? 5 : 9;
+  const opcionesCuatrimestre = Array.from({ length: maxCuatrimestres }, (_, i) => i + 1);
+
+  useEffect(() => {
+    if (esMaestria && parseInt(filtroCuatrimestre) > 5) {
+      handleCambioFiltro(setFiltroCuatrimestre, '');
+    }
+    
+    if (filtroCarrera) {
+      const programaSeleccionado = programasAcademicos.find(p => p.id.toString() === filtroCarrera.toString());
+      if (programaSeleccionado && nivelSeleccionado && programaSeleccionado.nivel_academico?.toLowerCase() !== nivelSeleccionado.name.toLowerCase()) {
+        handleCambioFiltro(setFiltroCarrera, '');
+      }
+    }
+  }, [filtroNivelAcademico, esMaestria, filtroCuatrimestre, filtroCarrera, programasAcademicos, nivelSeleccionado]);
 
   const fetchAlumnos = async () => {
     try {
@@ -148,6 +212,7 @@ const ListadoAlumnos = () => {
   const handleCerrarModal = () => {
     setIsModalOpen(false);
     setAlumnoAEditar(null);
+    setModoMaestriaActivo(false); // <-- Nuevo
     fetchAlumnos(); 
   };
 
@@ -249,6 +314,12 @@ const ListadoAlumnos = () => {
           <button onClick={handleAgregarAlumno} className="flex items-center gap-2 bg-[#1A237E] text-white px-4 py-2 rounded-lg text-sm font-bold hover:bg-[#283593] transition-colors shadow-sm">
             <Plus className="w-4 h-4" /> Agregar Alumno
           </button>
+          <button 
+            onClick={abrirModalCandidatosMaestria} 
+            className="flex items-center gap-2 bg-[#f59e0b] text-white px-4 py-2 rounded-lg text-sm font-bold hover:bg-[#d97706] transition-colors shadow-sm"
+          >
+            <GraduationCap className="w-4 h-4" /> Inscripción Maestría
+          </button>
         </div>
       </div>
 
@@ -294,7 +365,7 @@ const ListadoAlumnos = () => {
           </div>
 
           <div className="w-64">
-            <label className="block text-xs font-semibold text-gray-600 mb-1">Carrera</label>
+            <label className="block text-xs font-semibold text-gray-600 mb-1">Programa Académico</label>
             <div className="relative">
               <Filter className="w-4 h-4 absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
               <select 
@@ -302,16 +373,10 @@ const ListadoAlumnos = () => {
                 onChange={(e) => handleCambioFiltro(setFiltroCarrera, e.target.value)}
                 className="w-full pl-9 pr-4 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:border-blue-500 appearance-none bg-white cursor-pointer"
               >
-                <option value="">Todas las carreras</option>
-                <option value="1">Licenciatura en Contabilidad y Finanzas (LCF)</option>
-                <option value="2">Licenciatura en Derecho y Ciencias Jurídicas (LDCJ)</option>
-                <option value="3">Licenciatura en Diseño Gráfico Digital (LDGD)</option>
-                <option value="4">Licenciatura en Educación Física, Recreación y Deporte (LEFRD)</option>
-                <option value="5">Licenciatura en Mercadotecnia Estratégica (LME)</option>
-                <option value="6">Licenciatura en Administración de Empresas (LAE)</option>
-                <option value="7">Licenciatura en Contabilidad Financiera (LCFIN)</option>
-                <option value="8">Licenciatura en Educación y Tecnologías para el Aprendizaje (LETA)</option>
-                <option value="9">Licenciatura en Ingenieria de Software y Sistemas Computacionales (LISSC)</option>
+                <option value="">Todos los programas</option>
+                {programasFiltrados.map(prog => (
+                  <option key={prog.id} value={prog.id}>{prog.name}</option>
+                ))}
               </select>
             </div>
           </div>
@@ -324,7 +389,7 @@ const ListadoAlumnos = () => {
               className="w-full px-4 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:border-blue-500 bg-white cursor-pointer"
             >
               <option value="">Todos</option>
-              {[1,2,3,4,5,6,7,8,9].map(num => (
+              {opcionesCuatrimestre.map(num => (
                 <option key={num} value={num}>{num}º Cuatrimestre</option>
               ))}
             </select>
@@ -471,6 +536,7 @@ const ListadoAlumnos = () => {
         isOpen={isModalOpen}
         onClose={handleCerrarModal}
         alumnoAEditar={alumnoAEditar}
+        modoMaestria={modoMaestriaActivo}
       />
 
       {kardexMatricula && (
@@ -701,6 +767,74 @@ const ListadoAlumnos = () => {
                 </div>
               </>
             )}
+          </div>
+        </div>
+      )}
+
+      {modalMaestriaOpen && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-in fade-in">
+          <div className="bg-white rounded-xl shadow-lg w-full max-w-2xl overflow-hidden flex flex-col max-h-[80vh]">
+            
+            <div className="p-4 border-b border-gray-200 flex justify-between items-center bg-gray-50">
+              <h2 className="text-lg font-bold text-[#1A237E] flex items-center gap-2">
+                <GraduationCap className="w-5 h-5 text-amber-500" />
+                Directorio de Candidatos a Maestría
+              </h2>
+              <button onClick={() => setModalMaestriaOpen(false)} className="text-gray-400 hover:text-gray-600 text-xl font-bold">✕</button>
+            </div>
+
+            <div className="p-4 border-b border-gray-200 bg-white">
+              <div className="relative">
+                <Search className="w-4 h-4 absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
+                <input 
+                  type="text" 
+                  placeholder="Buscar por matrícula o nombre..." 
+                  value={busquedaCandidato}
+                  onChange={(e) => setBusquedaCandidato(e.target.value)}
+                  className="w-full pl-9 pr-4 py-2 border rounded-lg text-sm outline-none focus:ring-2 focus:ring-[#1A237E]"
+                />
+              </div>
+            </div>
+
+            <div className="p-4 overflow-y-auto flex-1 bg-gray-50">
+              {cargandoCandidatos ? (
+                <div className="flex flex-col items-center justify-center py-10">
+                  <Loader2 className="w-8 h-8 text-[#1A237E] animate-spin mb-2" />
+                  <p className="text-sm text-gray-500 font-bold">Buscando candidatos elegibles...</p>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {candidatosMaestria
+                    .filter(c => c.nombre_completo.toLowerCase().includes(busquedaCandidato.toLowerCase()) || c.matricula.includes(busquedaCandidato))
+                    .map(candidato => (
+                    <div key={candidato.matricula} className="bg-white p-4 rounded-lg border border-gray-200 flex justify-between items-center shadow-sm hover:border-blue-300 transition-colors">
+                      <div>
+                        <p className="font-bold text-[#1A237E] text-sm uppercase">{candidato.nombre_completo}</p>
+                        <p className="text-xs font-mono text-gray-500 mt-0.5">{candidato.matricula} • {candidato.email}</p>
+                      </div>
+                      <div className="text-right flex items-center gap-4">
+                        <div className="text-right">
+                          {candidato.es_opcion_titulacion ? (
+                            <span className="bg-purple-100 text-purple-700 text-[10px] px-2 py-1 rounded font-bold uppercase">9º Cuatrimestre</span>
+                          ) : (
+                            <span className="bg-blue-100 text-blue-700 text-[10px] px-2 py-1 rounded font-bold uppercase">Egresado</span>
+                          )}
+                        </div>
+                        <button
+                          onClick={() => handleSeleccionarCandidato(candidato)}
+                          className="bg-[#1A237E] hover:bg-[#283593] text-white p-2 rounded-lg transition-colors flex items-center gap-1 text-xs font-bold"
+                        >
+                          <Plus className="w-4 h-4" /> Inscribir
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                  {candidatosMaestria.length === 0 && !cargandoCandidatos && (
+                    <p className="text-center text-gray-500 font-bold py-8">No hay alumnos elegibles para maestría.</p>
+                  )}
+                </div>
+              )}
+            </div>
           </div>
         </div>
       )}

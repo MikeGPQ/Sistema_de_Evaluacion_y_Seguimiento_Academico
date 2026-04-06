@@ -20,6 +20,7 @@ from app.routers import (
     reportcards,
     boletas,
     api_salida_router,
+    sync_router,
 )
 
 load_dotenv()
@@ -76,6 +77,7 @@ app.include_router(boletas.router)
 app.include_router(files_router.router)
 app.include_router(logs.router)
 app.include_router(api_salida_router.router)
+app.include_router(sync_router.router)
 
 
 @app.get("/", tags=["Salud del Sistema"])

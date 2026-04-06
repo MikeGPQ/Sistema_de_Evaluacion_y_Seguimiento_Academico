@@ -423,42 +423,52 @@ const AsistenciaDocente = () => {
 
   const nombreDocentePDF = user?.full_name || user?.nombre_completo || user?.nombre || "DOCENTE TITULAR";
 
-  const handleExportPDF = () => {
+const handleExportPDF = () => {
     try {
       const doc = new jsPDF('landscape'); 
       const pageWidth = doc.internal.pageSize.getWidth();
-      
-      doc.setFillColor(11, 23, 42); doc.rect(14, 15, 12, 12, 'F');
-      doc.setTextColor(255, 255, 255); doc.setFontSize(16); doc.setFont("helvetica", "bold"); doc.text("U", 20, 23.5, { align: "center" }); 
-      
-      doc.setTextColor(26, 35, 126); doc.setFontSize(16); doc.text("UNID", 30, 20);
-      doc.setFontSize(8); doc.setTextColor(100); doc.setFont("helvetica", "normal"); doc.text("UNIVERSIDAD INTERAMERICANA PARA EL DESARROLLO", 30, 24);
-      
-      doc.setTextColor(26, 35, 126); doc.setFontSize(12); doc.setFont("helvetica", "bold"); doc.text("REPORTE DE ASISTENCIA DOCENTE", pageWidth - 14, 20, { align: "right" });
-      doc.setFontSize(9); doc.setTextColor(100); doc.setFont("helvetica", "normal"); doc.text("Documento Oficial", pageWidth - 14, 24, { align: "right" });
+      const pageHeight = doc.internal.pageSize.getHeight();
 
-      doc.setDrawColor(242, 169, 0); doc.setLineWidth(0.5); doc.line(14, 28, pageWidth - 14, 28);
-      
-      doc.setFontSize(8); doc.setTextColor(150); doc.setFont("helvetica", "bold");
-      doc.text("MATERIA", 14, 35); doc.text("GRUPO", 120, 35); doc.text("DOCENTE", 200, 35);
-      doc.text("PERIODO ACADÉMICO", 14, 45); doc.text("FECHA DE GENERACIÓN", 120, 45); doc.text("ID REPORTE", 200, 45);
+      const dibujarEncabezadoSesa = (pdf) => {
+        pdf.setFillColor(11, 23, 42); pdf.rect(14, 15, 12, 12, 'F');
+        pdf.setTextColor(255, 255, 255); pdf.setFontSize(16); pdf.setFont("helvetica", "bold"); 
+        pdf.text("U", 20, 23.5, { align: "center" }); 
+        
+        pdf.setTextColor(26, 35, 126); pdf.setFontSize(16); pdf.text("UNID", 30, 20);
+        pdf.setFontSize(8); pdf.setTextColor(100); pdf.setFont("helvetica", "normal"); 
+        pdf.text("UNIVERSIDAD INTERAMERICANA PARA EL DESARROLLO", 30, 24);
+        
+        pdf.setTextColor(26, 35, 126); pdf.setFontSize(12); pdf.setFont("helvetica", "bold"); 
+        pdf.text("REPORTE DE ASISTENCIA DOCENTE", pageWidth - 14, 20, { align: "right" });
+        pdf.setFontSize(9); pdf.setTextColor(100); pdf.setFont("helvetica", "normal"); 
+        pdf.text("Documento Oficial", pageWidth - 14, 24, { align: "right" });
 
-      doc.setTextColor(50); doc.setFont("helvetica", "bold");
-      const nombreMateriaStr = materiasOptions.find(o => o.id === materiaSeleccionada)?.label || "";
-      const partes = nombreMateriaStr.split(' - ');
-      const nombreMatLimpio = partes[0] ? partes[0].trim().toUpperCase() : "S/A";
-      const grupoLimpio = partes[1] ? partes[1].trim() : "S/A";
-      const codigoMateria = nombreMatLimpio.substring(0, 5);
-      
-      doc.text(nombreMatLimpio, 14, 40);
-      doc.text(grupoLimpio, 120, 40);
-      doc.text(nombreDocentePDF.toUpperCase(), 200, 40);
-      doc.text(periodoSeleccionado || "S/A", 14, 50);
-      doc.text(new Date().toLocaleDateString('es-ES', { day: 'numeric', month: 'long', year: 'numeric' }).toUpperCase(), 120, 50);
-      
-      const reporteIDStr = `REPORTE-${periodoSeleccionado}-${codigoMateria}`;
-      doc.setTextColor(100); doc.text(reporteIDStr, 200, 50);
+        pdf.setDrawColor(242, 169, 0); pdf.setLineWidth(0.5); pdf.line(14, 28, pageWidth - 14, 28);
+        
+        pdf.setFontSize(7.5); pdf.setTextColor(150); pdf.setFont("helvetica", "bold");
+        pdf.text("MATERIA", 14, 35); pdf.text("GRUPO", 120, 35); pdf.text("DOCENTE", 200, 35);
+        pdf.text("PERIODO ACADÉMICO", 14, 45); pdf.text("FECHA DE GENERACIÓN", 120, 45); pdf.text("ID REPORTE", 200, 45);
 
+        pdf.setTextColor(50); pdf.setFont("helvetica", "bold"); pdf.setFontSize(8.5);
+        const nombreMateriaStr = materiasOptions.find(o => o.id === materiaSeleccionada)?.label || "";
+        const partes = nombreMateriaStr.split(' - ');
+        const nombreMatLimpio = partes[0] ? partes[0].trim().toUpperCase() : "S/A";
+        const grupoLimpio = partes[1] ? partes[1].trim() : "S/A";
+        const codigoMateria = nombreMatLimpio.substring(0, 5);
+        
+        pdf.text(nombreMatLimpio, 14, 40);
+        pdf.text(grupoLimpio, 120, 40);
+        pdf.text(nombreDocentePDF.toUpperCase(), 200, 40);
+        pdf.text(periodoSeleccionado || "S/A", 14, 50);
+        pdf.text(new Date().toLocaleDateString('es-ES', { day: 'numeric', month: 'long', year: 'numeric' }).toUpperCase(), 120, 50);
+        
+        const reporteIDStr = `REPORTE-${periodoSeleccionado}-${codigoMateria}`;
+        pdf.setTextColor(100); pdf.text(reporteIDStr, 200, 50);
+
+        return codigoMateria;
+      };
+
+      const codigoMateria = materiasOptions.find(o => o.id === materiaSeleccionada)?.label?.split(' - ')[0]?.substring(0, 5) || "LISTA";
       const headersDias = fechasClase.map(f => formatearFechaMes(f));
       const tableColumn = ["MATRÍCULA", "NOMBRE DEL ALUMNO", ...headersDias, "ASIST.", "FALTAS"];
       
@@ -475,13 +485,19 @@ const AsistenciaDocente = () => {
         return [a.matricula, a.nombre, ...asistenciasFila, asistenciasTotal.toString(), faltasTotales.toString()];
       });
 
- autoTable(doc, {
-        head: [tableColumn], body: tableRows, startY: 55, theme: 'plain',
+      autoTable(doc, {
+        head: [tableColumn], 
+        body: tableRows, 
+        startY: 55,
+        theme: 'plain',
         horizontalPageBreak: true, 
-        horizontalPageBreakRepeat: 0, 
-        margin: { bottom: 25, top: 15, left: 10, right: 10 }, 
+        horizontalPageBreakRepeat: 0,
+        margin: { top: 55, bottom: 25, left: 10, right: 10 }, 
         styles: { fontSize: 6.5, cellPadding: 1, textColor: [80, 80, 80] }, 
-        headStyles: { fillColor: [248, 249, 250], textColor: [26, 35, 126], fontStyle: 'bold', lineWidth: 0.1, lineColor: [230, 230, 230], halign: 'center', valign: 'middle' },
+        headStyles: { 
+          fillColor: [248, 249, 250], textColor: [26, 35, 126], fontStyle: 'bold', 
+          lineWidth: 0.1, lineColor: [230, 230, 230], halign: 'center', valign: 'middle' 
+        },
         bodyStyles: { lineWidth: 0.1, lineColor: [240, 240, 240] },
         columnStyles: { 
           0: { fontStyle: 'bold', cellWidth: 18, halign: 'center' }, 
@@ -489,58 +505,60 @@ const AsistenciaDocente = () => {
           [tableColumn.length - 2]: { fontStyle: 'bold', textColor: [26, 35, 126], halign: 'center', cellWidth: 12 }, 
           [tableColumn.length - 1]: { fontStyle: 'bold', textColor: [220, 38, 38], halign: 'center', cellWidth: 12 } 
         },
+   
+        
         didParseCell: function (data) {
           if (data.section === 'head' && data.column.index >= 2) data.cell.styles.halign = 'center';
           if (data.section === 'body') {
             const rawVal = data.cell.raw;
             if (rawVal === 'P') { 
-              data.cell.text = ['4']; 
-              data.cell.styles.font = 'zapfdingbats'; 
-              data.cell.styles.textColor = [34, 197, 94]; 
-              data.cell.styles.halign = 'center'; 
+              data.cell.text = ['4']; data.cell.styles.font = 'zapfdingbats'; 
+              data.cell.styles.textColor = [34, 197, 94]; data.cell.styles.halign = 'center'; 
             } 
             else if (rawVal === 'F') { 
-              data.cell.text = ['8']; 
-              data.cell.styles.font = 'zapfdingbats'; 
-              data.cell.styles.textColor = [239, 68, 68]; 
-              data.cell.styles.halign = 'center'; 
+              data.cell.text = ['8']; data.cell.styles.font = 'zapfdingbats'; 
+              data.cell.styles.textColor = [239, 68, 68]; data.cell.styles.halign = 'center'; 
             }
             else if (rawVal === 'R' || rawVal === 'J') { 
-              data.cell.styles.textColor = [100, 100, 100]; 
-              data.cell.styles.fillColor = [245, 245, 245]; 
-              data.cell.styles.fontStyle = 'bold'; 
-              data.cell.styles.halign = 'center'; 
+              data.cell.styles.textColor = [100, 100, 100]; data.cell.styles.fillColor = [245, 245, 245]; 
+              data.cell.styles.fontStyle = 'bold'; data.cell.styles.halign = 'center'; 
             }
             else if (rawVal === '-') { 
-              data.cell.styles.textColor = [200, 200, 200]; 
-              data.cell.styles.halign = 'center'; 
+              data.cell.styles.textColor = [200, 200, 200]; data.cell.styles.halign = 'center'; 
             }
-            if (data.column.index >= 2 && data.column.index <= tableColumn.length - 3) data.cell.styles.halign = 'center';
           }
         },
+   
+        
         didDrawPage: function (data) {
-          const footerY = doc.internal.pageSize.getHeight() - 15;
-          doc.setFontSize(8); 
+          dibujarEncabezadoSesa(doc);
+
+          const footerY = pageHeight - 15;
           
+          doc.setFontSize(7); 
           doc.setFont("zapfdingbats"); doc.setTextColor(34, 197, 94); doc.text("4", 14, footerY); 
-          doc.setFont("helvetica", "normal"); doc.setTextColor(150); doc.text(" Asistencia (Presente)", 17, footerY);
+          doc.setFont("helvetica", "normal"); doc.setTextColor(150); doc.text(" Presente", 17, footerY);
 
-          doc.setFont("zapfdingbats"); doc.setTextColor(239, 68, 68); doc.text("8", 60, footerY); 
-          doc.setFont("helvetica", "normal"); doc.setTextColor(150); doc.text(" Falta (Ausencia Injustificada)", 63, footerY);
+          doc.setFont("zapfdingbats"); doc.setTextColor(239, 68, 68); doc.text("8", 35, footerY); 
+          doc.setFont("helvetica", "normal"); doc.text(" Falta", 38, footerY);
           
-          doc.setFont("helvetica", "bold"); doc.setTextColor(150); doc.text("R", 115, footerY);
-          doc.setFont("helvetica", "normal"); doc.text(" Retardo", 118, footerY);
+          doc.setFont("helvetica", "bold"); doc.setTextColor(150); doc.text("R", 52, footerY);
+          doc.setFont("helvetica", "normal"); doc.text(" Retardo", 55, footerY);
 
-          doc.setFont("helvetica", "bold"); doc.text("J", 140, footerY);
-          doc.setFont("helvetica", "normal"); doc.text(" Justificante", 143, footerY);
+          doc.setFont("helvetica", "bold"); doc.text("J", 72, footerY);
+          doc.setFont("helvetica", "normal"); doc.text(" Justificante", 75, footerY);
 
-          doc.setTextColor(100);
-          doc.text("Documento generado por Sistema Académico SESA UNID", 14, footerY + 5);
-          doc.text(`Página ${data.pageNumber}`, doc.internal.pageSize.getWidth() - 20, footerY + 5, { align: 'right' });
+          doc.setFontSize(7); doc.setTextColor(150);
+          doc.text("SISTEMA ACADÉMICO SESA UNID - DOCUMENTO OFICIAL DE CONTROL ESCOLAR", 14, footerY + 5);
+          doc.text(`Página ${data.pageNumber}`, pageWidth - 20, footerY + 5, { align: 'right' });
         }
       });
+
       doc.save(`Lista_Asistencia_${codigoMateria}.pdf`);
-    } catch (error) { Swal.fire('Error', 'No se pudo generar el documento PDF.', 'error'); }
+    } catch (error) { 
+      console.error(error);
+      Swal.fire('Error', 'No se pudo generar el documento PDF.', 'error'); 
+    }
   };
 
   return (

@@ -24,6 +24,30 @@ const AuditLogs = () => {
     fecha_hasta: ''
   });
 
+  const MAPA_ACCIONES = {
+    'CREATE': 'CREACIÓN',
+    'UPDATE': 'ACTUALIZACIÓN',
+    'DELETE': 'ELIMINACIÓN',
+    'LOGIN': 'INICIO DE SESIÓN',
+    'LOG': 'REGISTRO'
+  };
+
+  const MAPA_ENTIDADES = {
+    'students': 'Alumnos',
+    'users': 'Usuarios / Autenticación',
+    'administrators': 'Administradores',
+    'student_enrollments': 'Carga Académica',
+    'attendance_records': 'Asistencia',
+    'student_academic_profiles': 'Perfiles Académicos',
+    'student_status_logs': 'Historial de Estatus',
+    'academic_groups': 'Grupos Académicos',
+    'files': 'Archivos',
+    'student_enrollments_bloque': 'Carga en Bloque (Nuevo Ingreso)'
+  };
+
+  const traducirAccion = (accion) => MAPA_ACCIONES[accion] || accion;
+  const traducirEntidad = (entidad) => MAPA_ENTIDADES[entidad] || entidad;
+
   const [paginacion, setPaginacion] = useState({ skip: 0, limit: 15 });
 
   // 2. Estados del Modal de Locked Users
@@ -151,53 +175,146 @@ const handleUnlockUser = async (identifier) => {
     (user.email && user.email.toLowerCase().includes(searchLockedUser.toLowerCase()))
   );
 
-  // 5. Visualización y PDF
-  const verDetalleJson = (oldValues, newValues) => {
+const verDetalleJson = (oldValues, newValues, action) => {
     let htmlContent = '';
     const safeOld = typeof oldValues === 'object' && oldValues !== null ? oldValues : {};
     const safeNew = typeof newValues === 'object' && newValues !== null ? newValues : {};
 
-    const allKeys = Array.from(new Set([...Object.keys(safeOld), ...Object.keys(safeNew)]));
-    
-    const changes = [];
+    // Utilidad para limpiar y capitalizar las claves
+    const formatKey = (key) => key.charAt(0).toUpperCase() + key.slice(1).replace(/_/g, ' ');
 
-    allKeys.forEach(key => {
-      const oldVal = safeOld[key];
-      const newVal = safeNew[key];
-
-      const formatVal = (v) => {
-        if (v === null || v === undefined) return '<span style="color: #9ca3af; font-style: italic;">(vacío)</span>';
-        if (typeof v === 'boolean') return v ? 'Sí' : 'No';
-        if (Array.isArray(v)) return `[${v.join(', ')}]`;
-        if (typeof v === 'object') return JSON.stringify(v);
-        return v;
-      };
-
-      if (JSON.stringify(oldVal) !== JSON.stringify(newVal)) {
-        if (oldVal === undefined) {
-          changes.push(`<li>Campo <b>${key}</b> fue agregado con valor: <span style="color: #22c55e;">${formatVal(newVal)}</span></li>`);
-        } else if (newVal === undefined) {
-           changes.push(`<li>Campo <b>${key}</b> fue eliminado. Valor anterior: <span style="color: #ef4444;">${formatVal(oldVal)}</span></li>`);
-        } else {
-           changes.push(`<li><b>${key}:</b> cambió de <span style="color: #ef4444; text-decoration: line-through;">${formatVal(oldVal)}</span> a <span style="color: #22c55e; font-weight: bold;">${formatVal(newVal)}</span></li>`);
-        }
+    // Formateador con soporte optimizado para arreglos
+    const formatVal = (v) => {
+      if (v === null || v === undefined) return '<span style="color: #9ca3af; font-style: italic;">(vacío)</span>';
+      if (typeof v === 'boolean') return v ? 'Sí' : 'No';
+      if (Array.isArray(v)) {
+        if (v.length === 0) return '<span style="color: #9ca3af; font-style: italic;">(Lista vacía)</span>';
+        return `<ul style="margin: 6px 0 0 0; padding-left: 18px; list-style-type: square; color: #4b5563; font-size: 13px;">${v.map(item => `<li style="margin-bottom: 4px; line-height: 1.4;">${item}</li>`).join('')}</ul>`;
       }
-    });
+      if (typeof v === 'object') return JSON.stringify(v);
+      return v;
+    };
 
-    if (changes.length > 0) {
-      htmlContent = `<ul style="text-align: left; font-size: 14px; line-height: 1.6; padding-left: 20px;">${changes.join('')}</ul>`;
-    } else if (Object.keys(safeOld).length === 0 && Object.keys(safeNew).length > 0) {
-       htmlContent = `<p style="text-align: left; font-size: 14px;">Se creó el registro con los siguientes datos:</p>
-                      <ul style="text-align: left; font-size: 14px; line-height: 1.6; padding-left: 20px;">
-                        ${Object.entries(safeNew).map(([k, v]) => `<li><b>${k}:</b> ${formatVal(v)}</li>`).join('')}
-                      </ul>`;
-    } else if (Object.keys(safeOld).length > 0 && Object.keys(safeNew).length === 0) {
-        htmlContent = `<p style="text-align: left; font-size: 14px;">Se eliminó el registro. Datos anteriores:</p>
-                      <ul style="text-align: left; font-size: 14px; line-height: 1.6; padding-left: 20px;">
-                        ${Object.entries(safeOld).map(([k, v]) => `<li><b>${k}:</b> ${formatVal(v)}</li>`).join('')}
-                      </ul>`;
+    const isCreate = action === 'CREATE';
+    const isDelete = action === 'DELETE';
+
+    if (isCreate) {
+      htmlContent = `
+        <div style="text-align: left; max-height: 60vh; overflow-y: auto; padding-right: 8px;">
+          <div style="background-color: #f0fdf4; padding: 12px; border-radius: 6px; border-left: 4px solid #22c55e; margin-bottom: 16px;">
+            <span style="color: #166534; font-weight: bold; font-size: 14px;">Nuevo registro creado con los siguientes datos:</span>
+          </div>
+          <div style="display: flex; flex-direction: column; gap: 10px;">
+            ${Object.entries(safeNew).map(([k, v]) => `
+              <div style="background-color: #f9fafb; padding: 12px; border-radius: 6px; border: 1px solid #e5e7eb;">
+                <span style="font-weight: bold; color: #374151; font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; display: block; margin-bottom: 4px;">${formatKey(k)}</span>
+                <div style="color: #1f2937; font-size: 14px;">${formatVal(v)}</div>
+              </div>
+            `).join('')}
+          </div>
+        </div>`;
+        
+    } else if (isDelete) {
+      htmlContent = `
+        <div style="text-align: left; max-height: 60vh; overflow-y: auto; padding-right: 8px;">
+          <div style="background-color: #fef2f2; padding: 12px; border-radius: 6px; border-left: 4px solid #ef4444; margin-bottom: 16px;">
+            <span style="color: #991b1b; font-weight: bold; font-size: 14px;">Se eliminó el registro. Datos anteriores:</span>
+          </div>
+          <div style="display: flex; flex-direction: column; gap: 10px;">
+            ${Object.entries(safeOld).map(([k, v]) => `
+              <div style="background-color: #f9fafb; padding: 12px; border-radius: 6px; border: 1px solid #e5e7eb;">
+                <span style="font-weight: bold; color: #374151; font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; display: block; margin-bottom: 4px;">${formatKey(k)}</span>
+                <div style="color: #1f2937; font-size: 14px;">${formatVal(v)}</div>
+              </div>
+            `).join('')}
+          </div>
+        </div>`;
+        
     } else {
-      htmlContent = '<p style="text-align: center; color: #6b7280;">No se detectaron cambios en los valores.</p>';
+      const allKeys = Array.from(new Set([...Object.keys(safeOld), ...Object.keys(safeNew)]));
+      const changes = [];
+
+      allKeys.forEach(key => {
+        const oldVal = safeOld[key];
+        const newVal = safeNew[key];
+
+        if (JSON.stringify(oldVal) !== JSON.stringify(newVal)) {
+          let handledCustom = false;
+          
+          switch (key) {
+            case 'is_locked':
+              if (oldVal === false && newVal === true) {
+                changes.push(`<li><span style="color: #ef4444; font-weight: bold;">El usuario fue bloqueado.</span></li>`);
+                handledCustom = true;
+              } else if (oldVal === true && newVal === false) {
+                changes.push(`<li><span style="color: #22c55e; font-weight: bold;">El usuario fue desbloqueado.</span></li>`);
+                handledCustom = true;
+              }
+              break;
+          }
+
+          if (handledCustom) return;
+
+          if (Array.isArray(oldVal) || Array.isArray(newVal)) {
+            const oldArray = Array.isArray(oldVal) ? oldVal : [];
+            const newArray = Array.isArray(newVal) ? newVal : [];
+
+            const renderList = (arr, textColor) => {
+              if (arr.length === 0) return `<span style="color: ${textColor}; font-style: italic; font-size: 12px;">(Vacío)</span>`;
+              return `<ul style="margin: 0; padding-left: 15px; list-style-type: disc; color: ${textColor}; font-size: 13px; line-height: 1.5;">${arr.map(item => `<li>${item}</li>`).join('')}</ul>`;
+            };
+
+            changes.push(`
+              <li style="margin-bottom: 16px; list-style: none; margin-left: -20px; width: calc(100% + 20px);">
+                <div style="font-weight: bold; color: #374151; margin-bottom: 8px;">${formatKey(key)}</div>
+                <div style="display: flex; gap: 12px;">
+                  <div style="flex: 1; background-color: #fef2f2; padding: 10px; border-radius: 6px; border-left: 4px solid #ef4444;">
+                    <span style="color: #991b1b; font-size: 10px; font-weight: bold; text-transform: uppercase; letter-spacing: 0.5px; display: block; margin-bottom: 6px;">Valor Anterior</span>
+                    ${renderList(oldArray, '#7f1d1d')}
+                  </div>
+                  <div style="flex: 1; background-color: #f0fdf4; padding: 10px; border-radius: 6px; border-left: 4px solid #22c55e;">
+                    <span style="color: #166534; font-size: 10px; font-weight: bold; text-transform: uppercase; letter-spacing: 0.5px; display: block; margin-bottom: 6px;">Valor Nuevo</span>
+                    ${renderList(newArray, '#14532d')}
+                  </div>
+                </div>
+              </li>
+            `);
+            return; 
+          }
+
+          if (oldVal === undefined) {
+            let handledAddition = false;
+            switch (key) {
+              case 'motivo':
+              case 'evento':
+              case 'Fechas afectadas':
+              case 'Total de registros modificados':
+              case 'Alumnos con nuevas observaciones':
+                changes.push(`<li><b>${formatKey(key)}:</b> <span style="color: #22c55e;">${formatVal(newVal)}</span></li>`);
+                handledAddition = true;
+                break;
+            }
+
+            if (!handledAddition) {
+              changes.push(`<li>Campo <b>${formatKey(key)}</b> fue agregado con valor: <span style="color: #22c55e;">${formatVal(newVal)}</span></li>`);
+            }
+            
+          } else if (newVal === undefined) {
+             changes.push(`<li>Campo <b>${formatKey(key)}</b> fue eliminado. Valor anterior: <span style="color: #ef4444;">${formatVal(oldVal)}</span></li>`);
+          } else {
+             changes.push(`<li><b>${formatKey(key)}:</b> cambió de <span style="color: #ef4444; text-decoration: line-through;">${formatVal(oldVal)}</span> a <span style="color: #22c55e; font-weight: bold;">${formatVal(newVal)}</span></li>`);
+          }
+        } 
+      });
+
+      if (changes.length > 0) {
+        htmlContent = `
+          <div style="max-height: 60vh; overflow-y: auto; padding-right: 8px;">
+            <ul style="text-align: left; font-size: 14px; line-height: 1.6; padding-left: 20px;">${changes.join('')}</ul>
+          </div>`;
+      } else {
+        htmlContent = '<p style="text-align: center; color: #6b7280;">No se detectaron cambios en los valores.</p>';
+      }
     }
     
     Swal.fire({
@@ -291,8 +408,8 @@ const handleUnlockUser = async (identifier) => {
       new Date(log.created_at).toLocaleString(),
       log.user_identifier,
       log.user_role || 'SISTEMA',
-      log.action,
-      log.entity_name,
+      traducirAccion(log.action), 
+      traducirEntidad(log.entity_name), 
       formatPdfDetails(log.old_values, log.new_values)
     ]);
 
@@ -437,13 +554,15 @@ const handleUnlockUser = async (identifier) => {
                             log.action === 'CREATE' ? 'bg-green-100 text-green-700' : 
                             log.action === 'DELETE' ? 'bg-red-100 text-red-700' : 'bg-blue-100 text-blue-700'}`}
                         >
-                          {log.action}
+                          {traducirAccion(log.action)}
                         </span>
                       </td>
-                      <td className="p-3 font-mono text-gray-600 text-xs">{log.entity_name}</td>
+                      <td className="p-3 font-mono text-gray-600 text-xs">
+                        {traducirEntidad(log.entity_name)}
+                      </td>
                       <td className="p-3 text-center">
                         <button 
-                          onClick={() => verDetalleJson(log.old_values, log.new_values)}
+                          onClick={() => verDetalleJson(log.old_values, log.new_values, log.action)}
                           className="text-gray-400 hover:text-[#1A237E] transition-colors"
                           title="Ver cambios exactos"
                         >
@@ -465,7 +584,7 @@ const handleUnlockUser = async (identifier) => {
                 <div className="p-4 border-b border-gray-200 flex justify-between items-center bg-gray-50">
                   <h2 className="text-lg font-bold text-[#1A237E] flex items-center gap-2">
                     <UserX className="w-5 h-5 text-red-500" />
-                    Locked Users Directory
+                    Directorio de Usuarios Bloqueados
                   </h2>
                   <button 
                     onClick={() => setShowLockedUsersModal(false)} 
@@ -478,7 +597,7 @@ const handleUnlockUser = async (identifier) => {
                 <div className="p-4 border-b border-gray-200">
                   <input 
                     type="text" 
-                    placeholder="Search by ID or Email..." 
+                    placeholder="Buscar por ID o Correo..." 
                     value={searchLockedUser}
                     onChange={(e) => setSearchLockedUser(e.target.value)}
                     className="w-full px-3 py-2 border rounded-lg text-sm outline-none focus:ring-2 focus:ring-[#1A237E]"
@@ -487,7 +606,7 @@ const handleUnlockUser = async (identifier) => {
 
                 <div className="p-4 overflow-y-auto flex-1 bg-gray-50">
                   {filteredLockedUsers.length === 0 ? (
-                    <p className="text-center text-gray-500 font-bold py-8">No locked users found.</p>
+                    <p className="text-center text-gray-500 font-bold py-8">No se encontraron usuarios bloqueados.</p>
                   ) : (
                     <div className="space-y-3">
                       {filteredLockedUsers.map(user => (

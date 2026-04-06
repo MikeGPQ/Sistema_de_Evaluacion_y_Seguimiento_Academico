@@ -123,7 +123,7 @@ def unlock_user(identifier: str, data: UnlockRequest, db: Session = Depends(get_
         entity_name="users",
         entity_id=identifier,
         old_values={"is_locked": True},
-        new_values={"is_locked": False, "evento": "Desbloqueo"}
+        new_values={"is_locked": False, "evento": f"Desbloqueo del usuario {identifier}"}
     )
     
     db.commit()

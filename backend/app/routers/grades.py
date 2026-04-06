@@ -140,6 +140,10 @@ def bulk_update_grades(group_id: int, data: BulkGradeUpdateRequest, db: Session 
     cambios_realizados = 0
 
     id_to_numeric = {gv.id: gv.numeric_value for gv in db.query(GradeValue).all()}
+    grade_values_map = {gv.id: gv.value for gv in db.query(GradeValue).all()}
+
+    old_cambios_list = []
+    new_cambios_list = []
 
     for student_data in data.students:
         enrollment = db.query(StudentEnrollment).filter(
@@ -150,31 +154,42 @@ def bulk_update_grades(group_id: int, data: BulkGradeUpdateRequest, db: Session 
         if not enrollment:
             continue
 
-        old_values, new_values = {}, {}
+        old_student_vals = []
+        new_student_vals = []
+        hubo_cambio = False
 
-        def update_parcial(num_parcial, new_score_num, new_status_code):
+        def process_parcial(num_parcial, target_score_id, target_status_code):
+            nonlocal hubo_cambio
             attr_score = f'parcial_{num_parcial}_id'
             attr_status = f'status_parcial_{num_parcial}'
 
-            current_score = getattr(enrollment, attr_score, None)
+            current_score_id = getattr(enrollment, attr_score, None)
             current_status = getattr(enrollment, attr_status, None)
 
-            target_score = new_score_num  # es el grade_value.id enviado por el frontend
-            target_status = new_status_code or "OE"
+            target_status = target_status_code or "OE"
 
-            if current_score != target_score or current_status != target_status:
-                old_values[attr_score] = current_score
-                old_values[attr_status] = current_status
+            if current_score_id != target_score_id or current_status != target_status:
+                hubo_cambio = True
+                
+                old_score_val = grade_values_map.get(current_score_id, 'S/C') if current_score_id else 'S/C'
+                new_score_val = grade_values_map.get(target_score_id, 'S/C') if target_score_id else 'S/C'
+                old_stat = current_status if current_status else 'OE'
 
-                setattr(enrollment, attr_score, target_score)
+                old_student_vals.append(f"P{num_parcial}: {old_score_val} ({old_stat})")
+                new_student_vals.append(f"P{num_parcial}: {new_score_val} ({target_status})")
+
+                setattr(enrollment, attr_score, target_score_id)
                 setattr(enrollment, attr_status, target_status)
 
-                new_values[attr_score] = target_score
-                new_values[attr_status] = target_status
+        process_parcial(1, student_data.parcial_1, student_data.status_parcial_1)
+        process_parcial(2, student_data.parcial_2, student_data.status_parcial_2)
+        process_parcial(3, student_data.parcial_3, student_data.status_parcial_3)
 
-        update_parcial(1, student_data.parcial_1, student_data.status_parcial_1)
-        update_parcial(2, student_data.parcial_2, student_data.status_parcial_2)
-        update_parcial(3, student_data.parcial_3, student_data.status_parcial_3)
+        if hubo_cambio:
+            nombre_alumno = f"{enrollment.student.nombre} {enrollment.student.apellido_paterno}" if enrollment.student else student_data.student_matricula
+            old_cambios_list.append(f"{nombre_alumno} - {', '.join(old_student_vals)}")
+            new_cambios_list.append(f"{nombre_alumno} - {', '.join(new_student_vals)}")
+            cambios_realizados += 1
 
         if student_data.parcial_1 is not None and student_data.parcial_2 is not None and student_data.parcial_3 is not None:
             n1 = id_to_numeric.get(student_data.parcial_1, 0)
@@ -187,13 +202,24 @@ def bulk_update_grades(group_id: int, data: BulkGradeUpdateRequest, db: Session 
             enrollment.calificacion_final = None
             enrollment.status = "cursando"
 
-        if new_values:
-            log_audit_event(
-                db=db, user_identifier=audit_identifier, action="UPDATE",
-                entity_name="student_enrollments", entity_id=str(enrollment.id),
-                old_values=old_values, new_values=new_values
-            )
-            cambios_realizados += 1
+    if cambios_realizados > 0:
+        materia_nombre = group.subject.nombre if group.subject else "Sin Materia"
+        identificador_grupo = group.sigad_group.identificador if group.sigad_group else str(group.id)
+
+        log_audit_event(
+            db=db,
+            user_identifier=audit_identifier,
+            action="UPDATE",
+            entity_name="academic_groups", 
+            entity_id=identificador_grupo,
+            old_values={
+                "Alumnos modificados": old_cambios_list
+            },
+            new_values={
+                "evento": f"Actualización de calificaciones para {materia_nombre}",
+                "Alumnos modificados": new_cambios_list
+            }
+        )
 
     db.commit()
 

@@ -1,7 +1,7 @@
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { useAuth } from "../hooks/AuthContext";
 import { Hammer } from "lucide-react";
-
+import ReporteAsistencia from "../pages/ReporteAsistencia";
 // Páginas
 import LoginPage from "../pages/LoginPage";
 import ChangePassword from "../pages/ChangePassword";
@@ -20,10 +20,12 @@ import MiCargaAcademica from "../pages/GruposyHorarios/MiCargaAcademica";
 import ListadoAdministradores from "../pages/Administradores/ListadoAdministradores";
 import AuditLogs from "../pages/Administradores/AuditLogs";
 import Boletas from "../pages/Administradores/Boletas";
+import SincronizacionSigad from "../pages/Administradores/SincronizacionSigad";
 
-// Docentes (NUEVA IMPORTACIÓN)
+// Docentes
 import Calificaciones from "../pages/Docentes/Calificaciones";
 import ReportesDocente from "../pages/Docentes/ReportCards";
+
 // Layouts
 import AdminLayout from "../layouts/AdminLayout";
 import AlumnoLayout from "../layouts/AlumnoLayout";
@@ -31,26 +33,6 @@ import DocenteLayout from "../layouts/DocenteLayout";
 import MisCalificaciones from "../pages/Alumnos/MisCalificaciones";
 // Docente
 import AsistenciaDocente from "../pages/Docentes/AsistenciaDocente";
-
-
-
-
-// ==========================================
-// COMPONENTES REUTILIZABLES
-// ==========================================
-const EnConstruccion = ({ modulo }) => {
-  return (
-    <div className="flex flex-col items-center justify-center h-full min-h-[80vh] bg-[#F8F9FA] text-center px-4">
-      <div className="w-20 h-20 bg-blue-100 text-[#1A237E] rounded-full flex items-center justify-center mb-6 shadow-sm">
-        <Hammer className="w-10 h-10" />
-      </div>
-      <h2 className="text-2xl font-bold text-gray-800 mb-2">Módulo en Construcción</h2>
-      <p className="text-gray-500 max-w-md">
-        El módulo de <span className="font-semibold text-[#1A237E]">{modulo}</span> se encuentra actualmente en fase de desarrollo. Estará disponible próximamente.
-      </p>
-    </div>
-  );
-};
 
 const ProtectedRoute = ({ children, allowedRoles }) => {
   const { isAuthenticated, user, loading } = useAuth();
@@ -114,19 +96,19 @@ const AppRoutes = () => {
 
         {/* ADMIN & SUPER ADMIN */}
         <Route element={<ProtectedRoute allowedRoles={["admin", "super_admin"]}><AdminLayout /></ProtectedRoute>}>
+          
+          <Route path="/boletas" element={<Boletas />} />
           <Route path="/alumnos/listado" element={<ListadoAlumnos />} />
           <Route path="/alumnos/importar" element={<ImportarAlumnos />} />
           <Route path="/alumnos/cambiar-estatus" element={<CambiarEstatusAlumno />} />
-          <Route path="/docentes" element={<EnConstruccion modulo="Sincronización Docente" />} />
           <Route path="/horarios" element={<GruposYHorarios />} />
-          <Route path="/boletas" element={<Boletas />} />
-          <Route path="/reportes" element={<EnConstruccion modulo="Listas" />} />
+          <Route path="/reportes/asistencia" element={<ReporteAsistencia />} />
         </Route>
-
         {/* SUPER ADMIN */}
         <Route element={<ProtectedRoute allowedRoles={["super_admin"]}><AdminLayout /></ProtectedRoute>}>
           <Route path="/administradores/listado" element={<ListadoAdministradores />} />
-          <Route path="/admin/audit-logs" element={<AuditLogs />} /> 
+          <Route path="/admin/audit-logs" element={<AuditLogs />} />
+          <Route path="/admin/sincronizacion-sigad" element={<SincronizacionSigad />} />
         </Route>
         
         {/* DOCENTE */}

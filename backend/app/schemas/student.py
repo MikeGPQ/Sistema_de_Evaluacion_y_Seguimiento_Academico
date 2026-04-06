@@ -63,3 +63,5 @@ class StudentCreate(BaseModel):
     period_id: Optional[int] = None
     address: AddressCreate
     usuario_id: Optional[str] = "Sistema"
+    estatus_titulacion: Optional[str] = None
+    folio_certificado: Optional[str] = None
