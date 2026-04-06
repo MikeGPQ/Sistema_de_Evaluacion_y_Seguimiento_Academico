@@ -166,10 +166,12 @@ const AdminLayout = () => {
               <Users className="w-[18px] h-[18px] shrink-0" />
               {!effectivelyCollapsed && <span>Alumnos</span>}
             </Link>
-            <Link to="/docentes" title="Sincronización Docente" className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-colors ${effectivelyCollapsed ? 'justify-center' : ''} ${isActive('/docentes') ? 'bg-[#1A237E] text-white font-semibold shadow-md' : 'text-slate-300 hover:bg-slate-800 hover:text-white'}`}>
-              <RefreshCcw className="w-[18px] h-[18px] shrink-0" />
-              {!effectivelyCollapsed && <span>Sincronización Docente</span>}
-            </Link>
+            {isSuperAdmin && (
+              <Link to="/admin/sincronizacion-sigad" title="Sincronización SIGAD" className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-colors ${effectivelyCollapsed ? 'justify-center' : ''} ${isActive('/admin/sincronizacion-sigad') ? 'bg-[#1A237E] text-white font-semibold shadow-md' : 'text-slate-300 hover:bg-slate-800 hover:text-white'}`}>
+                <RefreshCcw className="w-[18px] h-[18px] shrink-0" />
+                {!effectivelyCollapsed && <span>Sincronización SIGAD</span>}
+              </Link>
+            )}
             <Link to="/horarios" title="Grupos y Horarios" className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-colors ${effectivelyCollapsed ? 'justify-center' : ''} ${isActive('/horarios') ? 'bg-[#1A237E] text-white font-semibold shadow-md' : 'text-slate-300 hover:bg-slate-800 hover:text-white'}`}>
               <CalendarDays className="w-[18px] h-[18px] shrink-0" />
               {!effectivelyCollapsed && <span>Grupos y Horarios</span>}
