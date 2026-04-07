@@ -534,6 +534,12 @@ async def importar_alumnos(file: UploadFile = File(...), usuario_id: str = Form(
         if not school:
             errores_fila.append(f"Procedencia '{escuela_excel}' no registrada"); campos_error.append("Procedencia")
 
+        quarter_obj = db.query(QuarterCatalog).filter(QuarterCatalog.external_id == cuat_val).first() if cuat_val else None
+        grupo_sigad = db.query(SigadGroup).filter(
+            SigadGroup.career_id == career.id,
+            SigadGroup.quarter_id == quarter_obj.id
+        ).first() if (career and quarter_obj) else None
+
         if errores_fila:
             errores_validacion.append({
                 "fila": fila_excel, "matricula": matricula_str, "nombre": nombre,
@@ -558,7 +564,8 @@ async def importar_alumnos(file: UploadFile = File(...), usuario_id: str = Form(
                 career_id=career.id,
                 origin_school_id=school.id,
                 period_id=periodo_activo.id if periodo_activo else 1,
-                quarter_actual_id=cuat_val,
+                sigad_group_id=grupo_sigad.id if grupo_sigad else None,
+                quarter_actual_id=quarter_obj.id if quarter_obj else cuat_val,
                 status_id=status_map.get(estatus_excel, 1),
                 promedio_procedencia=promedio_val
             )

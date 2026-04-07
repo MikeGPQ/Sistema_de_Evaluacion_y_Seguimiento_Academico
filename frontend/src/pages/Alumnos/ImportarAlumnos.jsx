@@ -358,6 +358,7 @@ const ImportarAlumnos = () => {
                                       <th className="p-3">Promedio</th>
                                       <th className="p-3">CURP</th>
                                       <th className="p-3">Carrera</th>
+                                      <th className="p-3">Cuatrimestre</th>
                                       <th className="p-3">Correo Personal</th>
                                       <th className="p-3">Correo Inst.</th>
                                   </tr>
@@ -406,6 +407,9 @@ const ImportarAlumnos = () => {
                                                       {String(alumno["Carrera"] || alumno["Carrera:"] || '---')}
                                                   </td>
                                                   
+                                                  <td className={`p-3 text-center font-bold ${errorCampos.includes("Cuatrimestre") ? 'text-red-700 bg-red-100 rounded border border-red-200 cursor-help' : 'text-gray-700'}`} title={errorCampos.includes("Cuatrimestre") ? mensajeError : ""}>
+                                                      {String(alumno["Cuatrimestre"] ?? alumno["Cuatrimestre:"] ?? '---').replace('.0', '')}
+                                                  </td>
                                                   <td className={`p-3 italic ${errorCampos.includes("Correo Personal") ? 'text-red-700 bg-red-100 rounded border border-red-200 cursor-help' : 'text-gray-500'}`} title={errorCampos.includes("Correo Personal") ? mensajeError : ""}>
                                                       {String(alumno["Correo Personal"] || alumno["Correo Personal:"] || '---')}
                                                   </td>
@@ -417,7 +421,7 @@ const ImportarAlumnos = () => {
                                       })
                                   ) : (
                                       <tr>
-                                          <td colSpan="11" className="p-20 text-center text-gray-400">
+                                          <td colSpan="12" className="p-20 text-center text-gray-400">
                                               <Database className="w-12 h-12 mx-auto mb-3 opacity-20" />
                                               <p className="font-medium text-gray-500">Sin datos para mostrar</p>
                                               <p className="text-xs mt-1">Sube un archivo Excel para iniciar la validación.</p>
