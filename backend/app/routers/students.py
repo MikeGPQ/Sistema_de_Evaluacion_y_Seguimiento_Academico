@@ -731,6 +731,7 @@ def update_student(
 
     old_career = db.query(AcademicProgram).filter(AcademicProgram.id == perfil.career_id).first() if perfil else None
     old_school = db.query(OriginSchool).filter(OriginSchool.id == perfil.origin_school_id).first() if perfil else None
+    old_titulation = db.query(TitulationStatus).filter(TitulationStatus.id == perfil.estatus_titulacion_id).first() if perfil and perfil.estatus_titulacion_id else None
 
     old_state = {
         "Nombre completo": " ".join(filter(None, [student.nombre, student.apellido_paterno, student.apellido_materno])).strip(),
@@ -739,6 +740,7 @@ def update_student(
         "Correo institucional": student.email_institucional,
         "Programa académico": old_career.name if old_career else "Desconocido",
         "Escuela de procedencia": old_school.name if old_school else "Desconocida",
+        "Estatus de Titulación": old_titulation.description if old_titulation else "No asignado",
         "Dirección completa": ", ".join(filter(None, [
             f"{address.calle} {address.numero_domicilio}".strip(),
             address.colonia, address.codigo_postal, address.municipio, address.estado
@@ -764,14 +766,8 @@ def update_student(
         if 'folio_certificado' in data_dict:
             perfil.folio_certificado = data_dict['folio_certificado']
 
-        if 'estatus_titulacion' in data_dict:
-            if data_dict['estatus_titulacion']:
-                estatus_obj = db.query(TitulationStatus).filter(
-                    TitulationStatus.description == data_dict['estatus_titulacion']
-                ).first()
-                perfil.estatus_titulacion_id = estatus_obj.id if estatus_obj else perfil.estatus_titulacion_id
-            else:
-                perfil.estatus_titulacion_id = None
+        if 'titulation_status_id' in data_dict:
+            perfil.estatus_titulacion_id = data_dict['titulation_status_id']
 
     if address:
         addr_data = data_dict.get('address', {})
@@ -808,6 +804,7 @@ def update_student(
 
     new_career = db.query(AcademicProgram).filter(AcademicProgram.id == perfil.career_id).first() if perfil else None
     new_school = db.query(OriginSchool).filter(OriginSchool.id == perfil.origin_school_id).first() if perfil else None
+    new_titulation = db.query(TitulationStatus).filter(TitulationStatus.id == perfil.estatus_titulacion_id).first() if perfil and perfil.estatus_titulacion_id else None
 
     new_state = {
         "Nombre completo": " ".join(filter(None, [student.nombre, student.apellido_paterno, student.apellido_materno])).strip(),
@@ -816,6 +813,7 @@ def update_student(
         "Correo institucional": student.email_institucional,
         "Programa académico": new_career.name if new_career else "Desconocido",
         "Escuela de procedencia": new_school.name if new_school else "Desconocida",
+        "Estatus de Titulación": new_titulation.description if new_titulation else "No asignado",
         "Dirección completa": ", ".join(filter(None, [
             f"{address.calle} {address.numero_domicilio}".strip(),
             address.colonia, address.codigo_postal, address.municipio, address.estado
