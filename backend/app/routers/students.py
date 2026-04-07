@@ -671,7 +671,7 @@ def get_student_detail(matricula: str, db: Session = Depends(get_db)):
             "email_personal": student.email_personal,
             "email_institucional": student.email_institucional,
             "nivel_id": perfil.nivel_id if perfil else None,
-            "titulation_status_id": getattr(perfil, 'titulation_status_id', None) if perfil else None,
+            "titulation_status_id": perfil.estatus_titulacion_id if perfil else None,
             "career_id": perfil.career_id if perfil else None,
             "carrera_nombre": perfil.career.name if perfil and getattr(perfil, 'career', None) else "Sin Carrera",
             "origin_school_id": perfil.origin_school_id if perfil else None,

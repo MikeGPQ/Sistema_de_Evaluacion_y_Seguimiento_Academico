@@ -40,7 +40,8 @@ const MiHorario = () => {
           nombre: resPerfil.data.alumno_nombre,
           matricula: resPerfil.data.alumno_matricula,
           carrera: resPerfil.data.carrera,
-          cuatrimestre: resPerfil.data.alumno_cuatrimestre
+          cuatrimestre: resPerfil.data.alumno_cuatrimestre,
+          es_maestria: resPerfil.data.es_maestria
         });
         const resHorario = await client.get(`/asignacion/${matriculaActiva}/horario`);
         setClasesAsignadas(resHorario.data);
@@ -172,7 +173,7 @@ const MiHorario = () => {
 
             <div className="flex bg-gray-200 p-1 rounded-lg shadow-inner w-full md:w-auto overflow-x-auto">
 
-              {alumnoInfo && alumnoInfo.cuatrimestre >= 2 && (
+              {alumnoInfo && alumnoInfo.cuatrimestre >= 2 && !alumnoInfo.es_maestria && (
                 <button
                   onClick={() => navigate('/alumno/carga-academica')}
                   className="flex items-center px-4 py-2 rounded-md text-sm font-bold transition-all text-gray-500 hover:text-gray-700 whitespace-nowrap"
