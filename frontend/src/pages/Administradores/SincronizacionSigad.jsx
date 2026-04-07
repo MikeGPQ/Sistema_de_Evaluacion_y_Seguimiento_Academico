@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
-import { RefreshCcw, CheckCircle, AlertCircle, ChevronDown, ChevronUp, Database, UserPlus, Mail, MailX, ArrowRight, XCircle } from 'lucide-react';
+import { RefreshCcw, AlertCircle, ChevronDown, ChevronUp, Database, UserPlus, Mail, MailX, ArrowRight } from 'lucide-react';
 import client from '../../lib/axios';
+import DetalleEntidadModal from './DetalleEntidadModal';
 
-const LABEL_MAP = {
+export const LABEL_MAP = {
   classrooms: 'Aulas',
   academic_periods: 'Periodos Académicos',
   academic_programs: 'Programas Académicos',
@@ -15,30 +16,73 @@ const LABEL_MAP = {
   assignment_schedules: 'Horarios de Clase',
 };
 
-const FIELD_MAP = {
-  nombre_codigo: 'Nombre / Código',
-  capacidad: 'Capacidad',
-  tipo: 'Tipo',
-  codigo: 'Código del Periodo',
-  anio: 'Año',
-  fecha_inicio: 'Fecha de Inicio',
-  fecha_fin: 'Fecha de Fin',
-  fecha_limite_calif: 'Límite de Calificaciones',
-  codigo_unico: 'Código Único',
-  name: 'Nombre',
-  modalidad: 'Modalidad',
-  nivel_academico: 'Nivel Académico',
-  nombre: 'Nombre',
-  identificador: 'Identificador',
-  creditos: 'Créditos',
-  cupo_maximo: 'Cupo Máximo',
-  tipo_asignatura: 'Tipo de Asignatura',
-  subject_id: 'Materia (ID)',
-  teacher_id: 'Docente (ID)',
-  sigad_group_id: 'Grupo SIGAD (ID)',
-  aula_id: 'Aula (ID)',
-  period_id: 'Periodo (ID)',
-  sesiones: 'Sesiones de Clase'
+export const COLUMNS_MAP = {
+  academic_periods: [
+    { key: 'external_id', label: 'ID SIGAD' },
+    { key: 'codigo', label: 'Código' },
+    { key: 'anio', label: 'Año' },
+    { key: 'fecha_inicio', label: 'Fecha inicio' },
+    { key: 'fecha_fin', label: 'Fecha fin' },
+    { key: 'is_active', label: 'Activo' },
+  ],
+  academic_programs: [
+    { key: 'external_id', label: 'ID SIGAD' },
+    { key: 'codigo_unico', label: 'Código' },
+    { key: 'name', label: 'Nombre' },
+    { key: 'modalidad', label: 'Modalidad' },
+    { key: 'nivel_academico', label: 'Nivel académico' },
+  ],
+  quarter_catalog: [
+    { key: 'external_id', label: 'ID SIGAD' },
+    { key: 'nombre', label: 'Nombre' },
+  ],
+  classrooms: [
+    { key: 'external_id', label: 'ID SIGAD' },
+    { key: 'nombre_codigo', label: 'Código' },
+    { key: 'capacidad', label: 'Capacidad' },
+    { key: 'tipo', label: 'Tipo' },
+  ],
+  teachers: [
+    { key: 'matricula_empleado', label: 'Matrícula' },
+    { key: 'nombre_completo', label: 'Nombre completo' },
+    { key: 'email_institucional', label: 'Email institucional' },
+    { key: 'nivel_academico', label: 'Nivel académico' },
+  ],
+  users_created: [
+    { key: 'identifier', label: 'Identifier' },
+    { key: 'email', label: 'Email' },
+    { key: 'correo_enviado', label: 'Correo enviado' },
+  ],
+  subjects: [
+    { key: 'external_id', label: 'ID SIGAD' },
+    { key: 'codigo_unico', label: 'Código' },
+    { key: 'nombre', label: 'Nombre' },
+    { key: 'tipo_asignatura', label: 'Tipo' },
+    { key: 'cuatrimestre_nombre', label: 'Cuatrimestre', fk: true, fkKey: 'quarter_id' },
+    { key: 'programa_codigo', label: 'Programa', fk: true, fkKey: 'career_id' },
+  ],
+  sigad_groups: [
+    { key: 'external_id', label: 'ID SIGAD' },
+    { key: 'identificador', label: 'Identificador' },
+    { key: 'nivel_academico', label: 'Nivel' },
+    { key: 'programa_codigo', label: 'Programa', fk: true, fkKey: 'career_id' },
+    { key: 'cuatrimestre_nombre', label: 'Cuatrimestre', fk: true, fkKey: 'quarter_id' },
+  ],
+  academic_groups: [
+    { key: 'external_id', label: 'ID SIGAD' },
+    { key: 'materia_nombre', label: 'Materia', fk: true, fkKey: 'subject_id' },
+    { key: 'docente_nombre', label: 'Docente', fk: true, fkKey: 'teacher_id' },
+    { key: 'grupo_identificador', label: 'Grupo SIGAD', fk: true, fkKey: 'sigad_group_id' },
+    { key: 'aula_codigo', label: 'Aula', fk: true, fkKey: 'aula_id' },
+    { key: 'periodo_codigo', label: 'Periodo', fk: true, fkKey: 'period_id' },
+  ],
+  assignment_schedules: [
+    { key: 'academic_group_id', label: 'ID grupo' },
+    { key: 'dia_semana', label: 'Día' },
+    { key: 'hora_inicio', label: 'Hora inicio' },
+    { key: 'hora_fin', label: 'Hora fin' },
+    { key: 'materia_nombre', label: 'Materia' },
+  ],
 };
 
 const SincronizacionSigad = () => {
@@ -46,6 +90,8 @@ const SincronizacionSigad = () => {
   const [resultado, setResultado] = useState(null);
   const [error, setError] = useState(null);
   const [expandedErrors, setExpandedErrors] = useState({});
+  const [modalEntity, setModalEntity] = useState(null);
+  const [modalFilter, setModalFilter] = useState('all');
 
   const toggleErrors = (key) => {
     setExpandedErrors(prev => ({ ...prev, [key]: !prev[key] }));
@@ -69,37 +115,19 @@ const SincronizacionSigad = () => {
     }
   };
 
+  const openModal = (key) => {
+    setModalFilter('all');
+    setModalEntity(key);
+  };
+
+  const closeModal = () => {
+    setModalEntity(null);
+  };
+
   const totalInserted = resultado ? Object.values(resultado).reduce((s, v) => s + (v.inserted || 0), 0) : 0;
   const totalUpdated = resultado ? Object.values(resultado).reduce((s, v) => s + (v.updated || 0), 0) : 0;
   const totalErrors = resultado ? Object.values(resultado).reduce((s, v) => s + (v.errors || 0), 0) : 0;
   const nuevosDocentes = resultado?.users_created?.nuevos_docentes ?? [];
-
-  // Procesamiento de listas para las tablas comparativas de resultados 
-  const insertedList = [];
-  const updatedList = [];
-
-  if (resultado) {
-    Object.entries(resultado).forEach(([key, val]) => {
-      if (val.inserted_details) {
-        val.inserted_details.forEach(d => {
-          insertedList.push({ entity: LABEL_MAP[key] || key, record: d.registro });
-        });
-      }
-      if (val.updated_details) {
-        val.updated_details.forEach(d => {
-          d.cambios.forEach(c => {
-            updatedList.push({
-              entity: LABEL_MAP[key] || key,
-              record: d.registro,
-              field: c.campo,
-              old: c.anterior,
-              new: c.nuevo
-            });
-          });
-        });
-      }
-    });
-  }
 
   return (
     <div className="p-6 md:p-10 max-w-5xl mx-auto">
@@ -157,35 +185,18 @@ const SincronizacionSigad = () => {
 
       {resultado && (
         <div className="space-y-5">
-          <div className={`rounded-xl border p-5 flex flex-wrap items-center gap-6 ${
-            totalErrors > 0 ? 'bg-amber-50 border-amber-200' : 'bg-green-50 border-green-200'
-          }`}>
-            {totalErrors > 0 ? (
-              <AlertCircle className="w-6 h-6 text-amber-500 shrink-0" />
-            ) : (
-              <CheckCircle className="w-6 h-6 text-green-500 shrink-0" />
-            )}
-            <div>
-              <p className="font-semibold text-gray-800 text-sm">
-                Sincronización completada {totalErrors > 0 ? 'con advertencias' : 'exitosamente'}
-              </p>
-              <p className="text-sm text-gray-500 mt-0.5">Resumen de cambios aplicados en la base de datos</p>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <div className="bg-green-50 border border-green-200 rounded-xl p-5 text-center">
+              <p className="text-3xl font-bold text-green-600">{totalInserted}</p>
+              <p className="text-sm text-green-700 mt-1 font-medium">Nuevos registros</p>
             </div>
-            <div className="flex gap-4 ml-auto flex-wrap">
-              <div className="text-center">
-                <p className="text-2xl font-bold text-green-600">{totalInserted}</p>
-                <p className="text-xs text-gray-500">Nuevos</p>
-              </div>
-              <div className="text-center">
-                <p className="text-2xl font-bold text-blue-600">{totalUpdated}</p>
-                <p className="text-xs text-gray-500">Actualizados</p>
-              </div>
-              {totalErrors > 0 && (
-                <div className="text-center">
-                  <p className="text-2xl font-bold text-red-500">{totalErrors}</p>
-                  <p className="text-xs text-gray-500">Errores</p>
-                </div>
-              )}
+            <div className="bg-amber-50 border border-amber-200 rounded-xl p-5 text-center">
+              <p className="text-3xl font-bold text-amber-600">{totalUpdated}</p>
+              <p className="text-sm text-amber-700 mt-1 font-medium">Actualizados</p>
+            </div>
+            <div className={`rounded-xl p-5 text-center border ${totalErrors > 0 ? 'bg-red-50 border-red-200' : 'bg-gray-50 border-gray-200'}`}>
+              <p className={`text-3xl font-bold ${totalErrors > 0 ? 'text-red-500' : 'text-gray-400'}`}>{totalErrors}</p>
+              <p className={`text-sm mt-1 font-medium ${totalErrors > 0 ? 'text-red-700' : 'text-gray-500'}`}>Errores</p>
             </div>
           </div>
 
@@ -195,185 +206,95 @@ const SincronizacionSigad = () => {
                 <tr className="bg-gray-50 border-b border-gray-200">
                   <th className="text-left px-5 py-3 font-semibold text-gray-600">Entidad</th>
                   <th className="text-center px-4 py-3 font-semibold text-green-700">Nuevos</th>
-                  <th className="text-center px-4 py-3 font-semibold text-blue-700">Actualizados</th>
+                  <th className="text-center px-4 py-3 font-semibold text-amber-700">Actualizados</th>
+                  <th className="text-center px-4 py-3 font-semibold text-gray-500">Sin cambios</th>
                   <th className="text-center px-4 py-3 font-semibold text-red-600">Errores</th>
                   <th className="text-center px-4 py-3 font-semibold text-gray-600">Detalle</th>
                 </tr>
               </thead>
               <tbody>
-                {Object.entries(resultado).map(([key, val]) => (
-                  <React.Fragment key={key}>
-                    <tr className="border-b border-gray-100 hover:bg-gray-50 transition-colors">
-                      <td className="px-5 py-3 font-medium text-gray-700">
-                        {LABEL_MAP[key] || key}
-                      </td>
-                      <td className="px-4 py-3 text-center">
-                        <span className={`inline-flex items-center justify-center min-w-[28px] px-2 py-0.5 rounded-full text-xs font-semibold ${
-                          (val.inserted || 0) > 0 ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-400'
-                        }`}>
-                          {val.inserted ?? 0}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3 text-center">
-                        <span className={`inline-flex items-center justify-center min-w-[28px] px-2 py-0.5 rounded-full text-xs font-semibold ${
-                          (val.updated || 0) > 0 ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-400'
-                        }`}>
-                          {val.updated ?? 0}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3 text-center">
-                        <span className={`inline-flex items-center justify-center min-w-[28px] px-2 py-0.5 rounded-full text-xs font-semibold ${
-                          val.errors > 0 ? 'bg-red-100 text-red-700' : 'bg-gray-100 text-gray-400'
-                        }`}>
-                          {val.errors}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3 text-center">
-                        {val.error_details && val.error_details.length > 0 && (
+                {Object.entries(resultado).map(([key, val]) => {
+                  const hasDetails = (val.inserted || 0) > 0 || (val.updated || 0) > 0;
+                  return (
+                    <React.Fragment key={key}>
+                      <tr className="border-b border-gray-100 hover:bg-gray-50 transition-colors">
+                        <td className="px-5 py-3 font-medium text-gray-700">
+                          {LABEL_MAP[key] || key}
+                        </td>
+                        <td className="px-4 py-3 text-center">
+                          {(val.inserted || 0) > 0 ? (
+                            <span className="inline-flex items-center justify-center min-w-[28px] px-2 py-0.5 rounded-full text-xs font-semibold bg-green-100 text-green-700">
+                              {val.inserted}
+                            </span>
+                          ) : (
+                            <span className="text-gray-300">—</span>
+                          )}
+                        </td>
+                        <td className="px-4 py-3 text-center">
+                          {(val.updated || 0) > 0 ? (
+                            <span className="inline-flex items-center justify-center min-w-[28px] px-2 py-0.5 rounded-full text-xs font-semibold bg-amber-100 text-amber-700">
+                              {val.updated}
+                            </span>
+                          ) : (
+                            <span className="text-gray-300">—</span>
+                          )}
+                        </td>
+                        <td className="px-4 py-3 text-center">
+                          {(val.unchanged || 0) > 0 ? (
+                            <span className="inline-flex items-center justify-center min-w-[28px] px-2 py-0.5 rounded-full text-xs font-semibold bg-gray-100 text-gray-500">
+                              {val.unchanged}
+                            </span>
+                          ) : (
+                            <span className="text-gray-300">—</span>
+                          )}
+                        </td>
+                        <td className="px-4 py-3 text-center">
+                          {(val.errors || 0) > 0 ? (
+                            <button
+                              onClick={() => toggleErrors(key)}
+                              className="inline-flex items-center justify-center min-w-[28px] px-2 py-0.5 rounded-full text-xs font-semibold bg-red-100 text-red-700 hover:bg-red-200 transition-colors cursor-pointer gap-1"
+                            >
+                              {val.errors}
+                              {expandedErrors[key] ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+                            </button>
+                          ) : (
+                            <span className="text-gray-300">—</span>
+                          )}
+                        </td>
+                        <td className="px-4 py-3 text-center">
                           <button
-                            onClick={() => toggleErrors(key)}
-                            className="text-indigo-600 hover:text-indigo-800 transition-colors inline-flex items-center gap-1 text-xs font-medium"
+                            onClick={() => openModal(key)}
+                            disabled={!hasDetails}
+                            className={`text-xs font-medium inline-flex items-center gap-1 transition-colors ${
+                              hasDetails
+                                ? 'text-indigo-600 hover:text-indigo-800 cursor-pointer'
+                                : 'text-gray-300 cursor-not-allowed'
+                            }`}
                           >
-                            {expandedErrors[key] ? (
-                              <><ChevronUp className="w-3.5 h-3.5" /> Ocultar</>
-                            ) : (
-                              <><ChevronDown className="w-3.5 h-3.5" /> Ver ({val.error_details.length})</>
-                            )}
+                            Ver detalle <ArrowRight className="w-3 h-3" />
                           </button>
-                        )}
-                      </td>
-                    </tr>
-                    {expandedErrors[key] && val.error_details && val.error_details.length > 0 && (
-                      <tr>
-                        <td colSpan={5} className="px-5 py-3 bg-red-50">
-                          <ul className="space-y-1">
-                            {val.error_details.map((detail, i) => (
-                              <li key={i} className="text-xs text-red-700 flex items-start gap-2">
-                                <span className="text-red-400 mt-0.5 shrink-0">&#8226;</span>
-                                {detail}
-                              </li>
-                            ))}
-                          </ul>
                         </td>
                       </tr>
-                    )}
-                  </React.Fragment>
-                ))}
+                      {expandedErrors[key] && val.error_details && val.error_details.length > 0 && (
+                        <tr>
+                          <td colSpan={6} className="px-5 py-3 bg-red-50">
+                            <ul className="space-y-1">
+                              {val.error_details.map((detail, i) => (
+                                <li key={i} className="text-xs text-red-700 flex items-start gap-2">
+                                  <span className="text-red-400 mt-0.5 shrink-0">&#8226;</span>
+                                  {detail}
+                                </li>
+                              ))}
+                            </ul>
+                          </td>
+                        </tr>
+                      )}
+                    </React.Fragment>
+                  );
+                })}
               </tbody>
             </table>
           </div>
-
-          {/* Tablas Comparativas de Resultados implementadas */}
-          {(insertedList.length > 0 || updatedList.length > 0) && (
-            <div className="mt-8 space-y-6">
-              <h2 className="text-xl font-bold text-gray-800">Detalle de Alteraciones en Base de Datos</h2>
-
-              {/* Tabla Visual de Registros Nuevos (Ahora como comparativa actual al del otro sistema ) */}
-              {insertedList.length > 0 && (
-                <div className="bg-white rounded-xl shadow-sm border border-green-200 overflow-hidden">
-                  <div className="bg-green-50 px-5 py-4 border-b border-green-100 flex items-center gap-3">
-                    <div className="bg-green-100 p-2 rounded-lg">
-                      <CheckCircle className="w-5 h-5 text-green-600" />
-                    </div>
-                    <div>
-                      <h3 className="font-bold text-green-900 text-base">Nuevos Registros (Cruces con SIGAD)</h3>
-                      <p className="text-xs text-green-700">Se detectaron {insertedList.length} elementos en SIGAD que no existían en tu base de datos local.</p>
-                    </div>
-                  </div>
-                  <div className="max-h-[500px] overflow-y-auto p-4">
-                    <div className="grid grid-cols-1 gap-3">
-                      {insertedList.map((item, idx) => (
-                        <div key={idx} className="bg-gray-50 border border-gray-200 rounded-lg p-4 flex flex-col md:flex-row md:items-center justify-between gap-4 hover:border-green-300 transition-colors">
-                          
-                          {/* Información de la Entidad */}
-                          <div className="flex-1">
-                            <span className="inline-block px-2.5 py-1 bg-green-100 text-green-800 text-[10px] font-bold uppercase tracking-wider rounded-md mb-1.5">
-                              Nuevo Registro en {item.entity}
-                            </span>
-                            <p className="text-xs text-gray-500 mt-0.5">El sistema ha importado exitosamente la siguiente información.</p>
-                          </div>
-
-                          {/* Comparativa Visual de Inserción */}
-                          <div className="flex items-center gap-3 md:w-[60%] justify-end bg-white p-3 rounded-md border border-gray-100 shadow-sm">
-                            <div className="flex-1 text-right">
-                              <p className="text-[10px] text-gray-400 font-bold uppercase mb-1">Antes (Local)</p>
-                              <span className="inline-flex items-center gap-1 text-xs font-medium text-gray-400 bg-gray-100 px-2 py-0.5 rounded-full">
-                                <XCircle className="w-3 h-3" /> No Registrado
-                              </span>
-                            </div>
-                            
-                            <div className="bg-green-50 p-1.5 rounded-full shrink-0">
-                              <ArrowRight className="w-4 h-4 text-green-500" />
-                            </div>
-                            
-                            <div className="flex-1 text-left">
-                              <p className="text-[10px] text-gray-400 font-bold uppercase mb-1">Ahora (SIGAD)</p>
-                              <p className="text-sm font-bold text-green-700 bg-green-50/50 truncate max-w-[200px] inline-block" title={item.record}>
-                                {item.record}
-                              </p>
-                            </div>
-                          </div>
-
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {/* Tabla Visual de Registros Modificados */}
-              {updatedList.length > 0 && (
-                <div className="bg-white rounded-xl shadow-sm border border-blue-200 overflow-hidden">
-                  <div className="bg-blue-50 px-5 py-4 border-b border-blue-100 flex items-center gap-3">
-                    <div className="bg-blue-100 p-2 rounded-lg">
-                      <RefreshCcw className="w-5 h-5 text-blue-600" />
-                    </div>
-                    <div>
-                      <h3 className="font-bold text-blue-900 text-base">Registros Existentes Actualizados</h3>
-                      <p className="text-xs text-blue-700">Se detectaron {updatedList.length} cambios entre tu base de datos y SIGAD.</p>
-                    </div>
-                  </div>
-                  <div className="max-h-[500px] overflow-y-auto p-4">
-                    <div className="grid grid-cols-1 gap-3">
-                      {updatedList.map((item, idx) => (
-                        <div key={idx} className="bg-gray-50 border border-gray-200 rounded-lg p-4 flex flex-col md:flex-row md:items-center justify-between gap-4 hover:border-blue-300 transition-colors">
-                          
-                          {/* Información del Registro */}
-                          <div className="flex-1">
-                            <span className="inline-block px-2.5 py-1 bg-gray-200 text-gray-700 text-[10px] font-bold uppercase tracking-wider rounded-md mb-1.5">
-                              {item.entity}
-                            </span>
-                            <p className="font-bold text-gray-900 text-sm">{item.record}</p>
-                            <p className="text-xs text-gray-500 mt-0.5">
-                              Atributo modificado: <span className="font-semibold text-gray-700">{FIELD_MAP[item.field] || item.field}</span>
-                            </p>
-                          </div>
-
-                          {/* Comparativa Visual con Flecha */}
-                          <div className="flex items-center gap-3 md:w-[60%] justify-end bg-white p-3 rounded-md border border-gray-100 shadow-sm">
-                            <div className="flex-1 text-right">
-                              <p className="text-[10px] text-gray-400 font-bold uppercase mb-1">Antes (Local)</p>
-                              <p className="text-sm font-medium text-red-600 line-through truncate max-w-[200px] inline-block" title={item.old}>{item.old}</p>
-                            </div>
-                            
-                            <div className="bg-blue-50 p-1.5 rounded-full shrink-0">
-                              <ArrowRight className="w-4 h-4 text-blue-500" />
-                            </div>
-                            
-                            <div className="flex-1 text-left">
-                              <p className="text-[10px] text-gray-400 font-bold uppercase mb-1">Ahora (SIGAD)</p>
-                              <p className="text-sm font-bold text-green-600 truncate max-w-[200px] inline-block" title={item.new}>{item.new}</p>
-                            </div>
-                          </div>
-
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
 
           {nuevosDocentes.length > 0 && (
             <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
@@ -416,6 +337,18 @@ const SincronizacionSigad = () => {
             </div>
           )}
         </div>
+      )}
+
+      {modalEntity && resultado?.[modalEntity] && (
+        <DetalleEntidadModal
+          entityKey={modalEntity}
+          entityLabel={LABEL_MAP[modalEntity] || modalEntity}
+          data={resultado[modalEntity]}
+          columns={COLUMNS_MAP[modalEntity] || []}
+          onClose={closeModal}
+          filter={modalFilter}
+          setFilter={setModalFilter}
+        />
       )}
     </div>
   );

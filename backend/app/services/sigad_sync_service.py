@@ -31,12 +31,10 @@ SIGAD_TIMEOUT = 30
 
 
 def _new_result():
-    # se agregaron listas de details para poblar las tablas comparativas de la interfaz
-    return {"inserted": 0, "updated": 0, "errors": 0, "error_details": [], "inserted_details": [], "updated_details": []}
+    return {"inserted": 0, "updated": 0, "unchanged": 0, "errors": 0, "error_details": [], "inserted_details": [], "updated_details": []}
 
 
 def _time_to_str(value) -> str | None:
-    """Normaliza un valor de tiempo (timedelta, time o string) a 'HH:MM:SS' para comparar."""
     if value is None:
         return None
     if isinstance(value, timedelta):
@@ -46,7 +44,6 @@ def _time_to_str(value) -> str | None:
         return f"{h:02}:{m:02}:{s:02}"
     if isinstance(value, dt_time):
         return value.strftime("%H:%M:%S")
-    # String: puede venir como "8:00", "08:00", "8:00:00", "08:00:00", "08:00:00.000"
     parts = str(value).strip().split(":")
     h = int(parts[0]) if len(parts) > 0 else 0
     m = int(parts[1]) if len(parts) > 1 else 0
@@ -63,7 +60,6 @@ def _parse_date(value) -> date | None:
 
 
 def _apply_changes(obj, **fields) -> tuple[bool, list]:
-    """Asigna los campos al objeto solo si cambiaron. Retorna un booleano y la lista de cambios (viejo vs nuevo) para la tabla comparativa."""
     changed = False
     changes = []
     for attr, value in fields.items():
@@ -116,7 +112,12 @@ def _sync_classrooms(db: Session) -> dict:
                 )
                 if changed:
                     result["updated"] += 1
-                    result["updated_details"].append({"registro": item["nombre_codigo"], "cambios": changes})
+                    result["updated_details"].append({
+                        "record": {"external_id": ext_id, "nombre_codigo": existing.nombre_codigo, "capacidad": existing.capacidad, "tipo": existing.tipo},
+                        "cambios": changes,
+                    })
+                else:
+                    result["unchanged"] += 1
             else:
                 db.add(Classroom(
                     external_id=ext_id,
@@ -125,7 +126,7 @@ def _sync_classrooms(db: Session) -> dict:
                     tipo=item["tipo"],
                 ))
                 result["inserted"] += 1
-                result["inserted_details"].append({"registro": item["nombre_codigo"]})
+                result["inserted_details"].append({"external_id": ext_id, "nombre_codigo": item["nombre_codigo"], "capacidad": item["capacidad"], "tipo": item["tipo"]})
         except Exception as e:
             result["errors"] += 1
             result["error_details"].append(f"Error al procesar aula id_aula={item.get('id_aula')}: {e}")
@@ -158,7 +159,7 @@ def _sync_periods(db: Session) -> dict:
         ext_id = item["id_periodo"]
         existing = db.query(AcademicPeriod).filter(AcademicPeriod.external_id == ext_id).first()
         if existing:
-            existing.is_active = True  # siempre se reactiva, no cuenta como cambio de datos
+            existing.is_active = True
             changed, changes = _apply_changes(existing,
                 codigo=item["codigo"],
                 anio=item.get("anio"),
@@ -168,7 +169,17 @@ def _sync_periods(db: Session) -> dict:
             )
             if changed:
                 result["updated"] += 1
-                result["updated_details"].append({"registro": item["codigo"], "cambios": changes})
+                result["updated_details"].append({
+                    "record": {
+                        "external_id": ext_id, "codigo": existing.codigo, "anio": existing.anio,
+                        "fecha_inicio": str(existing.fecha_inicio) if existing.fecha_inicio else None,
+                        "fecha_fin": str(existing.fecha_fin) if existing.fecha_fin else None,
+                        "is_active": existing.is_active,
+                    },
+                    "cambios": changes,
+                })
+            else:
+                result["unchanged"] += 1
         else:
             db.add(AcademicPeriod(
                 external_id=ext_id,
@@ -180,7 +191,12 @@ def _sync_periods(db: Session) -> dict:
                 is_active=True,
             ))
             result["inserted"] += 1
-            result["inserted_details"].append({"registro": item["codigo"]})
+            result["inserted_details"].append({
+                "external_id": ext_id, "codigo": item["codigo"], "anio": item.get("anio"),
+                "fecha_inicio": str(item["fecha_inicio"]) if item.get("fecha_inicio") else None,
+                "fecha_fin": str(item["fecha_fin"]) if item.get("fecha_fin") else None,
+                "is_active": True,
+            })
         db.flush()
     except Exception as e:
         result["errors"] += 1
@@ -213,7 +229,12 @@ def _sync_programs(db: Session) -> dict:
                 )
                 if changed:
                     result["updated"] += 1
-                    result["updated_details"].append({"registro": item["nombre_programa"], "cambios": changes})
+                    result["updated_details"].append({
+                        "record": {"external_id": ext_id, "codigo_unico": existing.codigo_unico, "name": existing.name, "modalidad": existing.modalidad, "nivel_academico": existing.nivel_academico},
+                        "cambios": changes,
+                    })
+                else:
+                    result["unchanged"] += 1
             else:
                 db.add(AcademicProgram(
                     external_id=ext_id,
@@ -223,7 +244,7 @@ def _sync_programs(db: Session) -> dict:
                     nivel_academico=item.get("nivel_academico"),
                 ))
                 result["inserted"] += 1
-                result["inserted_details"].append({"registro": item["nombre_programa"]})
+                result["inserted_details"].append({"external_id": ext_id, "codigo_unico": item.get("codigo_unico"), "name": item["nombre_programa"], "modalidad": item.get("modalidad"), "nivel_academico": item.get("nivel_academico")})
         except Exception as e:
             result["errors"] += 1
             result["error_details"].append(f"Error al procesar programa id={item.get('id_programa_academico')}: {e}")
@@ -251,14 +272,19 @@ def _sync_quarters(db: Session) -> dict:
                 changed, changes = _apply_changes(existing, nombre=item["nombre"])
                 if changed:
                     result["updated"] += 1
-                    result["updated_details"].append({"registro": item["nombre"], "cambios": changes})
+                    result["updated_details"].append({
+                        "record": {"external_id": ext_id, "nombre": existing.nombre},
+                        "cambios": changes,
+                    })
+                else:
+                    result["unchanged"] += 1
             else:
                 db.add(QuarterCatalog(
                     external_id=ext_id,
                     nombre=item["nombre"],
                 ))
                 result["inserted"] += 1
-                result["inserted_details"].append({"registro": item["nombre"]})
+                result["inserted_details"].append({"external_id": ext_id, "nombre": item["nombre"]})
         except Exception as e:
             result["errors"] += 1
             result["error_details"].append(f"Error al procesar cuatrimestre id={item.get('id_cuatrimestre')}: {e}")
@@ -375,8 +401,18 @@ def _sync_teachers(db: Session) -> tuple[dict, dict]:
                 changed, changes = _apply_changes(existing, **fields)
                 if changed:
                     t_result["updated"] += 1
-                    t_result["updated_details"].append({"registro": matricula_emp, "cambios": changes})
+                    nombre_completo = " ".join(filter(None, [existing.nombre, existing.apellido_paterno, existing.apellido_materno])).strip() or matricula_emp
+                    t_result["updated_details"].append({
+                        "record": {
+                            "matricula_empleado": matricula_emp, "nombre_completo": nombre_completo,
+                            "email_institucional": existing.email_institucional, "nivel_academico": existing.nivel_academico,
+                        },
+                        "cambios": changes,
+                    })
+                else:
+                    t_result["unchanged"] += 1
             else:
+                nombre_completo_new = " ".join(filter(None, [nombre or matricula_emp, apellido_paterno or "", apellido_materno or ""])).strip()
                 db.add(Teacher(
                     matricula_empleado=matricula_emp,
                     sigad_docente_id=item.get("id_docente"),
@@ -390,7 +426,10 @@ def _sync_teachers(db: Session) -> tuple[dict, dict]:
                     is_active=True,
                 ))
                 t_result["inserted"] += 1
-                t_result["inserted_details"].append({"registro": matricula_emp})
+                t_result["inserted_details"].append({
+                    "matricula_empleado": matricula_emp, "nombre_completo": nombre_completo_new,
+                    "email_institucional": email_institucional, "nivel_academico": item.get("nivel_academico"),
+                })
 
             existing_user = db.query(User).filter(User.identifier == matricula_emp).first()
             if not existing_user:
@@ -423,17 +462,20 @@ def _sync_teachers(db: Session) -> tuple[dict, dict]:
                 ))
                 db.flush()
                 u_result["inserted"] += 1
-                u_result["inserted_details"].append({"registro": email_para_cuenta})
 
                 nombre_display = nombre or matricula_emp
                 err = _send_teacher_welcome_email(nombre_display, matricula_emp, raw_pass, email_para_cuenta)
 
                 nombre_completo = " ".join(filter(None, [nombre, apellido_paterno, apellido_materno])).strip() or matricula_emp
+                correo_ok = err is None
                 u_result["nuevos_docentes"].append({
                     "matricula": matricula_emp,
                     "nombre": nombre_completo,
                     "email": email_para_cuenta,
-                    "correo_enviado": err is None,
+                    "correo_enviado": correo_ok,
+                })
+                u_result["inserted_details"].append({
+                    "identifier": matricula_emp, "email": email_para_cuenta, "correo_enviado": correo_ok,
                 })
 
                 if err:
@@ -479,6 +521,15 @@ def _sync_subjects(db: Session) -> dict:
             if id_prog:
                 career_id = _resolve_fk(db, AcademicProgram, id_prog)
 
+            periodo_obj = db.query(AcademicPeriod).filter(AcademicPeriod.id == period_id).first() if period_id else None
+            cuatrimestre_obj = db.query(QuarterCatalog).filter(QuarterCatalog.id == quarter_id).first() if quarter_id else None
+            programa_obj = db.query(AcademicProgram).filter(AcademicProgram.id == career_id).first() if career_id else None
+            fk_display = {
+                "periodo_codigo": periodo_obj.codigo if periodo_obj else None,
+                "cuatrimestre_nombre": cuatrimestre_obj.nombre if cuatrimestre_obj else None,
+                "programa_codigo": programa_obj.codigo_unico if programa_obj else None,
+            }
+
             existing = db.query(Subject).filter(Subject.external_id == ext_id).first()
             if existing:
                 changed, changes = _apply_changes(existing,
@@ -494,7 +545,16 @@ def _sync_subjects(db: Session) -> dict:
                 )
                 if changed:
                     result["updated"] += 1
-                    result["updated_details"].append({"registro": item["nombre"], "cambios": changes})
+                    result["updated_details"].append({
+                        "record": {
+                            "external_id": ext_id, "codigo_unico": existing.codigo_unico, "nombre": existing.nombre,
+                            "tipo_asignatura": existing.tipo_asignatura, "quarter_id": existing.quarter_id, "career_id": existing.career_id,
+                            **fk_display,
+                        },
+                        "cambios": changes,
+                    })
+                else:
+                    result["unchanged"] += 1
             else:
                 db.add(Subject(
                     external_id=ext_id,
@@ -509,7 +569,11 @@ def _sync_subjects(db: Session) -> dict:
                     career_id=career_id,
                 ))
                 result["inserted"] += 1
-                result["inserted_details"].append({"registro": item["nombre"]})
+                result["inserted_details"].append({
+                    "external_id": ext_id, "codigo_unico": item.get("codigo_unico"), "nombre": item["nombre"],
+                    "tipo_asignatura": item.get("tipo_asignatura"), "quarter_id": quarter_id, "career_id": career_id,
+                    **fk_display,
+                })
         except Exception as e:
             result["errors"] += 1
             result["error_details"].append(f"Error al procesar materia id_materia={item.get('id_materia')}: {e}")
@@ -548,6 +612,13 @@ def _sync_sigad_groups(db: Session) -> dict:
                 )
                 continue
 
+            programa_obj = db.query(AcademicProgram).filter(AcademicProgram.id == career_id).first() if career_id else None
+            cuatrimestre_obj = db.query(QuarterCatalog).filter(QuarterCatalog.id == quarter_id).first() if quarter_id else None
+            fk_display = {
+                "programa_codigo": programa_obj.codigo_unico if programa_obj else None,
+                "cuatrimestre_nombre": cuatrimestre_obj.nombre if cuatrimestre_obj else None,
+            }
+
             existing = db.query(SigadGroup).filter(SigadGroup.external_id == ext_id).first()
             if existing:
                 changed, changes = _apply_changes(existing,
@@ -558,7 +629,16 @@ def _sync_sigad_groups(db: Session) -> dict:
                 )
                 if changed:
                     result["updated"] += 1
-                    result["updated_details"].append({"registro": item["identificador"], "cambios": changes})
+                    result["updated_details"].append({
+                        "record": {
+                            "external_id": ext_id, "identificador": existing.identificador,
+                            "nivel_academico": existing.nivel_academico, "career_id": existing.career_id, "quarter_id": existing.quarter_id,
+                            **fk_display,
+                        },
+                        "cambios": changes,
+                    })
+                else:
+                    result["unchanged"] += 1
             else:
                 db.add(SigadGroup(
                     external_id=ext_id,
@@ -568,7 +648,11 @@ def _sync_sigad_groups(db: Session) -> dict:
                     quarter_id=quarter_id,
                 ))
                 result["inserted"] += 1
-                result["inserted_details"].append({"registro": item["identificador"]})
+                result["inserted_details"].append({
+                    "external_id": ext_id, "identificador": item["identificador"],
+                    "nivel_academico": item.get("nivel_academico"), "career_id": career_id, "quarter_id": quarter_id,
+                    **fk_display,
+                })
         except Exception as e:
             result["errors"] += 1
             result["error_details"].append(f"Error al procesar grupo id_grupo={item.get('id_grupo')}: {e}")
@@ -627,6 +711,19 @@ def _sync_academic_groups(db: Session) -> tuple[dict, dict]:
             sigad_group_id = _resolve_fk(db, SigadGroup, first.get("grupo_id"))
             aula_id = _resolve_fk(db, Classroom, first.get("aula_id"))
 
+            materia_obj = db.query(Subject).filter(Subject.id == subject_id).first() if subject_id else None
+            docente_nombre = " ".join(filter(None, [teacher.nombre, teacher.apellido_paterno])).strip() if teacher else None
+            sigad_grp_obj = db.query(SigadGroup).filter(SigadGroup.id == sigad_group_id).first() if sigad_group_id else None
+            aula_obj = db.query(Classroom).filter(Classroom.id == aula_id).first() if aula_id else None
+            periodo_obj = db.query(AcademicPeriod).filter(AcademicPeriod.id == period_id).first() if period_id else None
+            fk_display = {
+                "materia_nombre": materia_obj.nombre if materia_obj else None,
+                "docente_nombre": docente_nombre,
+                "grupo_identificador": sigad_grp_obj.identificador if sigad_grp_obj else None,
+                "aula_codigo": aula_obj.nombre_codigo if aula_obj else None,
+                "periodo_codigo": periodo_obj.codigo if periodo_obj else None,
+            }
+
             existing = db.query(AcademicGroup).filter(AcademicGroup.external_id == ext_id).first()
             if existing:
                 changed, changes = _apply_changes(existing,
@@ -638,7 +735,16 @@ def _sync_academic_groups(db: Session) -> tuple[dict, dict]:
                 )
                 if changed:
                     ag_result["updated"] += 1
-                    ag_result["updated_details"].append({"registro": f"Asignación {ext_id}", "cambios": changes})
+                    ag_result["updated_details"].append({
+                        "record": {
+                            "external_id": ext_id, "subject_id": existing.subject_id, "teacher_id": existing.teacher_id,
+                            "sigad_group_id": existing.sigad_group_id, "aula_id": existing.aula_id, "period_id": existing.period_id,
+                            **fk_display,
+                        },
+                        "cambios": changes,
+                    })
+                else:
+                    ag_result["unchanged"] += 1
                 ag_internal_id = existing.id
             else:
                 new_ag = AcademicGroup(
@@ -655,9 +761,12 @@ def _sync_academic_groups(db: Session) -> tuple[dict, dict]:
                 db.flush()
                 ag_internal_id = new_ag.id
                 ag_result["inserted"] += 1
-                ag_result["inserted_details"].append({"registro": f"Asignación {ext_id}"})
+                ag_result["inserted_details"].append({
+                    "external_id": ext_id, "subject_id": subject_id, "teacher_id": teacher.id,
+                    "sigad_group_id": sigad_group_id, "aula_id": aula_id, "period_id": period_id,
+                    **fk_display,
+                })
 
-            # Construir el set de horarios nuevos (normalizados)
             new_schedules = set()
             for row in rows:
                 dia = row.get("dia_semana")
@@ -667,22 +776,62 @@ def _sync_academic_groups(db: Session) -> tuple[dict, dict]:
                     continue
                 new_schedules.add((int(dia), _time_to_str(h_inicio), _time_to_str(h_fin)))
 
-            # Construir el set de horarios existentes en BD
             existing_schedules = set()
             for s in db.query(AssignmentSchedule).filter(
                 AssignmentSchedule.academic_group_id == ag_internal_id
             ).all():
                 existing_schedules.add((int(s.dia_semana), _time_to_str(s.hora_inicio), _time_to_str(s.hora_fin)))
 
+            materia_nombre_sched = materia_obj.nombre if materia_obj else f"Grupo {ext_id}"
+
             if new_schedules == existing_schedules:
+                as_result["unchanged"] += len(existing_schedules)
                 continue
 
-            # Hay cambios: eliminar y reinsertar
             db.query(AssignmentSchedule).filter(
                 AssignmentSchedule.academic_group_id == ag_internal_id
             ).delete(synchronize_session=False)
 
             added = new_schedules - existing_schedules
+            removed = existing_schedules - new_schedules
+
+            remaining_added = list(added)
+            remaining_removed = list(removed)
+            paired = []
+
+            still_added = []
+            for a in remaining_added:
+                matched = False
+                for i, r in enumerate(remaining_removed):
+                    if a[1] == r[1] and a[2] == r[2]:
+                        paired.append((r, a))
+                        remaining_removed.pop(i)
+                        matched = True
+                        break
+                if not matched:
+                    still_added.append(a)
+            remaining_added = still_added
+
+            still_added = []
+            for a in remaining_added:
+                matched = False
+                for i, r in enumerate(remaining_removed):
+                    if a[0] == r[0]:
+                        paired.append((r, a))
+                        remaining_removed.pop(i)
+                        matched = True
+                        break
+                if not matched:
+                    still_added.append(a)
+
+            truly_added = []
+            for a in still_added:
+                if remaining_removed:
+                    paired.append((remaining_removed.pop(0), a))
+                else:
+                    truly_added.append(a)
+            truly_removed = remaining_removed
+
             for row in rows:
                 try:
                     dia = row.get("dia_semana")
@@ -696,21 +845,51 @@ def _sync_academic_groups(db: Session) -> tuple[dict, dict]:
                         hora_inicio=h_inicio,
                         hora_fin=h_fin,
                     ))
-                    if (dia, _time_to_str(h_inicio), _time_to_str(h_fin)) in added:
-                        as_result["inserted"] += 1
-                    else:
-                        as_result["updated"] += 1
                 except Exception as e:
                     as_result["errors"] += 1
                     as_result["error_details"].append(
                         f"Error en horario de asignación id={ext_id}, dia={row.get('dia_semana')}: {e}"
                     )
-            
-            # Registro dinamico de que hubo un cambio en los horarios para esta asignacion
-            as_result["updated_details"].append({
-                "registro": f"Horarios de Asignación {ext_id}",
-                "cambios": [{"campo": "sesiones", "anterior": f"{len(existing_schedules)} horas", "nuevo": f"{len(new_schedules)} horas"}]
-            })
+
+            for (old_dia, old_inicio, old_fin), (new_dia, new_inicio, new_fin) in paired:
+                cambios = []
+                if old_dia != new_dia:
+                    cambios.append({"campo": "dia_semana", "anterior": str(old_dia), "nuevo": str(new_dia)})
+                if old_inicio != new_inicio:
+                    cambios.append({"campo": "hora_inicio", "anterior": old_inicio, "nuevo": new_inicio})
+                if old_fin != new_fin:
+                    cambios.append({"campo": "hora_fin", "anterior": old_fin, "nuevo": new_fin})
+                as_result["updated"] += 1
+                as_result["updated_details"].append({
+                    "record": {
+                        "academic_group_id": ag_internal_id, "dia_semana": new_dia,
+                        "hora_inicio": new_inicio, "hora_fin": new_fin,
+                        "materia_nombre": materia_nombre_sched,
+                    },
+                    "cambios": cambios,
+                })
+
+            for dia, inicio, fin in truly_added:
+                as_result["inserted"] += 1
+                as_result["inserted_details"].append({
+                    "academic_group_id": ag_internal_id, "dia_semana": dia,
+                    "hora_inicio": inicio, "hora_fin": fin,
+                    "materia_nombre": materia_nombre_sched,
+                })
+
+            for dia, inicio, fin in truly_removed:
+                as_result["updated"] += 1
+                as_result["updated_details"].append({
+                    "record": {
+                        "academic_group_id": ag_internal_id, "dia_semana": dia,
+                        "hora_inicio": inicio, "hora_fin": fin,
+                        "materia_nombre": materia_nombre_sched,
+                    },
+                    "cambios": [{"campo": "estado", "anterior": "Activo", "nuevo": "Eliminado"}],
+                })
+
+            kept = new_schedules & existing_schedules
+            as_result["unchanged"] += len(kept)
 
         except Exception as e:
             ag_result["errors"] += 1
