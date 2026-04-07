@@ -11,11 +11,13 @@ const LoginPage = () => {
   const [showPassword, setShowPassword] = useState(false);
   const [credentials, setCredentials] = useState({ identifier: '', password: '' });
   const [error, setError] = useState('');
+  const [errorType, setErrorType] = useState('error'); // 'error' | 'warning'
   const [isLoading, setIsLoading] = useState(false);
 
   const handleLogin = async (e) => {
     e.preventDefault();
     setError('');
+    setErrorType('error');
 
     const cleanIdentifier = credentials.identifier;
 
@@ -40,7 +42,7 @@ const LoginPage = () => {
     try {
       const response = await client.post('/auth/login', {
         identifier: cleanIdentifier,
-        password: credentials.password 
+        password: credentials.password.trim()
       });
 
       authLogin(response.data);
@@ -50,22 +52,31 @@ const LoginPage = () => {
         return;
       }
 
-      if (response.data?.role?.name === 'admin') navigate('/alumnos/listado');
-      else if (response.data?.role?.name === 'docente') navigate('/docente/pase-lista');
-      else navigate('/alumno/horario');
+      const roleName = response.data?.role?.name?.toLowerCase();
+
+      if (roleName === 'admin' || roleName === 'super_admin') {
+        navigate('/alumnos/listado');
+      } else if (roleName === 'docente') {
+        navigate('/docente/pase-lista');
+      } else {
+        navigate('/alumno/horario');
+      }
 
     } catch (err) {
-      setError('ID o contraseña incorrectos');
+      const detail = err.response?.data?.detail || 'ID o contraseña incorrectos';
+      const isWarning = detail.includes('Advertencia');
+      setErrorType(isWarning ? 'warning' : 'error');
+      setError(detail);
       console.error("Detalle técnico del error:", err.response?.data || err.message);
     } finally {
       setIsLoading(false);
     }
   };
 
-  // HU-31: requiere contraseña actual, por eso debe existir sesión
   const handleForgotPassword = (e) => {
     e.preventDefault();
     setError('');
+    navigate('/recover-password');
 
     const savedUser = localStorage.getItem('user');
     if (!savedUser) {
@@ -107,7 +118,7 @@ const LoginPage = () => {
           </div>
 
           <div className="p-8 pb-10 flex flex-col text-center">
-            <h1 className="text-[22px] font-bold text-[#1A1A1A] mb-1">Portal de Alumnos</h1>
+            <h1 className="text-[22px] font-bold text-[#1A1A1A] mb-1">Portal Académico</h1>
             <p className="text-sm text-gray-500 mb-8 font-medium">Ingresa tus credenciales para continuar</p>
 
             <form onSubmit={handleLogin} className="space-y-5 text-left flex flex-col">
@@ -175,8 +186,14 @@ const LoginPage = () => {
               </div>
 
               {error && (
-                <div className="bg-red-50 border border-red-100 p-2.5 rounded-lg text-center animate-in fade-in">
-                  <p className="text-red-600 text-xs font-bold">{error}</p>
+                <div className={`p-2.5 rounded-lg text-center animate-in fade-in border ${
+                  errorType === 'warning'
+                    ? 'bg-amber-50 border-amber-200'
+                    : 'bg-red-50 border-red-100'
+                }`}>
+                  <p className={`text-xs font-bold ${errorType === 'warning' ? 'text-amber-700' : 'text-red-600'}`}>
+                    {error}
+                  </p>
                 </div>
               )}
 

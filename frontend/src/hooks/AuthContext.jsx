@@ -10,11 +10,9 @@ export const AuthProvider = ({ children }) => {
     const savedUser = localStorage.getItem("user");
     if (savedUser) {
       const parsed = JSON.parse(savedUser);
-      // Valida que el usuario tenga la estructura nueva (role como objeto)
       if (parsed?.role && typeof parsed.role === 'object' && parsed.role.name) {
         setUser(parsed);
       } else {
-        // Limpia datos del formato anterior (role era string ENUM)
         localStorage.removeItem("user");
         localStorage.removeItem("token");
       }

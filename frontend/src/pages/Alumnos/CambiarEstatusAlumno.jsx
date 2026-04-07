@@ -1,8 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { User, CheckCircle, XCircle, Upload, FileText, AlertTriangle, Loader2, GraduationCap } from 'lucide-react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import client from '../../lib/axios';
 import { useAuth } from '../../hooks/AuthContext';
+import Swal from 'sweetalert2';
 
 const STATUS_UI = {
     'activo':        { label: 'Activo',       desc: 'Alumno con inscripción vigente',         color: 'text-green-600',  activeBg: 'bg-green-50 border-green-500',  Icon: CheckCircle },
@@ -52,6 +53,19 @@ const CambiarEstatusAlumno = () => {
     const requiereArchivo = esBaja && !logEvidencia?.evidence_file_id;
 
     const handleConfirmarCambio = async () => {
+        if (archivo) {
+            if (archivo.type !== 'application/pdf') {
+                Swal.fire('Formato inválido', 'Solo se permiten archivos PDF como carta de no adeudo.', 'error');
+                setArchivo(null);
+                return;
+            }
+            if (archivo.size > 2 * 1024 * 1024) {
+                Swal.fire('Archivo muy pesado', 'La carta de no adeudo no debe superar los 2MB.', 'error');
+                setArchivo(null);
+                return;
+            }
+        }
+
         try {
             setGuardando(true);
             const statusSeleccionado = estatusCatalogo.find(s => s.name === nuevoEstatus);
@@ -66,7 +80,7 @@ const CambiarEstatusAlumno = () => {
             navigate('/alumnos/listado');
         } catch (error) {
             console.error("Error al cambiar estatus:", error);
-            alert(error?.response?.data?.detail || "Hubo un error al actualizar el estatus.");
+            Swal.fire('Error', error?.response?.data?.detail || 'Hubo un error al actualizar el estatus.', 'error');
         } finally {
             setGuardando(false);
         }
@@ -80,7 +94,7 @@ const CambiarEstatusAlumno = () => {
                     <AlertTriangle className="w-8 h-8 text-red-600 flex-shrink-0" />
                     <p className="text-xs text-red-800 font-medium">
                         <span className="font-bold uppercase block mb-1">Advertencia Académica</span>
-                        Este cambio afectará el registro académico. Se liberarán cupos y el alumno será eliminado de las listas vigentes inmediatamente.
+                        Se registrará que TÚ diste de baja a este alumno. Se liberarán cupos y será eliminado de las listas vigentes. HECTOR
                     </p>
                 </div>
             );
@@ -173,7 +187,21 @@ const CambiarEstatusAlumno = () => {
                             <label className="flex flex-col items-center justify-center w-full h-24 border-2 border-dashed border-gray-300 rounded-xl cursor-pointer bg-gray-50 hover:bg-gray-100 transition">
                                 <Upload className="w-5 h-5 text-gray-400 mb-1" />
                                 <p className="text-xs text-gray-500 font-medium">Haga clic para adjuntar documento</p>
-                                <input type="file" className="hidden" onChange={(e) => setArchivo(e.target.files[0])} accept=".pdf, image/*" />
+                                <input type="file" className="hidden" onChange={(e) => {
+                                    const file = e.target.files[0];
+                                    if (!file) return;
+                                    if (file.type !== 'application/pdf') {
+                                        Swal.fire('Formato inválido', 'Solo se permiten archivos PDF como carta de no adeudo.', 'error');
+                                        e.target.value = '';
+                                        return;
+                                    }
+                                    if (file.size > 2 * 1024 * 1024) {
+                                        Swal.fire('Archivo muy pesado', 'La carta de no adeudo no debe superar los 2MB.', 'error');
+                                        e.target.value = '';
+                                        return;
+                                    }
+                                    setArchivo(file);
+                                }} accept="application/pdf" />
                             </label>
                             {archivo && (
                                 <div className="mt-3 p-2 bg-green-50 rounded border border-green-200 flex items-center">

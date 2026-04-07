@@ -8,9 +8,11 @@ import client from '../../lib/axios';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { useNavigate } from 'react-router-dom';
+import { useAuth } from '../../hooks/AuthContext';
 
 const ImportarAlumnos = () => {
   const navigate = useNavigate();
+  const { user } = useAuth();
   const [datos, setDatos] = useState([]);
   const [archivoNombre, setArchivoNombre] = useState("");
   const [fileObject, setFileObject] = useState(null); 
@@ -143,6 +145,7 @@ const ImportarAlumnos = () => {
 
     const formData = new FormData();
     formData.append('file', fileObject); 
+    formData.append('usuario_id', user?.identifier || user?.email || "Admin Local");
 
     try {
       const response = await client.post('/alumnos/importar', formData, {
@@ -297,17 +300,6 @@ const ImportarAlumnos = () => {
            </button> 
            &gt; <span className="text-[#1A237E] ml-1 font-bold">Importación Masiva</span>
         </div>
-        <div className="flex items-center gap-3">
-           <div className="flex items-center gap-3 border-l pl-4 border-gray-200">
-               <div className="text-right">
-                 <p className="text-sm font-bold text-gray-800 leading-tight">Administrador SESA</p>
-                 <p className="text-[10px] text-green-600 font-medium tracking-wide uppercase">En línea</p>
-               </div>
-               <div className="w-9 h-9 rounded-full bg-gradient-to-tr from-[#1A237E] to-blue-500 flex items-center justify-center text-white text-xs font-bold shadow-sm border-2 border-white">
-                   AD
-               </div>
-           </div>
-        </div>
       </header>
 
       <main className="flex-1 p-8">
@@ -366,6 +358,7 @@ const ImportarAlumnos = () => {
                                       <th className="p-3">Promedio</th>
                                       <th className="p-3">CURP</th>
                                       <th className="p-3">Carrera</th>
+                                      <th className="p-3">Cuatrimestre</th>
                                       <th className="p-3">Correo Personal</th>
                                       <th className="p-3">Correo Inst.</th>
                                   </tr>
@@ -402,8 +395,8 @@ const ImportarAlumnos = () => {
     {String(alumno["Procedencia"] || alumno["Procedencia:"] || '---')}
 </td>
 
-<td className={`p-3 font-bold ${errorCampos.includes("Promedio General") ? 'text-red-700 bg-red-100 rounded border border-red-200 cursor-help' : 'text-blue-600'}`} title={errorCampos.includes("Promedio General") ? mensajeError : ""}>
-    {String(alumno["Promedio General"] || alumno["Promedio General:"] || '0.00')}
+<td className={`p-3 font-bold ${errorCampos.includes("Promedio General") ? 'text-red-700 bg-red-100 rounded border border-red-200 cursor-help' : 'text-gray-700'}`} title={errorCampos.includes("Promedio General") ? mensajeError : ""}>
+    {alumno["Promedio General"] != null && alumno["Promedio General"] !== '' ? String(alumno["Promedio General"]) : (alumno["Promedio General:"] != null ? String(alumno["Promedio General:"]) : '---')}
 </td>
                                                   
                                                   <td className={`p-3 font-mono ${errorCampos.includes("Curp") ? 'text-red-700 bg-red-100 rounded border border-red-200 cursor-help' : 'text-gray-500'}`} title={errorCampos.includes("Curp") ? mensajeError : ""}>
@@ -414,6 +407,9 @@ const ImportarAlumnos = () => {
                                                       {String(alumno["Carrera"] || alumno["Carrera:"] || '---')}
                                                   </td>
                                                   
+                                                  <td className={`p-3 text-center font-bold ${errorCampos.includes("Cuatrimestre") ? 'text-red-700 bg-red-100 rounded border border-red-200 cursor-help' : 'text-gray-700'}`} title={errorCampos.includes("Cuatrimestre") ? mensajeError : ""}>
+                                                      {String(alumno["Cuatrimestre"] ?? alumno["Cuatrimestre:"] ?? '---').replace('.0', '')}
+                                                  </td>
                                                   <td className={`p-3 italic ${errorCampos.includes("Correo Personal") ? 'text-red-700 bg-red-100 rounded border border-red-200 cursor-help' : 'text-gray-500'}`} title={errorCampos.includes("Correo Personal") ? mensajeError : ""}>
                                                       {String(alumno["Correo Personal"] || alumno["Correo Personal:"] || '---')}
                                                   </td>
@@ -425,7 +421,7 @@ const ImportarAlumnos = () => {
                                       })
                                   ) : (
                                       <tr>
-                                          <td colSpan="11" className="p-20 text-center text-gray-400">
+                                          <td colSpan="12" className="p-20 text-center text-gray-400">
                                               <Database className="w-12 h-12 mx-auto mb-3 opacity-20" />
                                               <p className="font-medium text-gray-500">Sin datos para mostrar</p>
                                               <p className="text-xs mt-1">Sube un archivo Excel para iniciar la validación.</p>
