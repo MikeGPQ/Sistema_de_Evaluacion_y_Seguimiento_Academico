@@ -10,7 +10,6 @@ import autoTable from 'jspdf-autotable';
 import { useNavigate } from 'react-router-dom';
 
 const AuditLogs = () => {
-  // 1. Estados Generales
   const navigate = useNavigate();
   const [logs, setLogs] = useState([]);
   const [kpis, setKpis] = useState({ activos: 0, inactivos: 0 });
@@ -29,7 +28,8 @@ const AuditLogs = () => {
     'UPDATE': 'ACTUALIZACIÓN',
     'DELETE': 'ELIMINACIÓN',
     'LOGIN': 'INICIO DE SESIÓN',
-    'LOG': 'REGISTRO'
+    'LOG': 'REGISTRO',
+    'SYNC': 'SINCRONIZACIÓN'
   };
 
   const MAPA_ENTIDADES = {
@@ -42,7 +42,8 @@ const AuditLogs = () => {
     'student_status_logs': 'Historial de Estatus',
     'academic_groups': 'Grupos Académicos',
     'files': 'Archivos',
-    'student_enrollments_bloque': 'Carga en Bloque (Nuevo Ingreso)'
+    'student_enrollments_bloque': 'Carga en Bloque (Nuevo Ingreso)',
+    'sigad_synchronization': 'Sincronización SIGAD' 
   };
 
   const traducirAccion = (accion) => MAPA_ACCIONES[accion] || accion;
@@ -50,7 +51,6 @@ const AuditLogs = () => {
 
   const [paginacion, setPaginacion] = useState({ skip: 0, limit: 15 });
 
-  // 2. Estados del Modal de Locked Users
   const [showLockedUsersModal, setShowLockedUsersModal] = useState(false);
   const [lockedUsers, setLockedUsers] = useState([]);
   const [searchLockedUser, setSearchLockedUser] = useState('');
@@ -60,10 +60,10 @@ const AuditLogs = () => {
     { id: 'administrators', label: 'Administradores' },
     { id: 'users', label: 'Usuarios / Autenticación' },
     { id: 'student_enrollments', label: 'Carga Académica' },
-    { id: 'attendance_records', label: 'Asistencia' }
+    { id: 'attendance_records', label: 'Asistencia' },
+    { id: 'sigad_synchronization', label: 'Sincronización SIGAD' }
   ];
 
-  // 3. Funciones Principales
   const fetchLogs = async () => {
     setCargando(true);
     try {
@@ -108,19 +108,6 @@ const AuditLogs = () => {
   const limpiarFiltros = () => {
     setFiltros({ usuario_id: '', modulo: '', fecha_desde: '', fecha_hasta: '' });
     setPaginacion(prev => ({ ...prev, skip: 0 }));
-  };
-
-  // 4. Funciones del Modal
-  const fetchLockedUsers = async () => {
-    setLoadingLockedUsers(true);
-    try {
-      const response = await client.get('/logs/locked-users');
-      setLockedUsers(response.data.data || []);
-    } catch (error) {
-      console.error("Error fetching locked users:", error);
-    } finally {
-      setLoadingLockedUsers(false);
-    }
   };
 
   const handleOpenLockedUsers = () => {
@@ -180,10 +167,8 @@ const verDetalleJson = (oldValues, newValues, action) => {
     const safeOld = typeof oldValues === 'object' && oldValues !== null ? oldValues : {};
     const safeNew = typeof newValues === 'object' && newValues !== null ? newValues : {};
 
-    // Utilidad para limpiar y capitalizar las claves
     const formatKey = (key) => key.charAt(0).toUpperCase() + key.slice(1).replace(/_/g, ' ');
 
-    // Formateador con soporte optimizado para arreglos
     const formatVal = (v) => {
       if (v === null || v === undefined) return '<span style="color: #9ca3af; font-style: italic;">(vacío)</span>';
       if (typeof v === 'boolean') return v ? 'Sí' : 'No';
@@ -191,14 +176,83 @@ const verDetalleJson = (oldValues, newValues, action) => {
         if (v.length === 0) return '<span style="color: #9ca3af; font-style: italic;">(Lista vacía)</span>';
         return `<ul style="margin: 6px 0 0 0; padding-left: 18px; list-style-type: square; color: #4b5563; font-size: 13px;">${v.map(item => `<li style="margin-bottom: 4px; line-height: 1.4;">${item}</li>`).join('')}</ul>`;
       }
-      if (typeof v === 'object') return JSON.stringify(v);
+      if (typeof v === 'object') return `<pre style="font-size: 11px; color: #4b5563; background: #f3f4f6; padding: 8px; border-radius: 4px; overflow-x: auto; margin-top: 4px;">${JSON.stringify(v, null, 2)}</pre>`;
       return v;
     };
 
     const isCreate = action === 'CREATE';
     const isDelete = action === 'DELETE';
+    const isSync = action === 'SYNC';
 
-    if (isCreate) {
+    if (isSync && safeNew.resumen_operaciones) {
+      const resumen = safeNew.resumen_operaciones;
+      const LABELS_SYNC = {
+        classrooms: 'Aulas',
+        academic_periods: 'Periodos Académicos',
+        academic_programs: 'Programas Académicos',
+        quarter_catalog: 'Catálogo de Cuatrimestres',
+        teachers: 'Docentes',
+        users_created: 'Cuentas de Usuario',
+        subjects: 'Materias',
+        sigad_groups: 'Grupos SIGAD',
+        academic_groups: 'Grupos Académicos',
+        assignment_schedules: 'Horarios de Asignación'
+      };
+
+      const rows = Object.entries(resumen)
+        .filter(([_, stats]) => (stats.inserted || 0) > 0 || (stats.updated || 0) > 0 || (stats.errors || 0) > 0)
+        .map(([key, stats]) => {
+          const label = LABELS_SYNC[key] || key;
+          const errColor = stats.errors > 0 ? '#ef4444' : '#9ca3af';
+          return `
+            <tr style="border-bottom: 1px solid #e5e7eb; transition: background-color 0.15s ease;" onmouseover="this.style.backgroundColor='#f9fafb'" onmouseout="this.style.backgroundColor='transparent'">
+              <td style="padding: 12px; text-align: left;">
+                <span style="font-weight: 500; color: #374151; font-size: 14px;">${label}</span><br/>
+                <span style="font-size: 11px; color: #6b7280; font-family: monospace;">${key}</span>
+              </td>
+              <td style="padding: 12px; text-align: right; color: #374151; font-size: 14px;">${stats.inserted || 0}</td>
+              <td style="padding: 12px; text-align: right; color: #374151; font-size: 14px;">${stats.updated || 0}</td>
+              <td style="padding: 12px; text-align: right; color: ${errColor}; font-weight: ${stats.errors > 0 ? 'bold' : 'normal'}; font-size: 14px;">${stats.errors || 0}</td>
+            </tr>
+          `;
+        }).join('');
+
+      if (rows === '') {
+        htmlContent = `
+          <div style="text-align: center; padding: 10px 20px 20px 20px;">
+            <div style="color: #a5dc86; margin-bottom: 20px;">
+              <svg style="width: 72px; height: 72px; margin: 0 auto;" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+              </svg>
+            </div>
+            <h3 style="font-size: 1.5em; font-weight: 600; color: #545454; margin-bottom: 12px; line-height: 1.2;">Sincronización sin cambios</h3>
+            <p style="color: #545454; font-size: 1.125em; font-weight: 400; line-height: 1.5; margin: 0;">Todos los registros ya estaban actualizados. No se realizaron inserciones, actualizaciones ni se detectaron errores.</p>
+          </div>
+        `;
+      } else {
+        htmlContent = `
+          <div style="text-align: left; max-height: 60vh; overflow-y: auto;">
+            <h3 style="font-size: 18px; font-weight: bold; color: #111827; margin-bottom: 16px;">Resumen de Operaciones de Sincronización SIGAD</h3>
+            <div style="border: 1px solid #e5e7eb; border-radius: 8px; overflow: hidden;">
+              <table style="width: 100%; border-collapse: collapse;">
+                <thead style="background-color: #f3f4f6; border-bottom: 1px solid #e5e7eb;">
+                  <tr>
+                    <th style="padding: 12px; text-align: left; font-weight: 600; color: #374151; font-size: 13px;">Entidad</th>
+                    <th style="padding: 12px; text-align: right; font-weight: 600; color: #374151; font-size: 13px;">Insertados</th>
+                    <th style="padding: 12px; text-align: right; font-weight: 600; color: #374151; font-size: 13px;">Actualizados</th>
+                    <th style="padding: 12px; text-align: right; font-weight: 600; color: #374151; font-size: 13px;">Errores</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${rows}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        `;
+      }
+
+    } else if (isCreate) {
       htmlContent = `
         <div style="text-align: left; max-height: 60vh; overflow-y: auto; padding-right: 8px;">
           <div style="background-color: #f0fdf4; padding: 12px; border-radius: 6px; border-left: 4px solid #22c55e; margin-bottom: 16px;">
@@ -313,16 +367,23 @@ const verDetalleJson = (oldValues, newValues, action) => {
             <ul style="text-align: left; font-size: 14px; line-height: 1.6; padding-left: 20px;">${changes.join('')}</ul>
           </div>`;
       } else {
-        htmlContent = '<p style="text-align: center; color: #6b7280;">No se detectaron cambios en los valores.</p>';
+        htmlContent = `
+          <div style="text-align: center; padding: 30px 20px;">
+            <p style="color: #545454; font-size: 1.125em; font-weight: 400; margin: 0;">No se detectaron cambios en los valores.</p>
+          </div>
+        `;
       }
     }
     
     Swal.fire({
-      title: 'Detalle de Modificación',
+      title: isSync ? '' : 'Detalle de Modificación',
       html: htmlContent,
-      width: '600px',
+      width: '650px',
       confirmButtonColor: '#1A237E',
-      confirmButtonText: 'Cerrar'
+      confirmButtonText: 'Cerrar',
+      customClass: {
+        htmlContainer: '!text-left' 
+      }
     });
   };
 

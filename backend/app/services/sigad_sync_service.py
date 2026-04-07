@@ -23,6 +23,7 @@ from app.models.academic_group import AcademicGroup
 from app.models.assignment_schedule import AssignmentSchedule
 from dotenv import load_dotenv
 from app.core.security import get_password_hash
+from app.services.audit_service import log_audit_event
 
 load_dotenv()
 
@@ -926,7 +927,7 @@ def _sigad_disponible() -> tuple[bool, str]:
         return False, f"Error al verificar disponibilidad de SIGAD: {e}"
 
 
-def sincronizar_todo(db: Session) -> dict:
+def sincronizar_todo(db: Session, usuario_id: str = "Sistema") -> dict:
     resumen = {}
 
     disponible, motivo = _sigad_disponible()
@@ -960,5 +961,28 @@ def sincronizar_todo(db: Session) -> dict:
     resumen["academic_groups"] = ag_res
     resumen["assignment_schedules"] = as_res
     _commit(db, resumen, "academic_groups")
+
+    resumen_cantidades = {
+        k: {
+            "inserted": v.get("inserted", 0),
+            "updated": v.get("updated", 0),
+            "errors": v.get("errors", 0)
+        } for k, v in resumen.items() if isinstance(v, dict)
+    }
+
+    log_audit_event(
+        db=db,
+        user_identifier=usuario_id,
+        action="SYNC",
+        entity_name="sigad_synchronization",
+        entity_id="Batch_Sync",
+        old_values=None,
+        new_values={"resumen_operaciones": resumen_cantidades}
+    )
+    try:
+        db.commit()
+    except Exception as e:
+        db.rollback()
+        resumen["audit_error"] = f"No se pudo guardar el log de auditoría: {str(e)}"
 
     return resumen

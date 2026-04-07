@@ -102,7 +102,13 @@ const SincronizacionSigad = () => {
     setResultado(null);
     setError(null);
     try {
-      const res = await client.post('/api/sync/sigad');
+      const userStorage = localStorage.getItem('user');
+      const currentAdminId = userStorage ? JSON.parse(userStorage).identifier : 'Sistema';
+
+      const res = await client.post('/api/sync/sigad', {
+        usuario_id: currentAdminId
+      });
+      
       if (res.data?.error) {
         setError(res.data.error);
       } else {
