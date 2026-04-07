@@ -33,6 +33,7 @@ from app.models.grade_value import GradeValue
 from app.models.student_period_gpa import StudentPeriodGpa
 from app.models.titulation_status import TitulationStatus
 from app.models.quarter_catalog import QuarterCatalog
+from app.models.sigad_group import SigadGroup
 
 from sqlalchemy import case
 from app.models.user import User
@@ -267,6 +268,7 @@ def register_student(
 
         activo_status = db.query(StudentStatus).filter(StudentStatus.name == 'activo').first()
         periodo_activo = db.query(AcademicPeriod).filter(AcademicPeriod.is_active == True).first()
+        first_quarter = db.query(QuarterCatalog).filter(QuarterCatalog.external_id == 1).first()
 
         new_profile = StudentAcademicProfile(
             student_matricula=final_matricula,
@@ -275,7 +277,8 @@ def register_student(
             career_id=student_in.career_id,
             origin_school_id=student_in.origin_school_id,
             period_id=periodo_activo.id if periodo_activo else 1,
-            quarter_actual_id=1,
+            sigad_group_id=student_in.sigad_group_id,
+            quarter_actual_id=first_quarter.id if first_quarter else 1,
             status_id=data_dict.get('status_id') or (activo_status.id if activo_status else 1),
             promedio_procedencia=student_in.promedio_procedencia,
             certificado_id=cert_file_id,
@@ -613,6 +616,22 @@ async def importar_alumnos(file: UploadFile = File(...), usuario_id: str = Form(
     return {"message": f"{registros_nuevos} alumnos creados correctamente.", "data": credenciales_generadas}
 
 
+@router.get("/grupo-sigad")
+def get_grupo_sigad(career_id: int, db: Session = Depends(get_db)):
+    first_quarter = db.query(QuarterCatalog).filter(QuarterCatalog.external_id == 1).first()
+    if not first_quarter:
+        raise HTTPException(status_code=404, detail="Primer cuatrimestre no encontrado en catálogo")
+    grupo = db.query(SigadGroup).filter(
+        SigadGroup.career_id == career_id,
+        SigadGroup.quarter_id == first_quarter.id
+    ).first()
+    return {
+        "sigad_group_id": grupo.id if grupo else None,
+        "identificador": grupo.identificador if grupo else None,
+        "quarter_actual_id": first_quarter.id
+    }
+
+
 @router.get("/detalle/{matricula}")
 def get_student_detail(matricula: str, db: Session = Depends(get_db)):
     student = db.query(Student).filter(Student.matricula == matricula).first()
@@ -658,6 +677,8 @@ def get_student_detail(matricula: str, db: Session = Depends(get_db)):
             "foto_nombre": student.foto_perfil.file_name if student.foto_perfil else None,
             "certificado_id": perfil.certificado_id if perfil else None,
             "certificado_nombre": perfil.certificado_file.file_name if perfil and getattr(perfil, 'certificado_file', None) else None,
+            "sigad_group_id": perfil.sigad_group_id if perfil else None,
+            "sigad_group_identificador": perfil.sigad_group.identificador if perfil and getattr(perfil, 'sigad_group', None) else None,
             "promedio_general": promedio_general
         },
         "address": {

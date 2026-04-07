@@ -62,6 +62,7 @@ class StudentCreate(BaseModel):
     promedio_procedencia: int
     period_id: Optional[int] = None
     address: AddressCreate
+    sigad_group_id: Optional[int] = None
     usuario_id: Optional[str] = "Sistema"
     estatus_titulacion: Optional[str] = None
     folio_certificado: Optional[str] = None

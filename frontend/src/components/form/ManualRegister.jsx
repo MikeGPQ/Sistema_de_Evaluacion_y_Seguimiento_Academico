@@ -75,6 +75,7 @@ export default function ManualRegister({ isOpen, onClose, alumnoAEditar, modoMae
   const [erroresEnVivo, setErroresEnVivo] = useState({ curp: '', email: '', promedio: '' });
   const [validacionExitosa, setValidacionExitosa] = useState({ curp: false, email: false, promedio: false });
   const [datosOriginales, setDatosOriginales] = useState(null);
+  const [sigadGroup, setSigadGroup] = useState({ sigad_group_id: null, identificador: null, loading: false, noGroup: false });
 
   const [formData, setFormData] = useState({
     matricula: '', nombre: '', apellido_paterno: '', apellido_materno: '',
@@ -113,6 +114,7 @@ export default function ManualRegister({ isOpen, onClose, alumnoAEditar, modoMae
       setValidacionExitosa({ curp: false, email: false, promedio: false });
       setFiles({ foto: null, certificado: null });
       setColoniasAPI([]);
+      setSigadGroup({ sigad_group_id: null, identificador: null, loading: false, noGroup: false });
       setFormData({
         matricula: '', nombre: '', apellido_paterno: '', apellido_materno: '',
         curp: '', email_personal: '', email_institucional: '',
@@ -219,6 +221,10 @@ export default function ManualRegister({ isOpen, onClose, alumnoAEditar, modoMae
           
           setFormData(dataCargada);
           setDatosOriginales(dataCargada);
+
+          if (student.sigad_group_id) {
+            setSigadGroup({ sigad_group_id: student.sigad_group_id, identificador: student.sigad_group_identificador, loading: false, noGroup: !student.sigad_group_identificador });
+          }
 
           const curpRegex = /^[A-Z]{4}\d{6}[HM][A-Z]{5}[A-Z0-9]\d$/i;
           const emailRegex = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.(com|mx|org|net|edu|gob)$/i;
@@ -431,6 +437,26 @@ export default function ManualRegister({ isOpen, onClose, alumnoAEditar, modoMae
       }
       return newState;
     });
+    if (name === 'nivel_id') {
+      setSigadGroup({ sigad_group_id: null, identificador: null, loading: false, noGroup: false });
+    }
+    if (name === 'career_id') {
+      if (selectedOption) {
+        setSigadGroup({ sigad_group_id: null, identificador: null, loading: true, noGroup: false });
+        client.get(`/alumnos/grupo-sigad?career_id=${selectedOption.value}`)
+          .then(res => {
+            setSigadGroup({
+              sigad_group_id: res.data.sigad_group_id,
+              identificador: res.data.identificador,
+              loading: false,
+              noGroup: !res.data.sigad_group_id
+            });
+          })
+          .catch(() => setSigadGroup({ sigad_group_id: null, identificador: null, loading: false, noGroup: true }));
+      } else {
+        setSigadGroup({ sigad_group_id: null, identificador: null, loading: false, noGroup: false });
+      }
+    }
   };
 
   const handleFileChange = (e) => {
@@ -580,6 +606,7 @@ export default function ManualRegister({ isOpen, onClose, alumnoAEditar, modoMae
     const dataPayload = {
       ...restFormData,
       usuario_id: user?.identifier || user?.email || "Admin Local",
+      sigad_group_id: sigadGroup.sigad_group_id || null,
       nivel_id: parseInt(formData.nivel_id),
       titulation_status_id: formData.titulation_status_id ? parseInt(formData.titulation_status_id) : null,
       estatus_titulacion: isMaestriaSubmit ? formData.estatus_titulacion : null,
@@ -762,6 +789,25 @@ export default function ManualRegister({ isOpen, onClose, alumnoAEditar, modoMae
                   </label>
                   <Select name="career_id" options={careerOptions} onChange={handleSelectChange} value={careerOptions.find(opt => opt.value === formData.career_id) || null} placeholder="Seleccione una carrera..." styles={customSelectStyles} />
                 </div>
+                {formData.career_id && (
+                  <div className="md:col-span-2">
+                    <label className="block text-xs font-bold text-gray-600 mb-1">Grupo SIGAD asignado</label>
+                    {sigadGroup.loading ? (
+                      <div className="flex items-center gap-2 p-2.5 border border-gray-200 rounded-md bg-gray-50 text-sm text-gray-400">
+                        <div className="w-4 h-4 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+                        Buscando grupo...
+                      </div>
+                    ) : sigadGroup.noGroup ? (
+                      <p className="text-xs text-orange-600 font-bold mt-1">⚠ No se encontró grupo para este programa. Contacta al administrador.</p>
+                    ) : sigadGroup.identificador ? (
+                      <input
+                        readOnly
+                        value={sigadGroup.identificador}
+                        className="w-full border border-gray-200 rounded-md p-2.5 text-sm bg-blue-50 text-blue-800 font-mono cursor-default"
+                      />
+                    ) : null}
+                  </div>
+                )}
                 <div className={isMaestria ? "col-span-1" : "md:col-span-2"}>
                   <label className="block text-xs font-bold text-gray-600 mb-1">
                     {isMaestria ? 'Universidad' : 'Preparatoria'} de Procedencia <span className="text-red-500">*</span>
