@@ -339,7 +339,7 @@ const MiCargaAcademica = () => {
                       className="w-4 h-4 text-[#1A237E] focus:ring-[#1A237E] pointer-events-none"
                     />
                     <div>
-                      <p className="text-sm font-bold text-gray-800">Grupo {grupo.external_id ?? grupo.nombre}</p>
+                      <p className="text-sm font-bold text-gray-800">Grupo {grupo.nombre}</p>
                       <p className="text-xs text-gray-500 flex items-center gap-1 mt-0.5">
                         <Clock className="w-3 h-3" /> {grupo.horario}
                       </p>
