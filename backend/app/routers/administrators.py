@@ -57,9 +57,9 @@ def update_admin(numero_empleado: str, admin_data: AdminUpdate, db: Session = De
     if not admin:
         raise HTTPException(status_code=404, detail="Administrador no encontrado.")
 
-    old_nombre_completo = " ".join(filter(None, [admin.nombre, admin.apellido_paterno, admin.apellido_materno])).strip()
+    old_full_name = " ".join(filter(None, [admin.nombre, admin.apellido_paterno, admin.apellido_materno])).strip()
     old_state = {
-        "Nombre completo": old_nombre_completo,
+        "Nombre completo": old_full_name,
         "Correo personal": admin.email_personal,
         "Correo institucional": admin.email_institucional,
         "Estatus Activo": admin.is_active
@@ -89,9 +89,9 @@ def update_admin(numero_empleado: str, admin_data: AdminUpdate, db: Session = De
         if user:
             user.email = admin_data.email_institucional if admin_data.email_institucional else admin_data.email_personal
 
-        new_nombre_completo = " ".join(filter(None, [admin.nombre, admin.apellido_paterno, admin.apellido_materno])).strip()
+        new_full_name = " ".join(filter(None, [admin.nombre, admin.apellido_paterno, admin.apellido_materno])).strip()
         new_state = {
-            "Nombre completo": new_nombre_completo,
+            "Nombre completo": new_full_name,
             "Correo personal": admin.email_personal,
             "Correo institucional": admin.email_institucional,
             "Estatus Activo": admin.is_active
@@ -154,17 +154,17 @@ def get_administrators(
         is_active_val = True if estatus.lower() == 'activo' else False
         query = query.filter(Administrator.is_active == is_active_val)
 
-    total_registros = query.count()
-    administradores_db = query.offset(skip).limit(limit).all()
+    total_records = query.count()
+    admins_db = query.offset(skip).limit(limit).all()
     
-    lista_formateada = []
-    for admin in administradores_db:
-        partes_nombre = [admin.nombre, admin.apellido_paterno, admin.apellido_materno]
-        nombre_completo = " ".join(filter(None, partes_nombre)).strip()
+    formatted_list = []
+    for admin in admins_db:
+        name_parts = [admin.nombre, admin.apellido_paterno, admin.apellido_materno]
+        full_name = " ".join(filter(None, name_parts)).strip()
         
-        lista_formateada.append({
+        formatted_list.append({
             "numero_empleado": admin.numero_empleado,
-            "nombre_completo": nombre_completo,
+            "nombre_completo": full_name,
             "nombre": admin.nombre,                     
             "apellido_paterno": admin.apellido_paterno, 
             "apellido_materno": admin.apellido_materno,  
@@ -173,7 +173,7 @@ def get_administrators(
             "estatus": "Activo" if admin.is_active else "Inactivo"
         })
         
-    return {"data": lista_formateada, "total": total_registros}
+    return {"data": formatted_list, "total": total_records}
 
 @router.post("/register", status_code=status.HTTP_201_CREATED)
 def register_admin(admin_data: AdminCreate, db: Session = Depends(get_db)):
@@ -193,17 +193,17 @@ def register_admin(admin_data: AdminCreate, db: Session = Depends(get_db)):
         max_student = db.query(func.max(Student.matricula)).scalar()
         max_user = db.query(func.max(User.identifier)).scalar()
         
-        numeros_existentes = []
+        existing_numbers = []
         for valor in [max_admin, max_student, max_user]:
             if valor and str(valor).isdigit():
-                numeros_existentes.append(int(valor))
+                existing_numbers.append(int(valor))
         
-        siguiente_id = max(numeros_existentes) + 1 if numeros_existentes else 1
-        nuevo_numero_empleado = str(siguiente_id).zfill(8)
+        next_id = max(existing_numbers) + 1 if existing_numbers else 1
+        new_employee_number = str(next_id).zfill(8)
 
-        while db.query(User).filter(User.identifier == nuevo_numero_empleado).first():
-            siguiente_id += 1
-            nuevo_numero_empleado = str(siguiente_id).zfill(8)
+        while db.query(User).filter(User.identifier == new_employee_number).first():
+            next_id += 1
+            new_employee_number = str(next_id).zfill(8)
 
         alphabet = string.ascii_letters + string.digits
         raw_password = ''.join(secrets.choice(alphabet) for _ in range(10))
@@ -215,7 +215,7 @@ def register_admin(admin_data: AdminCreate, db: Session = Depends(get_db)):
 
         email_login = admin_data.email_institucional if admin_data.email_institucional else admin_data.email_personal
         new_user = User(
-            identifier=nuevo_numero_empleado, 
+            identifier=new_employee_number, 
             email=email_login,
             password_hash=hashed_password, 
             role_id=admin_role.id,
@@ -224,7 +224,7 @@ def register_admin(admin_data: AdminCreate, db: Session = Depends(get_db)):
         db.add(new_user)
 
         new_admin = Administrator(
-            numero_empleado=nuevo_numero_empleado,
+            numero_empleado=new_employee_number,
             nombre=admin_data.nombre,
             apellido_paterno=admin_data.apellido_paterno,
             apellido_materno=admin_data.apellido_materno,
@@ -234,18 +234,18 @@ def register_admin(admin_data: AdminCreate, db: Session = Depends(get_db)):
         )
         db.add(new_admin)
 
-        nombreCompleto = admin_data.nombre + " " + admin_data.apellido_paterno + " " +  admin_data.apellido_materno
+        full_name = admin_data.nombre + " " + admin_data.apellido_paterno + " " +  admin_data.apellido_materno
 
         log_audit_event(
             db=db,
             user_identifier=admin_data.usuario_id,
             action="CREATE",
             entity_name="administrators",
-            entity_id=nuevo_numero_empleado,
+            entity_id=new_employee_number,
             old_values=None,
             new_values={
-                "numero_empleado": nuevo_numero_empleado,
-                "nombre": nombreCompleto,
+                "numero_empleado": new_employee_number,
+                "nombre": full_name,
                 "email personal": admin_data.email_personal,
                 "email institucional": admin_data.email_institucional,
             }
@@ -254,15 +254,15 @@ def register_admin(admin_data: AdminCreate, db: Session = Depends(get_db)):
         db.commit()
 
         try:
-            remitente = "sesacorp10@gmail.com"
-            password_aplicacion = "enecpjvwkoseedip"
+            sender_email = "sesacorp10@gmail.com"
+            app_password = "enecpjvwkoseedip"
 
             msg = MIMEMultipart()
-            msg['From'] = remitente
+            msg['From'] = sender_email
             msg['To'] = admin_data.email_personal
             msg['Subject'] = "¡Bienvenido a SESA! Cuenta de Administrador Creada"
 
-            cuerpo_html = f"""
+            html_body = f"""
             <!DOCTYPE html>
             <html>
             <body style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f4f7f6; margin: 0; padding: 20px;">
@@ -274,7 +274,7 @@ def register_admin(admin_data: AdminCreate, db: Session = Depends(get_db)):
                         <h2 style="margin-top: 0; font-size: 20px; color: #111827;">¡Hola, {admin_data.nombre}!</h2>
                         <p style="font-size: 16px;">Se ha creado tu cuenta de administrador exitosamente.</p>
                         <div style="background-color: #f8fafc; border-left: 5px solid #1A237E; padding: 20px; margin: 30px 0;">
-                            <p style="margin: 8px 0; font-size: 16px;"><strong>ID Empleado:</strong> {nuevo_numero_empleado}</p>
+                            <p style="margin: 8px 0; font-size: 16px;"><strong>ID Empleado:</strong> {new_employee_number}</p>
                             <p style="margin: 8px 0; font-size: 16px;"><strong>Contraseña temporal:</strong> {raw_password}</p>
                         </div>
                     </div>
@@ -282,11 +282,11 @@ def register_admin(admin_data: AdminCreate, db: Session = Depends(get_db)):
             </body>
             </html>
             """
-            msg.attach(MIMEText(cuerpo_html, 'html'))
+            msg.attach(MIMEText(html_body, 'html'))
             server = smtplib.SMTP('smtp.gmail.com', 587)
             server.starttls()
-            server.login(remitente, password_aplicacion)
-            server.sendmail(remitente, admin_data.email_personal, msg.as_string())
+            server.login(sender_email, app_password)
+            server.sendmail(sender_email, admin_data.email_personal, msg.as_string())
             server.quit()
         except Exception:
             pass

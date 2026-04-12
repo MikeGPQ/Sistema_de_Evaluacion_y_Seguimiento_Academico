@@ -24,7 +24,7 @@ def validate_pagination(page: int, page_size: int):
 
 
 @router.get("/materias/recepcion")
-def get_materias(
+def get_subjects(
     page: int = Query(1, ge=1),
     page_size: int = Query(50, ge=1, le=100),
     db: Session = Depends(get_db),
@@ -52,7 +52,7 @@ def get_materias(
 
 
 @router.get("/grupos/recepcion")
-def get_grupos(
+def get_groups(
     page: int = Query(1, ge=1),
     page_size: int = Query(50, ge=1, le=100),
     db: Session = Depends(get_db),
@@ -75,7 +75,7 @@ def get_grupos(
 
 
 @router.get("/asignaciones/recepcion")
-def get_asignaciones(
+def get_assignments(
     materia_id: Optional[int] = Query(None),
     grupo_id: Optional[int] = Query(None),
     periodo_id: Optional[int] = Query(None),
@@ -84,10 +84,10 @@ def get_asignaciones(
     db: Session = Depends(get_db),
 ):
     if materia_id is not None and grupo_id is not None:
-        return _promedio_consolidado(materia_id, grupo_id, db)
+        return _consolidated_average(materia_id, grupo_id, db)
 
     if grupo_id is not None and periodo_id is not None:
-        return _incumplimientos(grupo_id, periodo_id, page, page_size, db)
+        return _missing_assignments(grupo_id, periodo_id, page, page_size, db)
 
     raise HTTPException(
         status_code=400,
@@ -95,8 +95,8 @@ def get_asignaciones(
     )
 
 
-def _promedio_consolidado(materia_id: int, grupo_id: int, db: Session):
-    asignacion = (
+def _consolidated_average(materia_id: int, grupo_id: int, db: Session):
+    assignment = (
         db.query(AcademicGroup)
         .filter(
             AcademicGroup.subject_id == materia_id,
@@ -104,18 +104,18 @@ def _promedio_consolidado(materia_id: int, grupo_id: int, db: Session):
         )
         .first()
     )
-    if not asignacion:
+    if not assignment:
         raise HTTPException(status_code=404, detail="Asignación no encontrada")
 
-    promedio = float(asignacion.promedio_consolidado) if asignacion.promedio_consolidado is not None else None
+    promedio = float(assignment.promedio_consolidado) if assignment.promedio_consolidado is not None else None
 
     return {
-        "id_asignacion": asignacion.id,
+        "id_asignacion": assignment.id,
         "promedio_consolidado": promedio,
     }
 
 
-def _incumplimientos(
+def _missing_assignments(
     grupo_id: int, periodo_id: int, page: int, page_size: int, db: Session
 ):
     query = (

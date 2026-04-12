@@ -27,24 +27,24 @@ from app.models.assignment_schedule import AssignmentSchedule
 
 router = APIRouter(prefix="/asistencia", tags=["Asistencia Docente"])
 
-class CambioAsistencia(BaseModel):
+class AttendanceChange(BaseModel):
     matricula: str
     fecha: date
     estado: str 
     notas_justificacion: Optional[str] = None 
 
-class ObservacionAlumno(BaseModel):
+class StudentObservation(BaseModel):
     matricula: str
     observaciones: Optional[str] = None
 
-class GuardarCambiosRequest(BaseModel):
+class SaveChangesRequest(BaseModel):
     academic_group_id: int
     periodo: str = "2026-1"
-    cambios: List[CambioAsistencia]
-    observaciones_alumnos: List[ObservacionAlumno] = [] 
+    cambios: List[AttendanceChange]
+    observaciones_alumnos: List[StudentObservation] = [] 
     usuario_id: Optional[str] = "Sistema"
 
-ESTADOS_DB = { "P": "asistencia", "F": "falta", "R": "retardo", "J": "justificado" }
+STATUS_DB = { "P": "asistencia", "F": "falta", "R": "retardo", "J": "justificado" }
 
 def calcular_fechas_clase_v3(schedules, fecha_inicio: date, fecha_fin: date) -> List[str]:
     if not schedules or not fecha_inicio or not fecha_fin: return []
@@ -59,12 +59,12 @@ def calcular_fechas_clase_v3(schedules, fecha_inicio: date, fecha_fin: date) -> 
     return fechas
 
 @router.get("/periodos")
-def obtener_periodos(db: Session = Depends(get_db)):
+def get_periods(db: Session = Depends(get_db)):
     periodos = db.query(AcademicPeriod).order_by(AcademicPeriod.id.desc()).all()
     return [{"id": p.codigo, "label": p.codigo, "is_active": p.is_active} for p in periodos]
 
 @router.get("/mis-grupos")
-def obtener_grupos_docente(periodo: str, num_empleado: str = "", teacher_id: str = "", db: Session = Depends(get_db)):
+def get_teacher_groups(periodo: str, num_empleado: str = "", teacher_id: str = "", db: Session = Depends(get_db)):
     teacher = None
     if num_empleado:
         teacher = db.query(Teacher).filter(Teacher.matricula_empleado == num_empleado).first()
@@ -97,7 +97,7 @@ def obtener_grupos_docente(periodo: str, num_empleado: str = "", teacher_id: str
     return respuesta
 
 @router.get("/grupo/{grupo_id}")
-def obtener_alumnos_grupo(grupo_id: int, periodo: str, db: Session = Depends(get_db)):
+def get_group_students(grupo_id: int, periodo: str, db: Session = Depends(get_db)):
     grupo = db.query(AcademicGroup).filter(AcademicGroup.id == grupo_id).first()
     if not grupo:
         raise HTTPException(status_code=404, detail="Grupo no encontrado")
@@ -155,7 +155,7 @@ def obtener_alumnos_grupo(grupo_id: int, periodo: str, db: Session = Depends(get
     }
 
 @router.post("/guardar")
-def guardar_cambios_asistencia(datos: GuardarCambiosRequest, request: Request, db: Session = Depends(get_db)):
+def save_attendance_changes(datos: SaveChangesRequest, request: Request, db: Session = Depends(get_db)):
     grupo = db.query(AcademicGroup).filter(AcademicGroup.id == datos.academic_group_id).first()
     if not grupo or grupo.estatus_acta == 'CERRADA':
         raise HTTPException(status_code=403, detail="El acta está cerrada. No se permiten modificaciones.")
@@ -177,7 +177,7 @@ def guardar_cambios_asistencia(datos: GuardarCambiosRequest, request: Request, d
             enroll_id = mapa_enrollments.get(cambio.matricula)
             if not enroll_id: continue
             
-            estado_bd = ESTADOS_DB.get(cambio.estado, "asistencia")
+            estado_bd = STATUS_DB.get(cambio.estado, "asistencia")
             registro_existente = db.query(AttendanceRecord).filter(
                 AttendanceRecord.enrollment_id == enroll_id, 
                 AttendanceRecord.fecha_clase == cambio.fecha
@@ -307,7 +307,7 @@ def get_student_attendance(student_id: str, period: str, db: Session = Depends(g
     return list(materias_fusionadas.values())
 
 @router.get("/reporte/filtros")
-def obtener_filtros_reporte(db: Session = Depends(get_db)):
+def get_report_filters(db: Session = Depends(get_db)):
     periodo = db.query(AcademicPeriod).filter(AcademicPeriod.is_active == True).first()
     if not periodo:
         raise HTTPException(status_code=404, detail="No hay periodo activo")
@@ -360,7 +360,7 @@ def obtener_filtros_reporte(db: Session = Depends(get_db)):
 
 
 @router.get("/reporte/materias-grupos")
-def obtener_materias_grupos(
+def get_subject_groups(
     nivel_academico: Optional[str] = None,
     carrera_id: Optional[int] = None,
     tronco_comun: Optional[bool] = None,
@@ -412,7 +412,7 @@ def obtener_materias_grupos(
 
 
 @router.get("/reporte")
-def generar_reporte_asistencia(
+def generate_attendance_report(
     carrera_id: Optional[int] = None,
     cuatrimestre: Optional[int] = None,
     grupo_id: Optional[int] = None,

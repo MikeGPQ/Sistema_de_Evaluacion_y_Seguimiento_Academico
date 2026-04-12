@@ -118,8 +118,7 @@ const ChangePassword = () => {
     setLoading(true);
     try {
       if (isAdminUnlock) {
-        const userStorage = localStorage.getItem('user');
-        const currentAdminId = userStorage ? JSON.parse(userStorage).identifier : 'Sistema';
+        const currentAdminId = user?.identifier || 'Sistema';
 
         await client.put("/auth/admin-force-password", {
           identifier: targetUser,

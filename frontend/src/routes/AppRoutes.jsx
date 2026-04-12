@@ -8,31 +8,31 @@ import ChangePassword from "../pages/ChangePassword";
 import RecoverPassword from "../pages/RecoverPassword";
 
 // Admin
-import ImportarAlumnos from "../pages/Alumnos/ImportarAlumnos";
-import ListadoAlumnos from "../pages/Alumnos/ListadoAlumnos";
-import CambiarEstatusAlumno from "../pages/Alumnos/CambiarEstatusAlumno";
-import GruposYHorarios from "../pages/GruposyHorarios/GrupoyHorarios";
-import MiHorario from "../pages/Alumnos/MiHorario";
-import StudentAttendance from '../pages/Alumnos/StudentAttendance'; 
-import MiCargaAcademica from "../pages/GruposyHorarios/MiCargaAcademica"; 
+import ImportStudents from "../pages/Students/ImportStudents";
+import StudentList from "../pages/Students/StudentList";
+import ChangeStudentStatus from "../pages/Students/ChangeStudentStatus";
+import GroupAndSchedule from "../pages/GroupsAndSchedules/GroupAndSchedule";
+import MySchedule from "../pages/Students/MySchedule";
+import StudentAttendance from '../pages/Students/StudentAttendance'; 
+import MyAcademicGroups from "../pages/GroupsAndSchedules/MyAcademicGroups"; 
 
 // Super Admin
-import ListadoAdministradores from "../pages/Administradores/ListadoAdministradores";
-import AuditLogs from "../pages/Administradores/AuditLogs";
-import Boletas from "../pages/Administradores/Boletas";
-import SincronizacionSigad from "../pages/Administradores/SincronizacionSigad";
+import AdministratorList from "../pages/Administrators/AdministratorList";
+import AuditLogs from "../pages/Administrators/AuditLogs";
+import GradeSlips from "../pages/Administrators/GradeSlips";
+import SigadSync from "../pages/Administrators/SigadSync";
 
 // Docentes
-import Calificaciones from "../pages/Docentes/Calificaciones";
-import ReportesDocente from "../pages/Docentes/ReportCards";
+import Grades from "../pages/Teachers/Grades";
+import ReportCards from "../pages/Teachers/ReportCards";
 
 // Layouts
 import AdminLayout from "../layouts/AdminLayout";
-import AlumnoLayout from "../layouts/AlumnoLayout";
-import DocenteLayout from "../layouts/DocenteLayout";
-import MisCalificaciones from "../pages/Alumnos/MisCalificaciones";
+import StudentLayout from "../layouts/StudentLayout";
+import TeacherLayout from "../layouts/TeacherLayout";
+import MyGrades from "../pages/Students/MyGrades";
 // Docente
-import AsistenciaDocente from "../pages/Docentes/AsistenciaDocente";
+import TeacherAttendance from "../pages/Teachers/TeacherAttendance";
 
 const ProtectedRoute = ({ children, allowedRoles }) => {
   const { isAuthenticated, user, loading } = useAuth();
@@ -97,33 +97,33 @@ const AppRoutes = () => {
         {/* ADMIN & SUPER ADMIN */}
         <Route element={<ProtectedRoute allowedRoles={["admin", "super_admin"]}><AdminLayout /></ProtectedRoute>}>
           
-          <Route path="/boletas" element={<Boletas />} />
-          <Route path="/alumnos/listado" element={<ListadoAlumnos />} />
-          <Route path="/alumnos/importar" element={<ImportarAlumnos />} />
-          <Route path="/alumnos/cambiar-estatus" element={<CambiarEstatusAlumno />} />
-          <Route path="/horarios" element={<GruposYHorarios />} />
+          <Route path="/boletas" element={<GradeSlips />} />
+          <Route path="/alumnos/listado" element={<StudentList />} />
+          <Route path="/alumnos/importar" element={<ImportStudents />} />
+          <Route path="/alumnos/cambiar-estatus" element={<ChangeStudentStatus />} />
+          <Route path="/horarios" element={<GroupAndSchedule />} />
           <Route path="/reportes/asistencia" element={<ReporteAsistencia />} />
         </Route>
         {/* SUPER ADMIN */}
         <Route element={<ProtectedRoute allowedRoles={["super_admin"]}><AdminLayout /></ProtectedRoute>}>
-          <Route path="/administradores/listado" element={<ListadoAdministradores />} />
+          <Route path="/administradores/listado" element={<AdministratorList />} />
           <Route path="/admin/audit-logs" element={<AuditLogs />} />
-          <Route path="/admin/sincronizacion-sigad" element={<SincronizacionSigad />} />
+          <Route path="/admin/sincronizacion-sigad" element={<SigadSync />} />
         </Route>
         
         {/* DOCENTE */}
-        <Route path="/docente" element={<ProtectedRoute allowedRoles={["docente"]}><DocenteLayout /></ProtectedRoute>}>
-          <Route path="pase-lista" element={<AsistenciaDocente />} />
-          <Route path="calificaciones" element={<Calificaciones />} />
-         <Route path="actas" element={<ReportesDocente />} />
+        <Route path="/docente" element={<ProtectedRoute allowedRoles={["docente"]}><TeacherLayout /></ProtectedRoute>}>
+          <Route path="pase-lista" element={<TeacherAttendance />} />
+          <Route path="calificaciones" element={<Grades />} />
+         <Route path="actas" element={<ReportCards />} />
         </Route>
 
          {/* ALUMNO */}
-        <Route path="/alumno" element={<ProtectedRoute allowedRoles={["alumno"]}><AlumnoLayout /></ProtectedRoute>}>
-          <Route path="horario" element={<MiHorario />} />
-          <Route path="calificaciones" element={<MisCalificaciones />} />
+        <Route path="/alumno" element={<ProtectedRoute allowedRoles={["alumno"]}><StudentLayout /></ProtectedRoute>}>
+          <Route path="horario" element={<MySchedule />} />
+          <Route path="calificaciones" element={<MyGrades />} />
           <Route path="asistencias" element={<StudentAttendance />} />
-          <Route path="carga-academica" element={<MiCargaAcademica />} />
+          <Route path="carga-academica" element={<MyAcademicGroups />} />
         </Route>
 
         {/* ROOT */}

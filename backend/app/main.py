@@ -8,20 +8,16 @@ from sqlalchemy import text
 from app.db.database import engine
 from app.routers import (
     students,
-    Listados as listados,
     auth,
     enrollments,
-    catalogos,
-    administradores,
     files as files_router,
     grades,
     attendance,
     logs,
     reportcards,
-    boletas,
-    api_salida_router,
     sync_router,
 )
+from .routers import administrators, api_output_router, catalogs, grade_slips, lists as listados
 
 load_dotenv()
 
@@ -65,18 +61,18 @@ app.add_middleware(
 )
 
 app.include_router(auth.router)
-app.include_router(administradores.router)
+app.include_router(administrators.router)
 app.include_router(students.router)
 app.include_router(listados.router)
-app.include_router(catalogos.router)
+app.include_router(catalogs.router)
 app.include_router(enrollments.router)
 app.include_router(grades.router)
 app.include_router(attendance.router)
 app.include_router(reportcards.router)
-app.include_router(boletas.router)
+app.include_router(grade_slips.router)
 app.include_router(files_router.router)
 app.include_router(logs.router)
-app.include_router(api_salida_router.router)
+app.include_router(api_output_router.router)
 app.include_router(sync_router.router)
 
 

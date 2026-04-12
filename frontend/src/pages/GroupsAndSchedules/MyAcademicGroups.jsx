@@ -14,7 +14,7 @@ const timeToMinutes = (t) => {
   return parseInt(h) * 60 + parseInt(m);
 };
 
-const MiCargaAcademica = () => {
+const MyAcademicGroups = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
   const [cargando, setCargando] = useState(true);
@@ -526,4 +526,4 @@ const MiCargaAcademica = () => {
   );
 };
 
-export default MiCargaAcademica;
+export default MyAcademicGroups;

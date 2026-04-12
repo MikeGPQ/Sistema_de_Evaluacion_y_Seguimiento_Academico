@@ -54,7 +54,7 @@ const getAverage = (p1, p2, p3, gradeValues) => {
 const normalize = (v) => (v === null || v === undefined ? '' : v);
 
 // ─── Component ─────────────────────────────────────────────
-const Calificaciones = () => {
+const Grades = () => {
   const { user } = useAuth();
 
   const [gradeValues, setGradeValues] = useState([]);
@@ -590,4 +590,4 @@ const Calificaciones = () => {
   );
 };
 
-export default Calificaciones;
+export default Grades;

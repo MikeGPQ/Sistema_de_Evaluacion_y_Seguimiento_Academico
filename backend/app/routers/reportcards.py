@@ -14,7 +14,7 @@ from app.models.student import Student
 from app.models.student_period_gpa import StudentPeriodGpa
 from app.services.audit_service import log_audit_event
 from sqlalchemy import func, case
-from app.services.promotion_service import procesar_promocion_automatica
+from app.services.promotion_service import process_automatic_promotion
 
 router = APIRouter(tags=["Generación de Actas"])
 
@@ -35,86 +35,86 @@ DIAS_MAP = {1: "Lunes", 2: "Martes", 3: "Miércoles", 4: "Jueves", 5: "Viernes",
 
 # endpoint para obtener la lista de grupos asignados a un docente especifico
 @router.get("/docentes/{docente_id}/grupos")
-def obtener_grupos_docente(docente_id: str, db: Session = Depends(get_db)):
+def get_teacher_groups(docente_id: str, db: Session = Depends(get_db)):
     # buscamos al docente por matricula
-    docente = db.query(Teacher).filter(Teacher.matricula_empleado == docente_id).first()
+    teacher = db.query(Teacher).filter(Teacher.matricula_empleado == docente_id).first()
     
     # si no se encuentra por matricula, intentamos buscarlo por id
-    if not docente:
+    if not teacher:
         try:
-            docente = db.query(Teacher).filter(Teacher.id == int(docente_id)).first()
+            teacher = db.query(Teacher).filter(Teacher.id == int(docente_id)).first()
         except ValueError:
             pass
             
-    if not docente:
+    if not teacher:
         raise HTTPException(status_code=404, detail="Docente no encontrado en la base de datos.")
 
     # obtenemos el periodo academico que se encuentra activo actualmente
-    periodo_actual = db.query(AcademicPeriod).filter(AcademicPeriod.is_active == True).first()
+    active_period = db.query(AcademicPeriod).filter(AcademicPeriod.is_active == True).first()
     
-    if not periodo_actual:
+    if not active_period:
         return []
 
     # filtro para buscar los grupos asignados a este docente en el periodo activo
-    grupos_db = db.query(AcademicGroup).filter(
-        AcademicGroup.teacher_id == docente.id,
-        AcademicGroup.period_id == periodo_actual.id
+    groups_db = db.query(AcademicGroup).filter(
+        AcademicGroup.teacher_id == teacher.id,
+        AcademicGroup.period_id == active_period.id
     ).all()
 
-    resultados = []
+    results = []
     # iteramos sobre los grupos para formatear la respuesta
-    for g in grupos_db:
+    for g in groups_db:
         # contamos el total de alumnos inscritos en cada grupo
-        total_alumnos = db.query(StudentEnrollment).filter(StudentEnrollment.academic_group_id == g.id).count()
-        resultados.append({
+        total_students = db.query(StudentEnrollment).filter(StudentEnrollment.academic_group_id == g.id).count()
+        results.append({
             "id": g.id,
             "materia_nombre": g.subject.nombre if g.subject else "Sin Materia",
             "identificador": g.sigad_group.identificador if g.sigad_group else str(g.id),
             "acta_status": g.estatus_acta.lower() if g.estatus_acta else "abierta",
-            "total_alumnos": total_alumnos
+            "total_alumnos": total_students
         })
         
-    return resultados
+    return results
 
 # endpoint para validar el estatus del acta y obtener la lista de alumnos con sus calificaciones
 @router.get("/actas/{grupo_id}/validar")
-def validar_acta_grupo(grupo_id: int, db: Session = Depends(get_db)):
+def validate_group_record(grupo_id: int, db: Session = Depends(get_db)):
     # buscamos el grupo especifico en la base de datos
-    grupo = db.query(AcademicGroup).filter(AcademicGroup.id == grupo_id).first()
+    group = db.query(AcademicGroup).filter(AcademicGroup.id == grupo_id).first()
     
-    if not grupo:
+    if not group:
         raise HTTPException(status_code=404, detail="Grupo académico no encontrado.")
 
     # extraemos la informacion relacional del grupo
-    materia = grupo.subject
-    docente = grupo.teacher
+    materia = group.subject
+    teacher = group.teacher
     programa = materia.career if materia else None
-    periodo = grupo.period
+    periodo = group.period
 
     # extraemos el cuatrimestre correspondiente a la materia
     cuatrimestre_val = materia.quarter.external_id if materia and getattr(materia, 'quarter', None) else getattr(materia, 'quarter_id', 1)
 
     # obtenemos todas las inscripciones de los alumnos a este grupo
-    inscripciones = db.query(StudentEnrollment).filter(StudentEnrollment.academic_group_id == grupo_id).all()
+    enrollments = db.query(StudentEnrollment).filter(StudentEnrollment.academic_group_id == grupo_id).all()
     
-    alumnos = []
+    students = []
     # iteramos sobre las inscripciones para extraer datos del alumno y su calificacion
-    for insc in inscripciones:
+    for insc in enrollments:
         st = insc.student
-        nombre_formateado = f"{st.apellido_paterno} {st.apellido_materno or ''}, {st.nombre}".strip() if st else "Desconocido"
+        formatted_name = f"{st.apellido_paterno} {st.apellido_materno or ''}, {st.nombre}".strip() if st else "Desconocido"
         
-        alumnos.append({
+        students.append({
             "matricula": insc.student_matricula,
-            "nombre": nombre_formateado,
+            "nombre": formatted_name,
             "calificacion_final": insc.calificacion_final
         })
 
     # ordenamos la lista de alumnos alfabeticamente por su nombre completo
-    alumnos.sort(key=lambda x: x['nombre'])
+    students.sort(key=lambda x: x['nombre'])
 
     # calculamos si todos los alumnos inscritos ya tienen calificacion capturada
-    total_inscritos = len(alumnos)
-    total_calificados = sum(1 for a in alumnos if a['calificacion_final'] is not None)
+    total_inscritos = len(students)
+    total_calificados = sum(1 for a in students if a['calificacion_final'] is not None)
     
     captura_completa = False
     # validacion para saber si la captura esta al 100%
@@ -127,17 +127,17 @@ def validar_acta_grupo(grupo_id: int, db: Session = Depends(get_db)):
         "campus": "San Francisco - Campeche",
         "cuatrimestre": cuatrimestre_val,
         "periodo": periodo.codigo if periodo else "Desconocido",
-        "grupo": grupo.sigad_group.identificador if grupo.sigad_group else str(grupo.id),
+        "grupo": group.sigad_group.identificador if group.sigad_group else str(group.id),
         "materia_nombre": materia.nombre if materia else "Sin Materia",
-        "docente_nombre": f"{docente.nombre} {docente.apellido_paterno}" if docente else "Sin Docente",
-        "acta_status": grupo.estatus_acta.lower() if grupo.estatus_acta else "abierta",
+        "docente_nombre": f"{teacher.nombre} {teacher.apellido_paterno}" if teacher else "Sin Docente",
+        "acta_status": group.estatus_acta.lower() if group.estatus_acta else "abierta",
         "captura_completa": captura_completa,
-        "alumnos": alumnos
+        "alumnos": students
     }
 
 # endpoint para cerrar de forma definitiva el acta oficial y procesar los promedios
 @router.post("/actas/{grupo_id}/cerrar")
-def cerrar_acta_oficial(grupo_id: int, payload: dict, background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
+def close_official_record(grupo_id: int, payload: dict, background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
     # extraemos el id del docente del payload para la auditoria
     docente_id = payload.get("docente_id", "Desconocido")
     
@@ -224,7 +224,7 @@ def cerrar_acta_oficial(grupo_id: int, payload: dict, background_tasks: Backgrou
         db.commit()
         
         # asigna a la cola de ejecucion asincrona el analisis de promocion despues del commit
-        background_tasks.add_task(procesar_promocion_automatica, grupo_id=grupo_id, db=db)
+        background_tasks.add_task(process_automatic_promotion, grupo_id=grupo_id, db=db)
         
         return {"message": "Acta cerrada exitosamente. Las calificaciones han sido congeladas."}
 
