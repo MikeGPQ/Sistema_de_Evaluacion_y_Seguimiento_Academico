@@ -48,7 +48,7 @@ function CellValue({ record, col, type, cambios }) {
   return <span>{displayValue}</span>;
 }
 
-const DetalleEntidadModal = ({ entityKey, entityLabel, data, columns, onClose, filter, setFilter }) => {
+const EntityDetailModal = ({ entityKey, entityLabel, data, columns, onClose, filter, setFilter }) => {
   const handleKeyDown = useCallback((e) => {
     if (e.key === 'Escape') onClose();
   }, [onClose]);
@@ -211,4 +211,4 @@ const DetalleEntidadModal = ({ entityKey, entityLabel, data, columns, onClose, f
   );
 };
 
-export default DetalleEntidadModal;
+export default EntityDetailModal;

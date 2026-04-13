@@ -29,7 +29,7 @@ const formatearFechaMes = (fechaStr) => {
   return `${parseInt(partes[2], 10)} ${meses[parseInt(partes[1], 10) - 1]}`;
 };
 
-const AsistenciaDocente = () => {
+const TeacherAttendance = () => {
   const { user } = useAuth(); 
   
   const [periodosOptions, setPeriodosOptions] = useState([]);
@@ -910,4 +910,4 @@ const handleExportPDF = () => {
   );
 };
 
-export default AsistenciaDocente;
+export default TeacherAttendance;

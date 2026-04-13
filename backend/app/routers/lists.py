@@ -15,7 +15,7 @@ from app.services.audit_service import log_audit_event
 
 router = APIRouter(prefix="/alumnos", tags=["Alumnos"])
 
-class AlumnoListado(BaseModel):
+class StudentListItem(BaseModel):
     matricula: str
     nombre_completo: str
     carrera: str
@@ -25,7 +25,7 @@ class AlumnoListado(BaseModel):
         from_attributes = True
 
 @router.get("/listado", response_model=dict)
-def listar_alumnos(
+def list_students(
     skip: int = 0,
     limit: int = 10,
     busqueda: str = None,
@@ -58,30 +58,30 @@ def listar_alumnos(
         query = query.filter(Student.matricula.in_(matriculas_filtradas))
 
     total = query.count()
-    alumnos_db = query.offset(skip).limit(limit).all()
+    students_db = query.offset(skip).limit(limit).all()
 
     data = []
-    for alumno in alumnos_db:
-        perfil_reciente = db.query(StudentAcademicProfile).filter(
-            StudentAcademicProfile.student_matricula == alumno.matricula
+    for student in students_db:
+        recent_profile = db.query(StudentAcademicProfile).filter(
+            StudentAcademicProfile.student_matricula == student.matricula
         ).order_by(StudentAcademicProfile.id.desc()).first()
 
-        carrera_nombre = "Sin Carrera"
-        estatus_nombre = "Sin Estatus"
+        career_name = "Sin Carrera"
+        status_name = "Sin Estatus"
 
-        if perfil_reciente:
-            if perfil_reciente.academic_program:
-                carrera_nombre = perfil_reciente.academic_program.name
-            if perfil_reciente.status:
-                estatus_nombre = perfil_reciente.status.name
+        if recent_profile:
+            if recent_profile.academic_program:
+                career_name = recent_profile.academic_program.name
+            if recent_profile.status:
+                status_name = recent_profile.status.name
 
-        nombre_completo = f"{alumno.nombre} {alumno.apellido_paterno} {alumno.apellido_materno or ''}".strip()
+        full_name = f"{student.nombre} {student.apellido_paterno} {student.apellido_materno or ''}".strip()
 
         data.append({
-            "matricula": alumno.matricula,
-            "nombre_completo": nombre_completo or "Sin Nombre",
-            "carrera": carrera_nombre,
-            "estatus": estatus_nombre
+            "matricula": student.matricula,
+            "nombre_completo": full_name or "Sin Nombre",
+            "carrera": career_name,
+            "estatus": status_name
         })
 
     return {
@@ -90,36 +90,36 @@ def listar_alumnos(
     }
 
 @router.put("/{matricula}/estatus")
-def cambiar_estatus(
+def change_status(
     matricula: str,
     status_id: int = Form(...),
     usuario_id: str = Form(None),
     evidence_file: UploadFile = File(None),
     db: Session = Depends(get_db)
 ):
-    alumno = db.query(Student).filter(Student.matricula == matricula).first()
-    if not alumno:
+    student = db.query(Student).filter(Student.matricula == matricula).first()
+    if not student:
         raise HTTPException(status_code=404, detail="Alumno no encontrado")
 
-    perfil = db.query(StudentAcademicProfile).filter(
+    profile = db.query(StudentAcademicProfile).filter(
         StudentAcademicProfile.student_matricula == matricula
     ).order_by(StudentAcademicProfile.id.desc()).first()
 
-    if not perfil:
+    if not profile:
         raise HTTPException(status_code=404, detail="El alumno no tiene un perfil académico activo")
 
-    nuevo_estatus = db.query(StudentStatus).filter(StudentStatus.id == status_id).first()
-    if not nuevo_estatus:
+    new_status = db.query(StudentStatus).filter(StudentStatus.id == status_id).first()
+    if not new_status:
         raise HTTPException(status_code=400, detail="Estatus no válido")
 
-    if nuevo_estatus.name in ('baja', 'baja_temporal') and not evidence_file:
-        estatus_actual = db.query(StudentStatus).filter(StudentStatus.id == perfil.status_id).first()
-        estatus_actual_es_baja = estatus_actual and estatus_actual.name in ('baja', 'baja_temporal')
-        log_con_evidencia = db.query(StudentStatusLog).filter(
-            StudentStatusLog.academic_profile_id == perfil.id,
+    if new_status.name in ('baja', 'baja_temporal') and not evidence_file:
+        current_status = db.query(StudentStatus).filter(StudentStatus.id == profile.status_id).first()
+        current_status_is_dropout = current_status and current_status.name in ('baja', 'baja_temporal')
+        evidence_log = db.query(StudentStatusLog).filter(
+            StudentStatusLog.academic_profile_id == profile.id,
             StudentStatusLog.evidence_file_id != None
         ).order_by(StudentStatusLog.id.desc()).first()
-        if not (estatus_actual_es_baja and log_con_evidencia):
+        if not (current_status_is_dropout and evidence_log):
             raise HTTPException(status_code=400, detail="Se requiere un archivo de evidencia para este estatus.")
 
     try:
@@ -136,42 +136,42 @@ def cambiar_estatus(
             db.flush()
             evidence_file_id = file_record.id
 
-        old_status_values = {"status_id": perfil.status_id}
-        status_id_anterior = perfil.status_id
+        old_status_values = {"status_id": profile.status_id}
+        status_id_anterior = profile.status_id
         
-        perfil.status_id = status_id
+        profile.status_id = status_id
 
-        inscripciones_borradas = []
-        if nuevo_estatus.name in ('baja', 'baja_temporal', 'egresado'):
-            inscripciones_viejas = db.query(StudentEnrollment).filter(
-                StudentEnrollment.academic_profile_id == perfil.id
+        removed_enrollments = []
+        if new_status.name in ('baja', 'baja_temporal', 'egresado'):
+            old_enrollments = db.query(StudentEnrollment).filter(
+                StudentEnrollment.academic_profile_id == profile.id
             ).all()
-            inscripciones_borradas = [insc.academic_group_id for insc in inscripciones_viejas]
+            removed_enrollments = [enrollment.academic_group_id for enrollment in old_enrollments]
 
             db.query(StudentEnrollment).filter(
-                StudentEnrollment.academic_profile_id == perfil.id
+                StudentEnrollment.academic_profile_id == profile.id
             ).delete()
 
-            if inscripciones_borradas:
+            if removed_enrollments:
                 log_audit_event(
                     db=db,
                     user_identifier=usuario_id,
                     action="DELETE",
                     entity_name="student_enrollments",
                     entity_id=matricula,
-                    old_values={"grupos_inscritos": inscripciones_borradas},
+                    old_values={"grupos_inscritos": removed_enrollments},
                     new_values=None
                 )
 
         if status_id_anterior != status_id or evidence_file_id is not None:
-            nuevo_log = StudentStatusLog(
-                academic_profile_id=perfil.id,
+            new_log = StudentStatusLog(
+                academic_profile_id=profile.id,
                 changed_by_user=usuario_id or "Sistema Desconocido",
                 previous_status_id=status_id_anterior,
                 new_status_id=status_id,
                 evidence_file_id=evidence_file_id
             )
-            db.add(nuevo_log)
+            db.add(new_log)
 
             log_audit_event(
                 db=db,
@@ -181,12 +181,12 @@ def cambiar_estatus(
                 entity_id=matricula, 
                 old_values=None,   
                 new_values={
-                    "evento": f"El estatus del alumno {matricula} cambió a: {nuevo_estatus.name.replace('_', ' ').capitalize()}"
+                    "evento": f"El estatus del alumno {matricula} cambió a: {new_status.name.replace('_', ' ').capitalize()}"
                 }
             )
 
         db.commit()
-        return {"message": "Estatus y Log actualizados correctamente. Si aplicaba, se liberaron sus materias.", "nuevo_estatus": nuevo_estatus.name}
+        return {"message": "Estatus y Log actualizados correctamente. Si aplicaba, se liberaron sus materias.", "nuevo_estatus": new_status.name}
     except HTTPException:
         raise
     except Exception as e:
@@ -194,16 +194,16 @@ def cambiar_estatus(
         raise HTTPException(status_code=500, detail=f"Error al actualizar estatus: {str(e)}")
 
 @router.get("/{matricula}/ultimo-log-estatus")
-def get_ultimo_log_estatus(matricula: str, db: Session = Depends(get_db)):
-    perfil = db.query(StudentAcademicProfile).filter(
+def get_last_status_log(matricula: str, db: Session = Depends(get_db)):
+    profile = db.query(StudentAcademicProfile).filter(
         StudentAcademicProfile.student_matricula == matricula
     ).order_by(StudentAcademicProfile.id.desc()).first()
 
-    if not perfil:
+    if not profile:
         return None
 
     log = db.query(StudentStatusLog).filter(
-        StudentStatusLog.academic_profile_id == perfil.id,
+        StudentStatusLog.academic_profile_id == profile.id,
         StudentStatusLog.evidence_file_id != None
     ).order_by(StudentStatusLog.changed_at.desc()).first()
 

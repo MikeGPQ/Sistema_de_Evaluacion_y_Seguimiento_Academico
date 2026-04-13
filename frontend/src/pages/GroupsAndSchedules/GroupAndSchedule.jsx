@@ -32,7 +32,7 @@ const normalizarDia = (str) => {
   return str ? str.toString().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim() : "";
 };
 
-const GruposYHorarios = () => {
+const GroupAndSchedule = () => {
   const { user } = useAuth();
   const [materiasAdelanto, setMateriasAdelanto] = useState([]);
   const navigate = useNavigate();
@@ -1008,4 +1008,4 @@ const verificarChoquesFront = (grupoEvaluar, seleccionActual) => {
   );
 };
 
-export default GruposYHorarios;
+export default GroupAndSchedule;

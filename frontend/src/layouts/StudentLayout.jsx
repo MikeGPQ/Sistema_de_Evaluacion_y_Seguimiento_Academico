@@ -19,7 +19,7 @@ const formatName = (name) => {
     .map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(" ");
 };
 
-const AlumnoLayout = () => {
+const StudentLayout = () => {
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const location = useLocation();
   const navigate = useNavigate();
@@ -204,4 +204,4 @@ const AlumnoLayout = () => {
   );
 };
 
-export default AlumnoLayout;
+export default StudentLayout;

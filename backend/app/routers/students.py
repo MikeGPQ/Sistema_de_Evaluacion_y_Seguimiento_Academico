@@ -112,24 +112,24 @@ def set_base_id(nueva_matricula: str = Form(...), db: Session = Depends(get_db))
 
 
 @router.get("/resumen-estatus", response_model=dict)
-def resumen_estatus_alumnos(db: Session = Depends(get_db)):
-    resultados = (
+def student_status_summary(db: Session = Depends(get_db)):
+    results = (
         db.query(StudentStatus.name, func.count(StudentAcademicProfile.id))
         .join(StudentAcademicProfile, StudentAcademicProfile.status_id == StudentStatus.id)
         .group_by(StudentStatus.name)
         .all()
     )
-    conteos = {nombre: total for nombre, total in resultados}
+    counts = {nombre: total for nombre, total in results}
     return {
-        "activo": conteos.get("activo", 0),
-        "baja": conteos.get("baja", 0),
-        "baja_temporal": conteos.get("baja_temporal", 0),
-        "egresado": conteos.get("egresado", 0),
+        "activo": counts.get("activo", 0),
+        "baja": counts.get("baja", 0),
+        "baja_temporal": counts.get("baja_temporal", 0),
+        "egresado": counts.get("egresado", 0),
     }
 
 
 @router.get("/listado", response_model=dict)
-def listar_alumnos(
+def list_students(
     skip: int = 0,
     limit: int = 10,
     busqueda: Optional[str] = Query(None, min_length=3, max_length=50, pattern=r"^[a-zA-Z0-9 áéíóúÁÉÍÓÚñÑ]+$"),
@@ -161,21 +161,21 @@ def listar_alumnos(
     query = query.distinct()
 
     total = query.count()
-    alumnos = query.offset(skip).limit(limit).all()
+    students = query.offset(skip).limit(limit).all()
 
     data = []
-    for alumno in alumnos:
-        perfil = db.query(StudentAcademicProfile).filter(
-            StudentAcademicProfile.student_matricula == alumno.matricula
+    for student in students:
+        profile = db.query(StudentAcademicProfile).filter(
+            StudentAcademicProfile.student_matricula == student.matricula
         ).order_by(StudentAcademicProfile.id.desc()).first()
 
-        carrera_nombre = perfil.career.name if perfil and perfil.career else "Sin Carrera"
-        estatus_nombre = perfil.status.name if perfil and perfil.status else "Sin Estatus"
-        nivel_nombre = perfil.nivel.name if perfil and getattr(perfil, 'nivel', None) else "Sin Nivel"
+        carrera_nombre = profile.career.name if profile and profile.career else "Sin Carrera"
+        estatus_nombre = profile.status.name if profile and profile.status else "Sin Estatus"
+        nivel_nombre = profile.nivel.name if profile and getattr(profile, 'nivel', None) else "Sin Nivel"
 
         data.append({
-            "matricula": alumno.matricula,
-            "nombre_completo": f"{alumno.nombre} {alumno.apellido_paterno} {alumno.apellido_materno or ''}".strip(),
+            "matricula": student.matricula,
+            "nombre_completo": f"{student.nombre} {student.apellido_paterno} {student.apellido_materno or ''}".strip(),
             "carrera": carrera_nombre,
             "estatus": estatus_nombre,
             "nivel_academico": nivel_nombre
@@ -197,17 +197,17 @@ def register_student(
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Error en datos: {str(e)}")
 
-    alumno_existente = db.query(Student).filter(Student.curp == student_in.curp).first()
-    es_nuevo_usuario = True
+    existing_student = db.query(Student).filter(Student.curp == student_in.curp).first()
+    is_new_user = True
     final_matricula = None
 
-    if alumno_existente:
+    if existing_student:
         if student_in.nivel_id == 2:
-            final_matricula = alumno_existente.matricula
-            es_nuevo_usuario = False
-            alumno_existente.nombre = student_in.nombre
-            alumno_existente.apellido_paterno = student_in.apellido_paterno
-            alumno_existente.apellido_materno = student_in.apellido_materno
+            final_matricula = existing_student.matricula
+            is_new_user = False
+            existing_student.nombre = student_in.nombre
+            existing_student.apellido_paterno = student_in.apellido_paterno
+            existing_student.apellido_materno = student_in.apellido_materno
         else:
             raise HTTPException(status_code=400, detail="Esta CURP ya se encuentra registrada en otra Licenciatura.")
     else:
@@ -227,7 +227,7 @@ def register_student(
 
     try:
         foto_file_id = None
-        if es_nuevo_usuario:
+        if is_new_user:
             if foto_perfil:
                 foto_content = foto_perfil.file.read()
                 foto_file = FileModel(
@@ -287,7 +287,7 @@ def register_student(
         db.add(new_profile)
 
         raw_pass = None
-        if es_nuevo_usuario:
+        if is_new_user:
             new_address = StudentAddress(
                 student_matricula=final_matricula,
                 calle=student_in.address.calle,
@@ -303,12 +303,12 @@ def register_student(
             raw_pass = ''.join(secrets.choice(alphabet) for _ in range(10))
             hashed_pw = get_password_hash(raw_pass)
 
-            alumno_role = db.query(Role).filter(Role.name == 'alumno').first()
+            student_role = db.query(Role).filter(Role.name == 'alumno').first()
             new_user = User(
                 identifier=final_matricula,
                 email=student_in.email_personal,
                 password_hash=hashed_pw,
-                role_id=alumno_role.id if alumno_role else 3,
+                role_id=student_role.id if student_role else 3,
                 is_temp_password=True
             )
             db.add(new_user)
@@ -360,7 +360,7 @@ def register_student(
 
         db.commit()
 
-        if es_nuevo_usuario and raw_pass:
+        if is_new_user and raw_pass:
             try:
                 remitente = "sesacorp10@gmail.com"
                 password_aplicacion = "enecpjvwkoseedip"
@@ -400,14 +400,14 @@ def register_student(
 
         mensaje_exito = (
             "Alumno y Perfil guardados correctamente"
-            if es_nuevo_usuario
+            if is_new_user
             else "Perfil de Maestría agregado a alumno existente (Regla 6.4)"
         )
         return {
             "status": "success",
             "message": mensaje_exito,
             "matricula": final_matricula,
-            "temporal_password": raw_pass if es_nuevo_usuario else "Mantiene su contraseña anterior"
+            "temporal_password": raw_pass if is_new_user else "Mantiene su contraseña anterior"
         }
 
     except Exception as e:
@@ -416,7 +416,7 @@ def register_student(
 
 
 @router.post("/importar")
-async def importar_alumnos(file: UploadFile = File(...), usuario_id: str = Form("Sistema"), db: Session = Depends(get_db)):
+async def import_students(file: UploadFile = File(...), usuario_id: str = Form("Sistema"), db: Session = Depends(get_db)):
     if not file.filename.endswith('.xlsx'):
         raise HTTPException(status_code=400, detail="Error: Solo se permiten archivos .xlsx")
 
@@ -428,10 +428,10 @@ async def importar_alumnos(file: UploadFile = File(...), usuario_id: str = Form(
     credenciales_generadas = []
     errores_validacion = []
 
-    alumno_role = db.query(Role).filter(Role.name == 'alumno').first()
-    todos_estatus = db.query(StudentStatus).all()
-    status_map = {s.name.lower(): s.id for s in todos_estatus}
-    periodo_activo = db.query(AcademicPeriod).filter(AcademicPeriod.is_active == True).first()
+    student_role = db.query(Role).filter(Role.name == 'alumno').first()
+    all_statuses = db.query(StudentStatus).all()
+    status_map = {s.name.lower(): s.id for s in all_statuses}
+    active_period = db.query(AcademicPeriod).filter(AcademicPeriod.is_active == True).first()
 
     regex_solo_letras = r'^[A-Za-záéíóúÁÉÍÓÚñÑüÜ\s]+$'
     regex_curp = r'^[A-Z]{4}\d{6}[HM][A-Z]{5}[A-Z0-9]\d$'
@@ -548,47 +548,47 @@ async def importar_alumnos(file: UploadFile = File(...), usuario_id: str = Form(
             continue
 
         try:
-            nuevo_alumno = Student(
+            new_student = Student(
                 matricula=matricula_str, nombre=nombre, apellido_paterno=ap_pat_limpio, apellido_materno=ap_mat_limpio,
                 curp=curp_str, email_personal=email_pers,
                 email_institucional=email_inst if email_inst and email_inst != 'nan' else None
             )
-            db.add(nuevo_alumno)
+            db.add(new_student)
             db.flush()
 
             estatus_excel = str(row.get('Estatus', 'activo')).strip().lower() if pd.notna(row.get('Estatus', 'activo')) else 'activo'
 
-            nuevo_perfil = StudentAcademicProfile(
+            new_profile = StudentAcademicProfile(
                 student_matricula=matricula_str,
                 nivel_id=1,
                 career_id=career.id,
                 origin_school_id=school.id,
-                period_id=periodo_activo.id if periodo_activo else 1,
+                period_id=active_period.id if active_period else 1,
                 sigad_group_id=grupo_sigad.id if grupo_sigad else None,
                 quarter_actual_id=quarter_obj.id if quarter_obj else cuat_val,
                 status_id=status_map.get(estatus_excel, 1),
                 promedio_procedencia=promedio_val
             )
-            db.add(nuevo_perfil)
+            db.add(new_profile)
 
             cp_str = str(row.get('Código Postal', '')).strip().replace('.0', '')
-            nueva_direccion = StudentAddress(
+            new_address = StudentAddress(
                 student_matricula=matricula_str, calle=str(row.get('Calle', '')).strip(),
                 numero_domicilio=str(row.get('Número de domicilio') or 'S/N'), colonia=str(row.get('Colonia', '')).strip(),
                 codigo_postal=cp_str, municipio=str(row.get('Municipio', '')).strip(), estado=str(row.get('Estado', 'Campeche')).strip()
             )
-            db.add(nueva_direccion)
+            db.add(new_address)
 
-            password_aleatoria = ''.join(secrets.choice(string.ascii_letters + string.digits) for _ in range(10))
-            nuevo_usuario = User(
-                identifier=matricula_str, email=email_pers, password_hash=pwd_context.hash(password_aleatoria),
-                role_id=alumno_role.id if alumno_role else 3, is_temp_password=True
+            random_password = ''.join(secrets.choice(string.ascii_letters + string.digits) for _ in range(10))
+            new_user = User(
+                identifier=matricula_str, email=email_pers, password_hash=pwd_context.hash(random_password),
+                role_id=student_role.id if student_role else 3, is_temp_password=True
             )
-            db.add(nuevo_usuario)
+            db.add(new_user)
 
             credenciales_generadas.append({
                 "nombre": f"{nombre} {ap_pat_limpio}", "usuario": matricula_str,
-                "password": password_aleatoria,
+                "password": random_password,
                 "correo": email_inst if email_inst and email_inst != 'nan' else email_pers
             })
             db.flush()
@@ -1148,7 +1148,7 @@ def inscribir_maestria(
     periodo_activo = db.query(AcademicPeriod).filter(AcademicPeriod.is_active == True).first()
     activo_status = db.query(StudentStatus).filter(StudentStatus.name == 'activo').first()
 
-    nuevo_perfil = StudentAcademicProfile(
+    new_profile = StudentAcademicProfile(
         student_matricula=matricula,
         nivel_id=2, 
         career_id=data_dict.get('career_id'),
@@ -1161,7 +1161,7 @@ def inscribir_maestria(
         folio_certificado=data_dict.get('folio_certificado'),
         estatus_titulacion_id=data_dict.get('titulation_status_id')
     )
-    db.add(nuevo_perfil)
+    db.add(new_profile)
 
     log_audit_event(
         db=db,
