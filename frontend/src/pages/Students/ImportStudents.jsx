@@ -10,7 +10,7 @@ import autoTable from 'jspdf-autotable';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../hooks/AuthContext';
 
-const ImportarAlumnos = () => {
+const ImportStudents = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
   const [datos, setDatos] = useState([]);
@@ -517,4 +517,4 @@ const ImportarAlumnos = () => {
   );
 };
 
-export default ImportarAlumnos;
+export default ImportStudents;

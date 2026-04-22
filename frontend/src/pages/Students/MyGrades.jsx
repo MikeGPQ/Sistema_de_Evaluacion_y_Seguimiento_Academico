@@ -5,7 +5,7 @@ import { useAuth } from '../../hooks/AuthContext';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 
-const MisCalificaciones = () => {
+const MyGrades = () => {
   const { user } = useAuth();
 
   const [calificaciones, setCalificaciones] = useState([]);
@@ -425,4 +425,4 @@ const MisCalificaciones = () => {
   );
 };
 
-export default MisCalificaciones;
+export default MyGrades;

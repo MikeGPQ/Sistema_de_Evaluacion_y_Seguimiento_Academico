@@ -15,17 +15,17 @@ from app.models.classroom import Classroom
 router = APIRouter(prefix="/catalogos", tags=["Catálogos"])
 
 @router.get("/estatus")
-def get_estatus(db: Session = Depends(get_db)):
+def get_status(db: Session = Depends(get_db)):
     estatus = db.query(StudentStatus).all()
     return [{"id": s.id, "name": s.name, "description": getattr(s, 'description', '')} for s in estatus]
 
 @router.get("/niveles-academicos")
-def get_niveles(db: Session = Depends(get_db)):
+def get_academic_levels(db: Session = Depends(get_db)):
     niveles = db.query(AcademicLevel).all()
     return [{"id": n.id, "name": n.name} for n in niveles]
 
 @router.get("/programas-academicos")
-def get_programas(nivel_id: int = None, db: Session = Depends(get_db)):
+def get_academic_programs(nivel_id: int = None, db: Session = Depends(get_db)):
     query = db.query(AcademicProgram)
     if nivel_id:
         nivel = db.query(AcademicLevel).filter(AcademicLevel.id == nivel_id).first()
@@ -35,7 +35,7 @@ def get_programas(nivel_id: int = None, db: Session = Depends(get_db)):
     return [{"id": p.id, "name": p.name, "nivel_academico": p.nivel_academico} for p in programas]
 
 @router.get("/periodos")
-def get_periodos(solo_activos: bool = False, db: Session = Depends(get_db)):
+def get_periods(solo_activos: bool = False, db: Session = Depends(get_db)):
     query = db.query(AcademicPeriod).order_by(AcademicPeriod.id.desc())
     if solo_activos:
         query = query.filter(AcademicPeriod.is_active == True)
@@ -43,7 +43,7 @@ def get_periodos(solo_activos: bool = False, db: Session = Depends(get_db)):
     return [{"id": p.id, "name": p.codigo, "is_active": p.is_active} for p in periodos]
 
 @router.get("/escuelas-procedencia")
-def get_escuelas(tipo: str = None, db: Session = Depends(get_db)):
+def get_schools(tipo: str = None, db: Session = Depends(get_db)):
     query = db.query(OriginSchool).filter(OriginSchool.is_active == True)
     if tipo:
         query = query.filter(OriginSchool.tipo == tipo)
@@ -51,16 +51,16 @@ def get_escuelas(tipo: str = None, db: Session = Depends(get_db)):
     return [{"id": e.id, "name": e.name, "tipo": getattr(e, 'tipo', '')} for e in escuelas]
 
 @router.get("/cuatrimestres")
-def get_cuatrimestres(db: Session = Depends(get_db)):
+def get_quarters(db: Session = Depends(get_db)):
     cuatrimestres = db.query(QuarterCatalog).order_by(QuarterCatalog.external_id.asc()).all()
     return [{"id": c.id, "numero": c.external_id, "nombre": c.nombre} for c in cuatrimestres]
 
 @router.get("/estatus-titulacion")
-def get_estatus_titulacion(db: Session = Depends(get_db)):
+def get_titulation_status(db: Session = Depends(get_db)):
     estatus = db.query(TitulationStatus).all()
     return [{"id": t.id, "name": t.name} for t in estatus]
 
 @router.get("/aulas")
-def get_aulas(db: Session = Depends(get_db)):
+def get_classrooms(db: Session = Depends(get_db)):
     aulas = db.query(Classroom).all()
     return [{"id": a.id, "nombre": a.nombre_codigo, "capacidad": a.capacidad} for a in aulas]

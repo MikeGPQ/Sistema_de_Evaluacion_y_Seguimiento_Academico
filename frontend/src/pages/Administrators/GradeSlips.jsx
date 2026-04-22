@@ -290,7 +290,7 @@ const BoletaCard = ({ boleta }) => (
 );
 
 
-const Boletas = () => {
+const GradeSlips = () => {
   const [modo, setModo] = useState('individual'); 
 
   const [busqueda, setBusqueda] = useState('');
@@ -661,4 +661,4 @@ const Boletas = () => {
   );
 };
 
-export default Boletas;
+export default GradeSlips;

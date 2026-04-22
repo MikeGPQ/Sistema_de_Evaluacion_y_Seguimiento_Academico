@@ -12,7 +12,7 @@ const STATUS_UI = {
     'baja':          { label: 'Baja',          desc: 'Baja definitiva del sistema',            color: 'text-red-600',    activeBg: 'bg-red-50 border-red-500',       Icon: XCircle },
 };
 
-const CambiarEstatusAlumno = () => {
+const ChangeStudentStatus = () => {
     const location = useLocation();
     const navigate = useNavigate();
     const { user } = useAuth();
@@ -234,4 +234,4 @@ const CambiarEstatusAlumno = () => {
     );
 };
 
-export default CambiarEstatusAlumno;
+export default ChangeStudentStatus;

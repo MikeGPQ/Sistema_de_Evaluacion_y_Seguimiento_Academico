@@ -19,7 +19,7 @@ import client from '../../lib/axios';
 import { useAuth } from '../../hooks/AuthContext';
 import AdminRegister from '../../components/form/AdminRegister'; 
 
-const ListadoAdministradores = () => {
+const AdministratorList = () => {
   const navigate = useNavigate();
   const { user } = useAuth(); 
 
@@ -338,4 +338,4 @@ const ListadoAdministradores = () => {
   );
 };
 
-export default ListadoAdministradores;
+export default AdministratorList;

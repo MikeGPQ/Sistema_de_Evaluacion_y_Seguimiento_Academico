@@ -11,7 +11,7 @@ import ManualRegister from '../../components/form/ManualRegister';
 import KardexModal from './KardexModal';
 import Swal from 'sweetalert2';
 
-const ListadoAlumnos = () => {
+const StudentList = () => {
   const navigate = useNavigate();
   const { user } = useAuth(); 
 
@@ -842,4 +842,4 @@ const handleSeleccionarCandidato = async (candidato) => {
   );
 };
 
-export default ListadoAlumnos;
+export default StudentList;

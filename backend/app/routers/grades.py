@@ -137,13 +137,13 @@ def bulk_update_grades(group_id: int, data: BulkGradeUpdateRequest, db: Session 
 
     teacher = db.query(Teacher).filter(Teacher.id == group.teacher_id).first()
     audit_identifier = teacher.matricula_empleado if teacher else str(data.docente_id)
-    cambios_realizados = 0
+    changes_count = 0
 
     id_to_numeric = {gv.id: gv.numeric_value for gv in db.query(GradeValue).all()}
     grade_values_map = {gv.id: gv.value for gv in db.query(GradeValue).all()}
 
-    old_cambios_list = []
-    new_cambios_list = []
+    old_changes_list = []
+    new_changes_list = []
 
     for student_data in data.students:
         enrollment = db.query(StudentEnrollment).filter(
@@ -156,10 +156,10 @@ def bulk_update_grades(group_id: int, data: BulkGradeUpdateRequest, db: Session 
 
         old_student_vals = []
         new_student_vals = []
-        hubo_cambio = False
+        has_change = False
 
         def process_parcial(num_parcial, target_score_id, target_status_code):
-            nonlocal hubo_cambio
+            nonlocal has_change
             attr_score = f'parcial_{num_parcial}_id'
             attr_status = f'status_parcial_{num_parcial}'
 
@@ -169,7 +169,7 @@ def bulk_update_grades(group_id: int, data: BulkGradeUpdateRequest, db: Session 
             target_status = target_status_code or "OE"
 
             if current_score_id != target_score_id or current_status != target_status:
-                hubo_cambio = True
+                has_change = True
                 
                 old_score_val = grade_values_map.get(current_score_id, 'S/C') if current_score_id else 'S/C'
                 new_score_val = grade_values_map.get(target_score_id, 'S/C') if target_score_id else 'S/C'
@@ -185,11 +185,11 @@ def bulk_update_grades(group_id: int, data: BulkGradeUpdateRequest, db: Session 
         process_parcial(2, student_data.parcial_2, student_data.status_parcial_2)
         process_parcial(3, student_data.parcial_3, student_data.status_parcial_3)
 
-        if hubo_cambio:
-            nombre_alumno = f"{enrollment.student.nombre} {enrollment.student.apellido_paterno}" if enrollment.student else student_data.student_matricula
-            old_cambios_list.append(f"{nombre_alumno} - {', '.join(old_student_vals)}")
-            new_cambios_list.append(f"{nombre_alumno} - {', '.join(new_student_vals)}")
-            cambios_realizados += 1
+        if has_change:
+            student_name = f"{enrollment.student.nombre} {enrollment.student.apellido_paterno}" if enrollment.student else student_data.student_matricula
+            old_changes_list.append(f"{student_name} - {', '.join(old_student_vals)}")
+            new_changes_list.append(f"{student_name} - {', '.join(new_student_vals)}")
+            changes_count += 1
 
         if student_data.parcial_1 is not None and student_data.parcial_2 is not None and student_data.parcial_3 is not None:
             n1 = id_to_numeric.get(student_data.parcial_1, 0)
@@ -202,7 +202,7 @@ def bulk_update_grades(group_id: int, data: BulkGradeUpdateRequest, db: Session 
             enrollment.calificacion_final = None
             enrollment.status = "cursando"
 
-    if cambios_realizados > 0:
+    if changes_count > 0:
         materia_nombre = group.subject.nombre if group.subject else "Sin Materia"
         identificador_grupo = group.sigad_group.identificador if group.sigad_group else str(group.id)
 
@@ -213,11 +213,11 @@ def bulk_update_grades(group_id: int, data: BulkGradeUpdateRequest, db: Session 
             entity_name="academic_groups", 
             entity_id=identificador_grupo,
             old_values={
-                "Alumnos modificados": old_cambios_list
+                "Alumnos modificados": old_changes_list
             },
             new_values={
                 "evento": f"Actualización de calificaciones para {materia_nombre}",
-                "Alumnos modificados": new_cambios_list
+                "Alumnos modificados": new_changes_list
             }
         )
 
@@ -225,5 +225,5 @@ def bulk_update_grades(group_id: int, data: BulkGradeUpdateRequest, db: Session 
 
     return {
         "message": "Calificaciones actualizadas y promedios calculados correctamente.",
-        "alumnos_modificados": cambios_realizados
+        "alumnos_modificados": changes_count
     }

@@ -14,16 +14,16 @@ const AuditLogs = () => {
   const [logs, setLogs] = useState([]);
   const [kpis, setKpis] = useState({ activos: 0, inactivos: 0 });
   const [total, setTotal] = useState(0);
-  const [cargando, setCargando] = useState(true);
+  const [loading, setLoading] = useState(true);
 
-  const [filtros, setFiltros] = useState({
-    usuario_id: '',
-    modulo: '',
-    fecha_desde: '',
-    fecha_hasta: ''
+  const [filters, setFilters] = useState({
+    user_id: '',
+    module: '',
+    start_date: '',
+    end_date: ''
   });
 
-  const MAPA_ACCIONES = {
+  const ACTION_MAP = {
     'CREATE': 'CREACIÓN',
     'UPDATE': 'ACTUALIZACIÓN',
     'DELETE': 'ELIMINACIÓN',
@@ -32,7 +32,7 @@ const AuditLogs = () => {
     'SYNC': 'SINCRONIZACIÓN'
   };
 
-  const MAPA_ENTIDADES = {
+  const ENTITY_MAP = {
     'students': 'Alumnos',
     'users': 'Usuarios / Autenticación',
     'administrators': 'Administradores',
@@ -46,8 +46,8 @@ const AuditLogs = () => {
     'sigad_synchronization': 'Sincronización SIGAD' 
   };
 
-  const traducirAccion = (accion) => MAPA_ACCIONES[accion] || accion;
-  const traducirEntidad = (entidad) => MAPA_ENTIDADES[entidad] || entidad;
+  const translate_action = (action) => ACTION_MAP[action] || action;
+  const translate_entity = (entity) => ENTITY_MAP[entity] || entity;
 
   const [paginacion, setPaginacion] = useState({ skip: 0, limit: 15 });
 
@@ -65,15 +65,15 @@ const AuditLogs = () => {
   ];
 
   const fetchLogs = async () => {
-    setCargando(true);
+    setLoading(true);
     try {
       const params = new URLSearchParams({
         skip: paginacion.skip,
         limit: paginacion.limit,
-        ...(filtros.usuario_id && { usuario_id: filtros.usuario_id }),
-        ...(filtros.modulo && { modulo: filtros.modulo }),
-        ...(filtros.fecha_desde && { fecha_desde: filtros.fecha_desde }),
-        ...(filtros.fecha_hasta && { fecha_hasta: filtros.fecha_hasta }),
+        ...(filters.user_id && { usuario_id: filters.user_id }),
+        ...(filters.module && { modulo: filters.module }),
+        ...(filters.start_date && { fecha_desde: filters.start_date }),
+        ...(filters.end_date && { fecha_hasta: filters.end_date }),
       });
 
       const response = await client.get(`/logs/listado?${params.toString()}`);
@@ -87,13 +87,19 @@ const AuditLogs = () => {
     } catch (error) {
       console.error("Error al obtener logs:", error);
     } finally {
-      setCargando(false);
+      setLoading(false);
     }
   };
 
-  const handleFilterChange = (e) => {
+const handleFilterChange = (e) => {
     const { name, value } = e.target;
-    setFiltros(prev => ({ ...prev, [name]: value }));
+    
+    let finalValue = value;
+    if (name === 'user_id') {
+      finalValue = value.replace(/\D/g, ''); 
+    }
+
+    setFilters(prev => ({ ...prev, [name]: finalValue }));
     setPaginacion(prev => ({ ...prev, skip: 0 })); 
   };
 
@@ -103,10 +109,10 @@ const AuditLogs = () => {
     }, 400); 
     
     return () => clearTimeout(timeoutId);
-  }, [paginacion.skip, paginacion.limit, filtros]);
+  }, [paginacion.skip, paginacion.limit, filters]);
 
-  const limpiarFiltros = () => {
-    setFiltros({ usuario_id: '', modulo: '', fecha_desde: '', fecha_hasta: '' });
+  const clearFilters = () => {
+    setFilters({ user_id: '', module: '', start_date: '', end_date: '' });
     setPaginacion(prev => ({ ...prev, skip: 0 }));
   };
 
@@ -455,7 +461,7 @@ const verDetalleJson = (oldValues, newValues, action) => {
     doc.text("Documento Oficial", pageWidth - 14, 24, { align: "right" });
 
     doc.setFontSize(9);
-    doc.text(`DESDE: ${filtros.fecha_desde}   HASTA: ${filtros.fecha_hasta}`, pageWidth - 14, 29, { align: "right" });
+    doc.text(`DESDE: ${filters.start_date}   HASTA: ${filters.end_date}`, pageWidth - 14, 29, { align: "right" });
 
     // 4. Línea separadora
     doc.setDrawColor(242, 169, 0); 
@@ -469,8 +475,8 @@ const verDetalleJson = (oldValues, newValues, action) => {
       new Date(log.created_at).toLocaleString(),
       log.user_identifier,
       log.user_role || 'SISTEMA',
-      traducirAccion(log.action), 
-      traducirEntidad(log.entity_name), 
+      translate_action(log.action), 
+      translate_entity(log.entity_name), 
       formatPdfDetails(log.old_values, log.new_values)
     ]);
 
@@ -504,10 +510,10 @@ const verDetalleJson = (oldValues, newValues, action) => {
       }
     });
 
-    doc.save(`Audit_Logs_${filtros.fecha_desde}_${filtros.fecha_hasta}.pdf`);
+    doc.save(`Audit_Logs_${filters.start_date}_${filters.end_date}.pdf`);
   };
 
-  const isPdfHabilitado = filtros.fecha_desde && filtros.fecha_hasta && logs.length > 0;
+  const isPdfHabilitado = filters.start_date && filters.end_date && logs.length > 0;
 
   return (
     <div className="min-h-screen bg-[#F8F9FA] p-6 font-sans">
@@ -546,27 +552,27 @@ const verDetalleJson = (oldValues, newValues, action) => {
         <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm mb-6 flex flex-wrap gap-4 items-end">
           <div className="flex flex-col flex-1 min-w-[150px]">
             <label className="text-[11px] font-bold text-gray-500 uppercase mb-1">ID Usuario</label>
-            <input type="text" name="usuario_id" value={filtros.usuario_id} onChange={handleFilterChange} placeholder="Ej. 20240001" className="px-3 py-2 border rounded-lg text-sm outline-none focus:ring-2 focus:ring-[#1A237E]" />
+            <input type="text" name="user_id" value={filters.user_id} onChange={handleFilterChange} placeholder="Ej. 20240001" className="px-3 py-2 border rounded-lg text-sm outline-none focus:ring-2 focus:ring-[#1A237E]" />
           </div>
           <div className="flex flex-col flex-1 min-w-[180px]">
             <label className="text-[11px] font-bold text-gray-500 uppercase mb-1">Módulo Afectado</label>
-            <select name="modulo" value={filtros.modulo} onChange={handleFilterChange} className="px-3 py-2 border rounded-lg text-sm outline-none focus:ring-2 focus:ring-[#1A237E] bg-white">
+            <select name="module" value={filters.module} onChange={handleFilterChange} className="px-3 py-2 border rounded-lg text-sm outline-none focus:ring-2 focus:ring-[#1A237E] bg-white">
               <option value="">Todos los módulos</option>
               {modulosDisponibles.map(m => <option key={m.id} value={m.id}>{m.label}</option>)}
             </select>
           </div>
           <div className="flex flex-col min-w-[140px]">
             <label className="text-[11px] font-bold text-gray-500 uppercase mb-1 flex items-center gap-1"><Calendar className="w-3 h-3"/> Desde</label>
-            <input type="date" name="fecha_desde" value={filtros.fecha_desde} onChange={handleFilterChange} className="px-3 py-2 border rounded-lg text-sm outline-none focus:ring-2 focus:ring-[#1A237E]" />
+            <input type="date" name="start_date" value={filters.start_date} onChange={handleFilterChange} className="px-3 py-2 border rounded-lg text-sm outline-none focus:ring-2 focus:ring-[#1A237E]" />
           </div>
           <div className="flex flex-col min-w-[140px]">
             <label className="text-[11px] font-bold text-gray-500 uppercase mb-1 flex items-center gap-1"><Calendar className="w-3 h-3"/> Hasta</label>
-            <input type="date" name="fecha_hasta" value={filtros.fecha_hasta} onChange={handleFilterChange} className="px-3 py-2 border rounded-lg text-sm outline-none focus:ring-2 focus:ring-[#1A237E]" />
+            <input type="date" name="end_date" value={filters.end_date} onChange={handleFilterChange} className="px-3 py-2 border rounded-lg text-sm outline-none focus:ring-2 focus:ring-[#1A237E]" />
           </div>
           
           <div className="flex gap-2">
-            <button onClick={limpiarFiltros} className="px-4 py-2 bg-gray-100 text-gray-600 font-bold rounded-lg text-sm hover:bg-gray-200 transition-colors">
-              Limpiar
+            <button onClick={clearFilters} className="px-4 py-2 bg-gray-100 text-gray-600 font-bold rounded-lg text-sm hover:bg-gray-200 transition-colors">
+              Clear
             </button>
             <button 
               onClick={exportarPDF} 
@@ -594,8 +600,8 @@ const verDetalleJson = (oldValues, newValues, action) => {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
-                {cargando ? (
-                  <tr><td colSpan="6" className="text-center py-10 text-gray-500 font-bold">Cargando registros...</td></tr>
+                {loading ? (
+                  <tr><td colSpan="6" className="text-center py-10 text-gray-500 font-bold">Loading records...</td></tr>
                 ) : logs.length === 0 ? (
                   <tr>
                     <td colSpan="6" className="text-center py-16">
@@ -615,11 +621,11 @@ const verDetalleJson = (oldValues, newValues, action) => {
                             log.action === 'CREATE' ? 'bg-green-100 text-green-700' : 
                             log.action === 'DELETE' ? 'bg-red-100 text-red-700' : 'bg-blue-100 text-blue-700'}`}
                         >
-                          {traducirAccion(log.action)}
+                          {translate_action(log.action)}
                         </span>
                       </td>
                       <td className="p-3 font-mono text-gray-600 text-xs">
-                        {traducirEntidad(log.entity_name)}
+                        {translate_entity(log.entity_name)}
                       </td>
                       <td className="p-3 text-center">
                         <button 
@@ -702,7 +708,7 @@ const verDetalleJson = (oldValues, newValues, action) => {
           )}
           
           {/* Paginación */}
-          {!cargando && total > 0 && (
+          {!loading && total > 0 && (
             <div className="p-4 border-t border-gray-200 bg-gray-50 flex justify-between items-center">
               <span className="text-xs font-bold text-gray-500">
                 Mostrando {paginacion.skip + 1} a {Math.min(paginacion.skip + paginacion.limit, total)} de {total} registros

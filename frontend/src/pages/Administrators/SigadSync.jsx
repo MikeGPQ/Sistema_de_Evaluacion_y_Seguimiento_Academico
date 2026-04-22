@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 import { RefreshCcw, AlertCircle, ChevronDown, ChevronUp, Database, UserPlus, Mail, MailX, ArrowRight } from 'lucide-react';
 import client from '../../lib/axios';
-import DetalleEntidadModal from './DetalleEntidadModal';
+import EntityDetailModal from "./EntityDetailModal";
+import { useAuth } from "../../hooks/AuthContext";
 
 export const LABEL_MAP = {
   classrooms: 'Aulas',
@@ -85,7 +86,8 @@ export const COLUMNS_MAP = {
   ],
 };
 
-const SincronizacionSigad = () => {
+const SigadSync = () => {
+  const { user } = useAuth(); 
   const [loading, setLoading] = useState(false);
   const [resultado, setResultado] = useState(null);
   const [error, setError] = useState(null);
@@ -102,8 +104,7 @@ const SincronizacionSigad = () => {
     setResultado(null);
     setError(null);
     try {
-      const userStorage = localStorage.getItem('user');
-      const currentAdminId = userStorage ? JSON.parse(userStorage).identifier : 'Sistema';
+      const currentAdminId = user?.identifier || 'Sistema';
 
       const res = await client.post('/api/sync/sigad', {
         usuario_id: currentAdminId
@@ -346,7 +347,7 @@ const SincronizacionSigad = () => {
       )}
 
       {modalEntity && resultado?.[modalEntity] && (
-        <DetalleEntidadModal
+        <EntityDetailModal
           entityKey={modalEntity}
           entityLabel={LABEL_MAP[modalEntity] || modalEntity}
           data={resultado[modalEntity]}
@@ -360,4 +361,4 @@ const SincronizacionSigad = () => {
   );
 };
 
-export default SincronizacionSigad;
+export default SigadSync;

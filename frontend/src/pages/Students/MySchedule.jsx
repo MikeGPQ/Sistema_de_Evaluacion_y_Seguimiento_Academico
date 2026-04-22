@@ -17,7 +17,7 @@ const HORAS_CLASE = [
 
 const DIAS_SEMANA = ["LUNES", "MARTES", "MIÉRCOLES", "JUEVES", "VIERNES", "SÁBADO"];
 
-const MiHorario = () => {
+const MySchedule = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
 
@@ -274,4 +274,4 @@ const MiHorario = () => {
   );
 };
 
-export default MiHorario;
+export default MySchedule;

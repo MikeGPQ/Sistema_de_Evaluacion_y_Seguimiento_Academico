@@ -19,7 +19,7 @@ const formatName = (name) => {
     .map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(" ");
 };
 
-const DocenteLayout = () => {
+const TeacherLayout = () => {
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const location = useLocation();
   const navigate = useNavigate();
@@ -189,4 +189,4 @@ const DocenteLayout = () => {
   );
 };
 
-export default DocenteLayout;
+export default TeacherLayout;

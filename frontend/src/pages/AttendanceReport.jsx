@@ -380,7 +380,12 @@ export default function ReporteAsistencia() {
   const getNivelLabel = () => {
     if (!nivelSeleccionado) return 'Todos los niveles';
     const nivel = filtrosData?.niveles?.find(n => n.name === nivelSeleccionado);
-    return nivel ? (nivel.name === 'licenciatura' ? 'Licenciatura' : 'Maestría') : nivelSeleccionado;
+    if (!nivel) return nivelSeleccionado;
+    
+    const nombreLower = nivel.name.toLowerCase();
+    return nombreLower === 'licenciatura' ? 'Licenciatura' : 
+           nombreLower === 'maestria' ? 'Maestría' : 
+           nivel.name;
   };
 
   const getProgramaLabel = () => {
@@ -471,15 +476,20 @@ export default function ReporteAsistencia() {
               >
                 Todos los niveles
               </div>
-              {(filtrosData?.niveles || []).map(nivel => (
-                <div
-                  key={nivel.id}
-                  onClick={() => handleNivelChange(nivel.name)}
-                  className={`px-4 py-3 text-sm cursor-pointer transition-colors border-b border-gray-50 last:border-none capitalize ${nivelSeleccionado === nivel.name ? 'bg-blue-50 text-[#1A237E] font-bold' : 'text-gray-700 hover:bg-gray-50'}`}
-                >
-                  {nivel.name === 'licenciatura' ? 'Licenciatura' : nivel.name === 'maestria' ? 'Maestría' : nivel.name}
-                </div>
-              ))}
+              {(filtrosData?.niveles || []).map(nivel => {
+                const nombreLower = nivel.name.toLowerCase();
+                return (
+                  <div
+                    key={nivel.id}
+                    onClick={() => handleNivelChange(nivel.name)}
+                    className={`px-4 py-3 text-sm cursor-pointer transition-colors border-b border-gray-50 last:border-none capitalize ${nivelSeleccionado === nivel.name ? 'bg-blue-50 text-[#1A237E] font-bold' : 'text-gray-700 hover:bg-gray-50'}`}
+                  >
+                    {nombreLower === 'licenciatura' ? 'Licenciatura' : 
+                    nombreLower === 'maestria' ? 'Maestría' : 
+                    nivel.name}
+                  </div>
+                );
+              })}
             </div>
           </div>
 
