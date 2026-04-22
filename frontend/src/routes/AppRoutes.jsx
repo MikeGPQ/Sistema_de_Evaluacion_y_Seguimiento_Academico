@@ -1,7 +1,7 @@
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { useAuth } from "../hooks/AuthContext";
 import { Hammer } from "lucide-react";
-import ReporteAsistencia from "../pages/ReporteAsistencia";
+import ReporteAsistencia from "../pages/AttendanceReport";
 // Páginas
 import LoginPage from "../pages/LoginPage";
 import ChangePassword from "../pages/ChangePassword";

@@ -91,9 +91,15 @@ const AuditLogs = () => {
     }
   };
 
-  const handleFilterChange = (e) => {
+const handleFilterChange = (e) => {
     const { name, value } = e.target;
-    setFilters(prev => ({ ...prev, [name]: value }));
+    
+    let finalValue = value;
+    if (name === 'user_id') {
+      finalValue = value.replace(/\D/g, ''); 
+    }
+
+    setFilters(prev => ({ ...prev, [name]: finalValue }));
     setPaginacion(prev => ({ ...prev, skip: 0 })); 
   };
 
